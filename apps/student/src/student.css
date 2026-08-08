@@ -1,0 +1,63 @@
+.boot-screen { height: 100%; display: grid; place-content: center; gap: 16px; justify-items: center; color: var(--muted); }
+.boot-screen svg { width: 34px; }
+.connection-fab { position: fixed; right: 24px; bottom: 22px; display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); cursor: pointer; }
+.connection-fab svg { width: 17px; height: 17px; }
+.recovery-fab { position: fixed; right: 24px; bottom: 68px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.student-metrics { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
+.row-button { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.compact-subjects { display: grid; gap: 12px; }
+.compact-subject { display: flex; align-items: center; gap: 11px; }
+.compact-subject > span { width: 4px; height: 38px; border-radius: 3px; }
+.compact-subject strong, .compact-subject small { display: block; }
+.compact-subject small { margin-top: 3px; color: var(--muted); }
+.assignment-workspace { height: calc(100vh - 140px); display: flex; flex-direction: column; gap: 0; }
+.assignment-bar { min-height: 68px; display: flex; align-items: center; gap: 14px; padding: 10px 16px; border: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; background: var(--surface); }
+.assignment-bar > div { min-width: 0; flex: 1; }
+.assignment-bar strong, .assignment-bar span { display: block; }
+.assignment-bar span { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.assignment-instructions { padding: 13px 18px; border: 1px solid var(--border); border-top: 0; background: var(--surface-lowest); }
+.assignment-instructions strong { color: var(--primary); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+.assignment-instructions p { margin: 5px 0 0; color: var(--text-soft); line-height: 1.45; }
+.assignment-editor { min-height: 0; flex: 1; border: 1px solid var(--border); border-top: 0; border-radius: 0 0 var(--radius) var(--radius); overflow: hidden; }
+.notes-page { height: calc(100vh - 140px); display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 18px; }
+.notes-sidebar, .notes-document { min-height: 0; display: flex; flex-direction: column; }
+.notes-list { flex: 1; }
+.note-row { width: 100%; display: flex; align-items: center; gap: 11px; padding: 13px 15px; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text-soft); text-align: left; cursor: pointer; }
+.note-row > svg { width: 18px; color: var(--muted); }
+.note-row span { min-width: 0; }
+.note-row strong, .note-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-row small { margin-top: 4px; color: var(--muted); }
+.note-row.is-selected { background: rgba(190, 194, 255, .09); box-shadow: inset 2px 0 var(--primary); }
+.note-titlebar { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+.note-titlebar strong, .note-titlebar span { display: block; }
+.note-titlebar div span { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.notes-document .document-editor { flex: 1; }
+.flashcard-layout { grid-template-columns: minmax(360px, 1.2fr) minmax(300px, .8fr); }
+.study-card { width: 100%; min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 40px; border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: linear-gradient(145deg, var(--surface-raised), var(--surface-lowest)); color: var(--text); text-align: center; cursor: pointer; }
+.study-card.is-flipped { border-color: var(--cyan); background: linear-gradient(145deg, rgba(80,216,233,.09), var(--surface-lowest)); }
+.study-card span { color: var(--primary); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.study-card strong { max-width: 650px; font-size: clamp(24px, 3vw, 38px); line-height: 1.3; }
+.study-card small { color: var(--muted); }
+.study-controls { display: flex; justify-content: center; gap: 10px; margin-top: 14px; }
+.grade-display { display: flex; align-items: center; gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.grade-display > span { color: var(--muted); }
+.grade-display strong { font-size: 25px; }
+.feedback-detail h3 { margin: 20px 0 8px; font-size: 14px; }
+.feedback-detail p { color: var(--text-soft); line-height: 1.6; white-space: pre-wrap; }
+.comment-list { display: grid; gap: 8px; }
+.comment-list > div { padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-lowest); }
+.comment-list strong { font-size: 11px; color: var(--primary); }
+.comment-list p { margin: 5px 0 0; }
+.detail-list { margin: 0; display: grid; }
+.detail-list > div { display: flex; justify-content: space-between; gap: 20px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+.detail-list dt { color: var(--muted); }
+.detail-list dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.panel-actions { display: flex; gap: 10px; margin-top: 18px; }
+.host-list { display: grid; gap: 6px; }
+.host-list button { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-lowest); cursor: pointer; }
+@media (max-width: 900px) {
+  .student-metrics { grid-template-columns: repeat(2, 1fr); }
+  .notes-page { grid-template-columns: 220px minmax(0, 1fr); }
+  .flashcard-layout { grid-template-columns: 1fr; }
+  .assignment-bar { flex-wrap: wrap; }
+}

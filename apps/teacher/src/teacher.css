@@ -1,0 +1,48 @@
+.boot-screen { height: 100%; display: grid; place-content: center; justify-items: center; gap: 15px; color: var(--muted); }
+.boot-screen svg { width: 36px; color: var(--primary); }
+.teacher-recovery-button { position: fixed; right: 24px; bottom: 24px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.setup-screen { width: 100%; min-height: 100%; overflow: auto; display: grid; place-items: center; padding: 40px; background: radial-gradient(circle at 25% 15%, rgba(80,216,233,.1), transparent 30%), var(--background); }
+.setup-card { width: min(600px, 100%); display: grid; gap: 17px; padding: 34px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.setup-card > svg { width: 42px; color: var(--primary); }
+.setup-card h1 { margin: 0; font-size: 32px; letter-spacing: -.045em; }
+.setup-card > p:not(.eyebrow) { margin: -6px 0 8px; color: var(--muted); line-height: 1.55; }
+.row-button { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.compact-subjects { display: grid; gap: 13px; }
+.compact-subject { display: flex; align-items: center; gap: 11px; }
+.compact-subject > span { width: 4px; height: 38px; border-radius: 3px; }
+.compact-subject strong, .compact-subject small { display: block; }
+.compact-subject small { margin-top: 3px; color: var(--muted); }
+.recovery-code { font-size: 18px; }
+.roster-list { padding: 0 !important; }
+.classroom-manager { display: grid; gap: 24px; }
+.classroom-manager section + section { padding-top: 20px; border-top: 1px solid var(--border); }
+.manager-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
+.manager-heading h3 { margin: 4px 0 0; font-size: 15px; }
+.upload-button { position: relative; overflow: hidden; }
+.upload-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.check-field { display: flex; align-items: center; gap: 10px; color: var(--text-soft); }
+.check-field input { width: 17px; min-height: 17px; accent-color: var(--primary); }
+.grade-modal-content { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); min-height: 640px; }
+.grade-modal-content .submission-preview { min-height: 0; border-right: 1px solid var(--border); }
+.grade-modal-content .document-canvas { padding: 22px; }
+.grade-modal-content .document-page { padding: 46px 52px; min-height: 820px; }
+.grade-modal-content .document-body { min-height: 720px; }
+.grade-form { display: flex; flex-direction: column; gap: 15px; padding: 20px; overflow: auto; }
+.modal:has(.grade-modal-content) { width: min(1180px, 100%); }
+.comment-list { display: grid; gap: 8px; }
+.comment-list > div { padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-lowest); }
+.comment-list strong { font-size: 11px; color: var(--primary); }
+.comment-list p { margin: 5px 0 0; color: var(--text-soft); line-height: 1.45; }
+.history-list { display: grid; gap: 5px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+.date-control { width: 170px; }
+.attendance-row > div strong, .attendance-row > div small { display: block; }
+.checked-in { margin-top: 5px; color: var(--cyan); }
+.ai-warning { margin: 2px 0 0; color: var(--warning); font-size: 12px; line-height: 1.5; }
+.detail-list { margin: 0 0 18px; display: grid; }
+.detail-list > div { display: flex; justify-content: space-between; gap: 20px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+.detail-list dt { color: var(--muted); }
+.detail-list dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+@media (max-width: 1150px) {
+  .grade-modal-content { grid-template-columns: 1fr; }
+  .grade-modal-content .submission-preview { height: 500px; border-right: 0; border-bottom: 1px solid var(--border); }
+}

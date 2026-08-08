@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 370 96" role="img" aria-labelledby="title">
+  <title id="title">Lumina</title>
+  <g transform="translate(8 8)">
+    <rect width="80" height="80" rx="18" fill="#070708"/>
+    <path d="M23 20v38c0 5 4 9 9 9h30c4 0 7-3 7-7H34V19l-11 7Z" fill="#BEC2FF"/>
+    <path d="m36 60 21-38 7 4-25 34Z" fill="#50D8E9"/>
+    <path d="M23 52c5 1 10 5 14 15M23 58c4 0 7 3 9 9" fill="none" stroke="#070708" stroke-width="3"/>
+  </g>
+  <text x="112" y="65" fill="#111214" font-family="Inter, Segoe UI, Ubuntu, sans-serif" font-size="58" font-weight="700" letter-spacing="-3">Lumina</text>
+</svg>

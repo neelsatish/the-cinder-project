@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Lumina</title>
+  <rect width="64" height="64" rx="14" fill="#070708"/>
+  <path d="M18 16v30c0 4 3 7 7 7h24c3 0 5-2 6-5H27V15l-9 6Z" fill="#BEC2FF"/>
+  <path d="M29 48 46 18l5 3-20 27Z" fill="#50D8E9"/>
+  <path d="M18 42c4 1 8 4 11 10M18 47c3 0 5 2 7 5" fill="none" stroke="#070708" stroke-width="2.2"/>
+</svg>

@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Lumina Command Center</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@520;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary-fixed": "#e0e0ff",
+                        "on-primary-container": "#000992",
+                        "secondary": "#50d8e9",
+                        "inverse-primary": "#3d4ae0",
+                        "inverse-on-surface": "#313031",
+                        "accent-lemon": "#C4FF44",
+                        "on-tertiary-container": "#471e00",
+                        "tertiary-fixed-dim": "#ffb68a",
+                        "tertiary-container": "#c28259",
+                        "on-surface": "#e5e2e3",
+                        "surface-container": "#201f21",
+                        "surface-variant": "#353436",
+                        "surface-deep": "#050505",
+                        "text-muted": "#9A9DA3",
+                        "surface-panel": "#111214",
+                        "tertiary": "#ffb68a",
+                        "primary-container": "#7a85ff",
+                        "surface-container-lowest": "#0e0e0f",
+                        "error": "#ffb4ab",
+                        "surface-dim": "#131314",
+                        "primary-fixed-dim": "#bec2ff",
+                        "on-surface-variant": "#c6c5d8",
+                        "surface-container-highest": "#353436",
+                        "inverse-surface": "#e5e2e3",
+                        "outline": "#8f8fa1",
+                        "accent-teal": "#D1EBEB",
+                        "surface-tint": "#bec2ff",
+                        "on-secondary": "#00363c",
+                        "primary": "#bec2ff",
+                        "tertiary-fixed": "#ffdbc8",
+                        "error-container": "#93000a",
+                        "on-tertiary-fixed": "#321300",
+                        "on-secondary-fixed-variant": "#004f57",
+                        "on-tertiary-fixed-variant": "#6c3a17",
+                        "outline-variant": "#454655",
+                        "on-primary-fixed": "#000469",
+                        "on-secondary-fixed": "#001f23",
+                        "on-secondary-container": "#003e44",
+                        "on-primary": "#000ba6",
+                        "secondary-container": "#00b1c1",
+                        "on-primary-fixed-variant": "#1f2bc8",
+                        "secondary-fixed-dim": "#50d8e9",
+                        "surface": "#131314",
+                        "on-error-container": "#ffdad6",
+                        "on-tertiary": "#502403",
+                        "surface-container-low": "#1c1b1d",
+                        "background": "#131314",
+                        "on-background": "#e5e2e3",
+                        "border-muted": "#232426",
+                        "surface-container-high": "#2a2a2b",
+                        "secondary-fixed": "#91f1ff",
+                        "surface-bright": "#3a393a",
+                        "on-error": "#690005"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "xl": "40px",
+                        "margin-safe": "32px",
+                        "md": "16px",
+                        "lg": "24px",
+                        "gutter": "20px",
+                        "xs": "4px",
+                        "sm": "8px"
+                    },
+                    fontFamily: {
+                        "body-md": ["Inter"],
+                        "mono-data": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "mono-telemetry": ["Inter"],
+                        "h2": ["Manrope"],
+                        "hero-headline": ["Manrope"],
+                        "h3": ["Manrope"],
+                        "body-lg": ["Inter"],
+                        "h1": ["Manrope"]
+                    },
+                    fontSize: {
+                        "body-md": ["14px", { lineHeight: "1.5", letterSpacing: "0em", fontWeight: "400" }],
+                        "mono-data": ["13px", { lineHeight: "1.0", letterSpacing: "-0.01em", fontWeight: "400" }],
+                        "label-sm": ["12px", { lineHeight: "1.0", letterSpacing: "0.02em", fontWeight: "500" }],
+                        "mono-telemetry": ["9px", { lineHeight: "1.0", letterSpacing: "0.2em", fontWeight: "600" }],
+                        "h2": ["32px", { lineHeight: "1.2", letterSpacing: "-0.05em", fontWeight: "520" }],
+                        "hero-headline": ["76px", { lineHeight: "1.1", letterSpacing: "-0.055em", fontWeight: "520" }],
+                        "h3": ["24px", { lineHeight: "1.2", letterSpacing: "-0.04em", fontWeight: "520" }],
+                        "body-lg": ["19px", { lineHeight: "1.6", letterSpacing: "0em", fontWeight: "400" }],
+                        "h1": ["48px", { lineHeight: "1.1", letterSpacing: "-0.05em", fontWeight: "520" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .dot-pattern {
+            background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 16px 16px;
+        }
+        .glow-edge {
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+        }
+        .glass-panel {
+            background: rgba(16, 17, 18, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        /* Custom scrollbar for technical feel */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #050505;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #232426;
+            border-radius: 2px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #454655;
+        }
+    </style>
+</head>
+<body class="bg-surface-deep text-on-surface font-body-md h-screen overflow-hidden flex selection:bg-primary selection:text-on-primary">
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-full z-40 w-20 flex flex-col border-r border-outline-variant bg-surface-deep dark:bg-surface-deep items-center py-lg justify-between">
+<div class="flex flex-col items-center gap-xl w-full">
+<div class="font-h3 text-h3 font-bold text-primary tracking-tighter" title="Lumina">L</div>
+<div class="flex flex-col items-center gap-sm w-full">
+<a class="w-full flex justify-center py-md text-primary bg-primary/10 border-r-2 border-primary scale-95 transition-transform" href="#" title="Command Center">
+<span class="material-symbols-outlined" data-icon="dashboard" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+</a>
+<a class="w-full flex justify-center py-md text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors" href="#" title="Library">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+</a>
+<a class="w-full flex justify-center py-md text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors" href="#" title="Study">
+<span class="material-symbols-outlined" data-icon="edit_note">edit_note</span>
+</a>
+<a class="w-full flex justify-center py-md text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors" href="#" title="AI Assistant">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+</a>
+<a class="w-full flex justify-center py-md text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors" href="#" title="Timer">
+<span class="material-symbols-outlined" data-icon="timer">timer</span>
+</a>
+</div>
+</div>
+<div class="flex flex-col items-center gap-md w-full">
+<a class="w-full flex justify-center py-md text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors" href="#" title="Settings">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</a>
+<div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center overflow-hidden border border-outline-variant">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="A detailed close-up portrait of a user profile in a high-tech clinical environment. The lighting is cold and precise, with a stark black background and subtle glowing blue telemetry lines across the visor. The overall mood is serious, professional, and cybernetic, fitting a high-stakes intelligence platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD1aS9nFo4w_GfvCEK9Dvd41kWsmB6WB3QpnMasmTBOX0lSe2z75uJnChreuEB2CGQHvXG1nbkQmwFL49DzP7gK-nwsZGnReQz0dQgmY71Eace5U9qU_iKp7k20DhWa3bTvctGEm8sqEpp6UXiHB5lfpZrcm_epiL_qtVg4HvKK2blyJfuhiPCmayliBN_Zm9O93jjgQ0oDqt_oQHBThGou2f2oPJoHYuNj8lhaJZutX--JB96_nzA"/>
+</div>
+</div>
+</nav>
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-20 z-30 flex justify-between items-center px-lg h-16 border-b border-outline-variant/30 bg-surface/80 dark:bg-surface/80 backdrop-blur-xl">
+<div class="flex items-center gap-md">
+<span class="font-h3 text-h3 font-black text-primary">Lumina</span>
+<span class="font-mono-data text-mono-data text-text-muted">/ Command Center</span>
+</div>
+<div class="flex items-center gap-lg">
+<div class="flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-accent-lemon glow-edge shadow-[0_0_10px_rgba(196,255,68,0.5)]"></span>
+<span class="font-mono-telemetry text-mono-telemetry text-accent-lemon uppercase">System Nominal</span>
+</div>
+<div class="h-6 w-px bg-outline-variant"></div>
+<div class="font-mono-data text-mono-data text-text-muted flex items-center gap-sm">
+<span class="material-symbols-outlined text-[16px]">local_fire_department</span>
+                Streak: 12d
+            </div>
+<button class="bg-primary text-on-primary font-label-sm text-label-sm font-bold px-md py-sm rounded DEFAULT hover:bg-primary-fixed transition-colors">
+                Study Session
+            </button>
+<div class="flex items-center gap-sm text-text-muted">
+<button class="hover:text-primary transition-all p-xs rounded hover:bg-surface-variant">
+<span class="material-symbols-outlined" data-icon="dark_mode">dark_mode</span>
+</button>
+<button class="hover:text-primary transition-all p-xs rounded hover:bg-surface-variant relative">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-error"></span>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-20 mt-16 p-lg h-[calc(100vh-4rem)] w-full overflow-y-auto grid grid-cols-12 gap-gutter relative">
+<div class="absolute inset-0 pointer-events-none dot-pattern opacity-5"></div>
+<!-- Left Pane: Subject Organizer -->
+<section class="col-span-12 md:col-span-3 flex flex-col gap-md">
+<div class="bg-surface-panel border border-border-muted p-md flex flex-col gap-sm h-full glow-edge relative overflow-hidden">
+<div class="flex items-center justify-between border-b border-border-muted pb-sm mb-sm">
+<h2 class="font-label-sm text-label-sm uppercase tracking-widest text-text-muted">Subject Organizer</h2>
+<span class="material-symbols-outlined text-[16px] text-text-muted cursor-pointer hover:text-primary">add</span>
+</div>
+<div class="flex-1 overflow-y-auto pr-sm">
+<ul class="flex flex-col gap-xs font-mono-data text-mono-data">
+<!-- Math Folder -->
+<li>
+<div class="flex items-center gap-sm p-sm hover:bg-surface-variant cursor-pointer group text-on-surface">
+<span class="material-symbols-outlined text-[16px] text-primary group-hover:text-primary-fixed transition-colors">folder_open</span>
+<span>Math</span>
+<span class="ml-auto text-text-muted group-hover:text-primary transition-colors text-[10px]">12 items</span>
+</div>
+<ul class="ml-xl pl-sm border-l border-border-muted flex flex-col gap-xs mt-xs">
+<li class="flex items-center gap-sm p-xs hover:bg-surface-variant cursor-pointer text-text-muted hover:text-on-surface">
+<span class="material-symbols-outlined text-[14px]">description</span>
+<span>Calculus Notes</span>
+</li>
+<li class="flex items-center gap-sm p-xs hover:bg-surface-variant cursor-pointer text-text-muted hover:text-on-surface">
+<span class="material-symbols-outlined text-[14px]">description</span>
+<span>Linear Algebra</span>
+</li>
+</ul>
+</li>
+<!-- Physics Folder -->
+<li class="mt-xs">
+<div class="flex items-center gap-sm p-sm hover:bg-surface-variant cursor-pointer group text-text-muted hover:text-on-surface">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>Physics</span>
+<span class="ml-auto text-[10px]">8 items</span>
+</div>
+</li>
+<!-- History Folder -->
+<li class="mt-xs">
+<div class="flex items-center gap-sm p-sm hover:bg-surface-variant cursor-pointer group text-text-muted hover:text-on-surface">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>History</span>
+<span class="ml-auto text-[10px]">24 items</span>
+</div>
+</li>
+<li class="mt-xs">
+<div class="flex items-center gap-sm p-sm hover:bg-surface-variant cursor-pointer group text-text-muted hover:text-on-surface">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>Computer Science</span>
+<span class="ml-auto text-[10px]">5 items</span>
+</div>
+</li>
+</ul>
+</div>
+</div>
+</section>
+<!-- Center Pane: Study Log & Activity -->
+<section class="col-span-12 md:col-span-6 flex flex-col gap-md">
+<!-- Study Log Chart -->
+<div class="bg-surface-panel border border-border-muted p-md glow-edge relative">
+<div class="flex items-center justify-between border-b border-border-muted pb-sm mb-md">
+<h2 class="font-label-sm text-label-sm uppercase tracking-widest text-text-muted flex items-center gap-sm">
+<span class="material-symbols-outlined text-[16px]">show_chart</span>
+                        Telemetry: Study Hours
+                    </h2>
+<div class="flex gap-sm">
+<span class="font-mono-telemetry text-mono-telemetry text-secondary">AVG: 4.2H/D</span>
+<span class="font-mono-telemetry text-mono-telemetry text-primary">PEAK: 6.1H/D</span>
+</div>
+</div>
+<div class="h-48 w-full relative flex items-end justify-between px-md py-sm border border-border-muted/50 dot-pattern">
+<!-- Grid Lines -->
+<div class="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20 z-0">
+<div class="h-px w-full bg-outline-variant"></div>
+<div class="h-px w-full bg-outline-variant"></div>
+<div class="h-px w-full bg-outline-variant"></div>
+<div class="h-px w-full bg-outline-variant"></div>
+</div>
+<!-- Bars/Chart representation -->
+<div class="w-8 bg-surface-variant hover:bg-secondary/20 border border-secondary/50 h-[40%] relative z-10 transition-colors group cursor-crosshair">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 font-mono-telemetry text-mono-telemetry opacity-0 group-hover:opacity-100 transition-opacity bg-surface-deep px-1 border border-border-muted">2.4h</div>
+</div>
+<div class="w-8 bg-surface-variant hover:bg-secondary/20 border border-secondary/50 h-[60%] relative z-10 transition-colors group cursor-crosshair">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 font-mono-telemetry text-mono-telemetry opacity-0 group-hover:opacity-100 transition-opacity bg-surface-deep px-1 border border-border-muted">3.6h</div>
+</div>
+<div class="w-8 bg-primary/20 border border-primary h-[85%] relative z-10 transition-colors group cursor-crosshair shadow-[0_0_15px_rgba(190,194,255,0.2)]">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 font-mono-telemetry text-mono-telemetry opacity-100 bg-surface-deep px-1 border border-primary text-primary">5.1h</div>
+</div>
+<div class="w-8 bg-surface-variant hover:bg-secondary/20 border border-secondary/50 h-[70%] relative z-10 transition-colors group cursor-crosshair">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 font-mono-telemetry text-mono-telemetry opacity-0 group-hover:opacity-100 transition-opacity bg-surface-deep px-1 border border-border-muted">4.2h</div>
+</div>
+<div class="w-8 bg-surface-variant hover:bg-secondary/20 border border-secondary/50 h-[30%] relative z-10 transition-colors group cursor-crosshair">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 font-mono-telemetry text-mono-telemetry opacity-0 group-hover:opacity-100 transition-opacity bg-surface-deep px-1 border border-border-muted">1.8h</div>
+</div>
+<div class="w-8 bg-surface-variant hover:bg-secondary/20 border border-secondary/50 h-[90%] relative z-10 transition-colors group cursor-crosshair">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 font-mono-telemetry text-mono-telemetry opacity-0 group-hover:opacity-100 transition-opacity bg-surface-deep px-1 border border-border-muted">5.4h</div>
+</div>
+<div class="w-8 bg-surface-variant border border-dashed border-outline-variant h-[50%] relative z-10 opacity-50"></div>
+</div>
+<div class="flex justify-between w-full px-md mt-sm font-mono-telemetry text-mono-telemetry text-text-muted">
+<span>MON</span>
+<span>TUE</span>
+<span>WED</span>
+<span>THU</span>
+<span>FRI</span>
+<span>SAT</span>
+<span>SUN</span>
+</div>
+</div>
+<!-- Recent Activity -->
+<div class="bg-surface-panel border border-border-muted p-md flex-1 glow-edge flex flex-col relative">
+<div class="flex items-center justify-between border-b border-border-muted pb-sm mb-md">
+<h2 class="font-label-sm text-label-sm uppercase tracking-widest text-text-muted">Recent Signal</h2>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted">LIVE STREAM</span>
+</div>
+<div class="flex flex-col gap-md overflow-y-auto pr-sm flex-1">
+<!-- Activity Item 1 -->
+<div class="flex items-start gap-md border-b border-border-muted pb-md">
+<div class="w-8 h-8 rounded-full border border-secondary flex items-center justify-center text-secondary bg-secondary/10 shrink-0">
+<span class="material-symbols-outlined text-[16px]">edit_document</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-center mb-xs">
+<span class="font-label-sm text-label-sm text-on-surface">Calculus Midterm Prep updated</span>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted">10M AGO</span>
+</div>
+<p class="font-mono-data text-mono-data text-text-muted">Added 4 new nodes related to integration by parts. Session duration: 45m.</p>
+</div>
+</div>
+<!-- Activity Item 2 -->
+<div class="flex items-start gap-md border-b border-border-muted pb-md">
+<div class="w-8 h-8 rounded-full border border-primary flex items-center justify-center text-primary bg-primary/10 shrink-0">
+<span class="material-symbols-outlined text-[16px]">psychology_alt</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-center mb-xs">
+<span class="font-label-sm text-label-sm text-on-surface">Flashcard Deck: Cold War</span>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted">2H AGO</span>
+</div>
+<div class="flex items-center gap-md mt-xs">
+<div class="flex-1 h-1 bg-surface-variant overflow-hidden">
+<div class="h-full bg-primary w-[85%]"></div>
+</div>
+<span class="font-mono-telemetry text-mono-telemetry text-primary">85% RECALL</span>
+</div>
+</div>
+</div>
+<!-- Activity Item 3 -->
+<div class="flex items-start gap-md border-b border-border-muted pb-md opacity-70">
+<div class="w-8 h-8 rounded-full border border-outline-variant flex items-center justify-center text-text-muted bg-surface-variant shrink-0">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-center mb-xs">
+<span class="font-label-sm text-label-sm text-text-muted line-through">Read Chapter 4: Cellular Respiration</span>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted">5H AGO</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Pane: Actions & Timer -->
+<section class="col-span-12 md:col-span-3 flex flex-col gap-md">
+<!-- Tactical Actions -->
+<div class="bg-surface-panel border border-border-muted p-md glow-edge">
+<div class="flex flex-col gap-sm">
+<button class="w-full flex items-center justify-center gap-sm bg-transparent border border-[#3d4ae0] text-primary font-mono-telemetry text-mono-telemetry py-md uppercase hover:bg-[#3d4ae0]/10 transition-colors tracking-widest">
+<span class="material-symbols-outlined text-[16px]">play_arrow</span>
+                        Execute Focus Mode
+                    </button>
+<button class="w-full flex items-center justify-center gap-sm bg-transparent border border-border-muted text-on-surface font-label-sm text-label-sm py-sm hover:border-outline-variant transition-colors">
+<span class="material-symbols-outlined text-[16px]">add_box</span>
+                        New Node
+                    </button>
+</div>
+</div>
+<!-- Global Timer Widget -->
+<div class="bg-surface-panel border border-border-muted p-md glow-edge flex-1 flex flex-col items-center justify-center relative overflow-hidden">
+<div class="absolute top-md left-md">
+<span class="font-label-sm text-label-sm uppercase tracking-widest text-text-muted">Global Timer</span>
+</div>
+<!-- Circular Progress Ring (Simulated) -->
+<div class="relative w-40 h-40 flex items-center justify-center mt-lg">
+<svg class="w-full h-full transform -rotate-90 absolute inset-0" viewbox="0 0 100 100">
+<circle cx="50" cy="50" fill="none" r="45" stroke="#232426" stroke-width="2"></circle>
+<circle class="shadow-[0_0_10px_rgba(80,216,233,0.5)]" cx="50" cy="50" fill="none" r="45" stroke="#50d8e9" stroke-dasharray="282.7" stroke-dashoffset="100" stroke-width="2"></circle>
+</svg>
+<div class="flex flex-col items-center text-center z-10">
+<span class="font-h2 text-h2 font-bold text-on-surface tracking-tighter">01:45</span>
+<span class="font-mono-telemetry text-mono-telemetry text-secondary mt-1">/ 03:00 GOAL</span>
+</div>
+</div>
+<div class="flex items-center gap-md mt-xl w-full justify-center">
+<button class="p-sm rounded border border-border-muted hover:border-secondary hover:text-secondary transition-colors">
+<span class="material-symbols-outlined">replay</span>
+</button>
+<button class="w-12 h-12 rounded-full border border-secondary bg-secondary/10 flex items-center justify-center text-secondary hover:bg-secondary hover:text-on-secondary transition-all">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">pause</span>
+</button>
+<button class="p-sm rounded border border-border-muted hover:border-error hover:text-error transition-colors">
+<span class="material-symbols-outlined">stop</span>
+</button>
+</div>
+</div>
+<!-- Quick Stats -->
+<div class="bg-surface-panel border border-border-muted p-md glow-edge">
+<div class="grid grid-cols-2 gap-md font-mono-data text-mono-data">
+<div class="flex flex-col gap-xs">
+<span class="text-text-muted text-[10px]">EFFICIENCY</span>
+<span class="text-primary text-body-md">92%</span>
+</div>
+<div class="flex flex-col gap-xs">
+<span class="text-text-muted text-[10px]">TASKS DONE</span>
+<span class="text-on-surface text-body-md">14/20</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+</body></html>

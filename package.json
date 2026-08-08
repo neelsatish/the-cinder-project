@@ -1,0 +1,19 @@
+{
+  "name": "lumina",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/student",
+    "apps/teacher",
+    "packages/ui"
+  ],
+  "scripts": {
+    "dev:student": "npm run dev --workspace @lumina/student",
+    "dev:teacher": "npm run dev --workspace @lumina/teacher",
+    "build:student": "npm run build --workspace @lumina/student",
+    "build:teacher": "npm run build --workspace @lumina/teacher",
+    "bundle:student": "npm run app:build --workspace @lumina/student",
+    "bundle:teacher": "npm run app:build --workspace @lumina/teacher",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

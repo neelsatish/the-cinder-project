@@ -1,0 +1,11 @@
+pub mod ai;
+pub mod assignments;
+pub mod attendance;
+pub mod auth;
+pub mod cards;
+pub mod classrooms;
+pub mod dashboard;
+pub mod files;
+pub mod health;
+pub mod notes;
+pub mod tree;
