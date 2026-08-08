@@ -43,15 +43,26 @@ jobs:
           cargo test --workspace --locked
 
       - name: Build Student installers
-        run: npm run bundle:student
+        run: |
+          npm run bundle:student
+          mkdir -p artifacts/student
+          cp target/release/bundle/deb/Lumina\ Student_*.deb artifacts/student/
+          cp target/release/bundle/appimage/Lumina\ Student_*.AppImage artifacts/student/
 
       - name: Build Teacher installers
-        run: npm run bundle:teacher
+        run: |
+          npm run bundle:teacher
+          mkdir -p artifacts/teacher
+          cp target/release/bundle/deb/Lumina\ Teacher_*.deb artifacts/teacher/
+          cp target/release/bundle/appimage/Lumina\ Teacher_*.AppImage artifacts/teacher/
+
+      - name: Verify installer set
+        run: |
+          test "$(find artifacts -type f \( -name '*.deb' -o -name '*.AppImage' \) | wc -l)" -eq 4
+          find artifacts -type f -print
 
       - uses: actions/upload-artifact@v4
         with:
           name: lumina-linux-x86_64
           if-no-files-found: error
-          path: |
-            target/release/bundle/deb/*.deb
-            target/release/bundle/appimage/*.AppImage
+          path: artifacts/
