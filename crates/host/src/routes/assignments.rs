@@ -89,10 +89,7 @@ async fn list_assignments(
                     .query_map([user_id], assignment_row)?
                     .collect::<Result<Vec<_>, _>>()?,
             };
-            let assignments = rows
-                .into_iter()
-                .map(|row| row?)
-                .collect::<HostResult<Vec<_>>>()?;
+            let assignments = rows.into_iter().collect::<HostResult<Vec<_>>>()?;
             Ok(Json(assignments))
         })
         .await

@@ -57,7 +57,6 @@ async fn list(
             };
             let classrooms = rows
                 .into_iter()
-                .map(|row| row?)
                 .collect::<HostResult<Vec<_>>>()?;
             Ok(Json(classrooms))
         })
@@ -124,10 +123,7 @@ async fn roster(
             let rows = stmt
                 .query_map([id.to_string()], user_row)?
                 .collect::<Result<Vec<_>, _>>()?;
-            let students = rows
-                .into_iter()
-                .map(|row| row?)
-                .collect::<HostResult<Vec<_>>>()?;
+            let students = rows.into_iter().collect::<HostResult<Vec<_>>>()?;
             Ok(Json(ClassroomRoster {
                 classroom,
                 students,
