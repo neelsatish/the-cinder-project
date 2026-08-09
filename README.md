@@ -36,6 +36,18 @@ The current architecture, rollout phases and acceptance checklist are in
 | `crates/ai` | OpenAI-compatible and future local-model clients. |
 | `design` | Stitch reference export and final Lumina brand assets. |
 
+## Download on Linux Mint
+
+Sign in to GitHub and open the [latest Lumina installer release](https://github.com/Alfie3542/lumina-classroom/releases/latest).
+Download the `.deb` matching the computer's role, then double-click it and choose
+**Install Package**:
+
+- `Lumina Teacher_*_amd64.deb` for the teacher computer.
+- `Lumina Student_*_amd64.deb` for each student computer.
+
+No Codex installation is needed. Because this repository is private, the Linux browser
+must be signed into a GitHub account that can access the repository.
+
 ## Develop
 
 On Linux Mint, install prerequisites and dependencies:
@@ -63,7 +75,8 @@ bash scripts/build-linux.sh
 ```
 
 The script runs tests and frontend checks before producing `.deb` and `.AppImage`
-artifacts for both apps under the shared Cargo target directory.
+artifacts for both apps under the shared Cargo target directory. Every push to `main`
+also rebuilds all four packages and replaces the assets on the latest GitHub Release.
 
 ## Security boundaries
 
