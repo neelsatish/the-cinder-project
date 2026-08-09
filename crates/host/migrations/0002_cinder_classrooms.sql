@@ -1,4 +1,4 @@
--- Lumina classroom, assignment, grading, attendance, and account-recovery model.
+-- Cinder classroom, assignment, grading, attendance, and account-recovery model.
 
 ALTER TABLE users ADD COLUMN grade_level TEXT;
 ALTER TABLE users ADD COLUMN section TEXT;

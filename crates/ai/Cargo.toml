@@ -1,11 +1,11 @@
 [package]
-name = "lumina-ai"
+name = "cinder-ai"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-lumina-core.workspace = true
+cinder-core.workspace = true
 
 anyhow.workspace = true
 serde.workspace = true

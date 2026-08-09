@@ -4,7 +4,7 @@ use axum::extract::{Path, State};
 use axum::routing::{get, put};
 use axum::{Json, Router};
 use chrono::{NaiveDate, Utc};
-use lumina_core::{AttendanceDay, AttendanceRecord, AttendanceStatus, SaveAttendanceRequest};
+use cinder_core::{AttendanceDay, AttendanceRecord, AttendanceStatus, SaveAttendanceRequest};
 use rusqlite::OptionalExtension;
 use uuid::Uuid;
 

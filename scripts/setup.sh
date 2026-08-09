@@ -19,8 +19,8 @@ $SUDO apt-get install -y \
   libayatana-appindicator3-dev libwebkit2gtk-4.1-dev patchelf nodejs npm
 
 if ! command -v rustc >/dev/null 2>&1; then
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/lumina-rustup.sh
-  sh /tmp/lumina-rustup.sh -y --profile minimal
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/cinder-rustup.sh
+  sh /tmp/cinder-rustup.sh -y --profile minimal
   # shellcheck disable=SC1090
   . "${HOME}/.cargo/env"
 fi
@@ -31,4 +31,4 @@ npm install --no-audit --no-fund
 cargo fmt --all -- --check
 npm run typecheck
 
-echo "Lumina development setup is ready."
+echo "Cinder development setup is ready."

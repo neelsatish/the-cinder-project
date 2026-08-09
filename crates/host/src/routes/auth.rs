@@ -5,7 +5,7 @@ use axum::extract::{Path, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::{Duration, Utc};
-use lumina_core::{
+use cinder_core::{
     AppLoginRequest, BootstrapTeacherRequest, BootstrapTeacherResponse, ChangePasswordRequest,
     CreateStudentRequest, CreateStudentResponse, LoginResponse, RecoverTeacherRequest, Role,
     UpdateStudentRequest, User,

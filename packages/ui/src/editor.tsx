@@ -108,6 +108,16 @@ export function DocumentEditor({
     editor?.setEditable(!readOnly);
   }, [editor, readOnly]);
 
+  useEffect(() => {
+    if (!editor) return;
+
+    const current = JSON.stringify(editor.getJSON());
+    const incoming = JSON.stringify(value);
+    if (current !== incoming) {
+      editor.commands.setContent(value, false);
+    }
+  }, [editor, value]);
+
   if (!editor) return <div className="editor-loading">Opening document…</div>;
 
   const applyLink = () => {

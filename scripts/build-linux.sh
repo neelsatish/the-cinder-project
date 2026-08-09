@@ -17,4 +17,4 @@ cargo test --workspace
 npm run bundle:student
 npm run bundle:teacher
 
-echo "Lumina Student and Teacher installers are ready under target/release/bundle/."
+echo "Cinder Student and Teacher installers are ready under target/release/bundle/."

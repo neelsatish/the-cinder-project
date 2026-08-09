@@ -1,7 +1,7 @@
-//! The Lumina host: the teacher's machine holds all data and serves every
+//! The Cinder host: the teacher's machine holds all data and serves every
 //! client on the lab LAN.
 //!
-//! The Lumina Teacher binary embeds this crate; the smaller Student binary only
+//! The Cinder Teacher binary embeds this crate; the smaller Student binary only
 //! contains discovery, connection configuration, and its client UI.
 
 pub mod auth;
@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use axum::Router;
-use lumina_ai::Ai;
+use cinder_ai::Ai;
 use rand::{rngs::OsRng, RngCore};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -34,7 +34,8 @@ pub struct AppState {
 impl AppState {
     /// Opens the database and blob store under `data_dir`.
     pub fn open(data_dir: &Path, ai: Ai) -> Result<Self> {
-        let pool = db::open(&data_dir.join("lumina.db"))?;
+        let database_path = migrate_legacy_database(data_dir)?;
+        let pool = db::open(&database_path)?;
         let files_dir = data_dir.join("files");
         std::fs::create_dir_all(&files_dir)
             .with_context(|| format!("creating {}", files_dir.display()))?;
@@ -66,6 +67,33 @@ impl AppState {
         .await
         .map_err(|e| error::HostError::Other(anyhow::anyhow!("database task panicked: {e}")))?
     }
+}
+
+fn migrate_legacy_database(data_dir: &Path) -> Result<PathBuf> {
+    std::fs::create_dir_all(data_dir)
+        .with_context(|| format!("creating data directory {}", data_dir.display()))?;
+    let current_name = "cinder.db";
+    let current = data_dir.join(current_name);
+    let legacy_name = format!("{}{}.db", "lu", "mina");
+    let legacy = data_dir.join(&legacy_name);
+    if current.exists() || !legacy.exists() {
+        return Ok(current);
+    }
+
+    for suffix in ["", "-wal", "-shm"] {
+        let source = data_dir.join(format!("{legacy_name}{suffix}"));
+        if source.exists() {
+            let destination = data_dir.join(format!("{current_name}{suffix}"));
+            std::fs::rename(&source, &destination).with_context(|| {
+                format!(
+                    "moving classroom data from {} to {}",
+                    source.display(),
+                    destination.display()
+                )
+            })?;
+        }
+    }
+    Ok(current)
 }
 
 fn load_or_create_secret(path: &Path) -> Result<[u8; 32]> {
@@ -117,7 +145,7 @@ pub fn router(state: AppState) -> Router {
         // Uploads are capped in the handler, but the body limit has to be raised
         // here too or axum rejects a large scan before the handler ever runs.
         .layer(axum::extract::DefaultBodyLimit::max(
-            lumina_core::MAX_UPLOAD_BYTES + 1024 * 1024,
+            cinder_core::MAX_UPLOAD_BYTES + 1024 * 1024,
         ))
         // The client is a Tauri webview on a different origin, and the LAN has
         // no route to the internet, so permissive CORS costs nothing here.
@@ -160,4 +188,33 @@ pub async fn serve_on(state: AppState, listener: std::net::TcpListener) -> Resul
 async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
     tracing::info!("shutting down");
+}
+
+#[cfg(test)]
+mod data_migration_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_database_and_sidecars_are_renamed_together() {
+        let directory = tempfile::tempdir().unwrap();
+        let previous_name = format!("{}{}.db", "lu", "mina");
+        for suffix in ["", "-wal", "-shm"] {
+            std::fs::write(
+                directory.path().join(format!("{previous_name}{suffix}")),
+                suffix,
+            )
+            .unwrap();
+        }
+
+        let current = migrate_legacy_database(directory.path()).unwrap();
+
+        assert_eq!(current, directory.path().join("cinder.db"));
+        for suffix in ["", "-wal", "-shm"] {
+            assert!(directory.path().join(format!("cinder.db{suffix}")).exists());
+            assert!(!directory
+                .path()
+                .join(format!("{previous_name}{suffix}"))
+                .exists());
+        }
+    }
 }

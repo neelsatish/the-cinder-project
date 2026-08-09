@@ -1,8 +1,8 @@
-# Lumina product and delivery plan
+# Cinder product and delivery plan
 
 ## Product decision
 
-Lumina uses two installers backed by one repository:
+Cinder uses two installers backed by one repository:
 
 - **Teacher**: authoritative data store, LAN API, student accounts, classrooms,
   materials, assignments, submissions, grading, attendance and cloud AI.
@@ -16,16 +16,16 @@ preference. The server still verifies the account role on every request.
 ## Deployment model
 
 ```text
-Teacher PC (Lumina Teacher)
+Teacher PC (Cinder Teacher)
   SQLite + file store + encrypted AI key
   Axum API on :7373 + mDNS advertisement
           │
-          └── trusted classroom LAN ── Student PCs (Lumina Student)
+          └── trusted classroom LAN ── Student PCs (Cinder Student)
                                       IndexedDB drafts + outbox
 ```
 
 KDE Connect is not used. It is designed for personal device pairing and file transfer,
-not concurrent classroom records. Lumina uses a small authenticated HTTP API and mDNS
+not concurrent classroom records. Cinder uses a small authenticated HTTP API and mDNS
 discovery, with a manual IP-address fallback.
 
 The core classroom workflow is LAN-first. Internet is required only when the teacher

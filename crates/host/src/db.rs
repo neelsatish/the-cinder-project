@@ -14,8 +14,8 @@ pub type PooledConn = r2d2::PooledConnection<SqliteConnectionManager>;
 const MIGRATIONS: &[(&str, &str)] = &[
     ("0001_init", include_str!("../migrations/0001_init.sql")),
     (
-        "0002_lumina_classrooms",
-        include_str!("../migrations/0002_lumina_classrooms.sql"),
+        "0002_cinder_classrooms",
+        include_str!("../migrations/0002_cinder_classrooms.sql"),
     ),
     (
         "0003_student_recovery",
@@ -77,6 +77,20 @@ fn migrate(conn: &mut Connection) -> Result<()> {
              name        TEXT PRIMARY KEY NOT NULL,
              applied_at  TEXT NOT NULL
          );",
+    )?;
+
+    // Keep databases created before the Cinder rebrand compatible without
+    // re-running the classroom migration against tables that already exist.
+    let legacy_name = ["0002_lu", "mina_classrooms"].concat();
+    conn.execute(
+        "DELETE FROM schema_migrations
+          WHERE name = ?1
+            AND EXISTS (SELECT 1 FROM schema_migrations WHERE name = ?2)",
+        rusqlite::params![legacy_name, "0002_cinder_classrooms"],
+    )?;
+    conn.execute(
+        "UPDATE schema_migrations SET name = ?1 WHERE name = ?2",
+        rusqlite::params!["0002_cinder_classrooms", legacy_name],
     )?;
 
     for (name, sql) in MIGRATIONS {

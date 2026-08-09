@@ -4,7 +4,7 @@ use axum::extract::{Path, Query, State};
 use axum::routing::get;
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
-use lumina_core::{NoteBody, SaveNoteRequest, SearchHit};
+use cinder_core::{NoteBody, SaveNoteRequest, SearchHit};
 use rusqlite::OptionalExtension;
 use serde::Deserialize;
 use uuid::Uuid;

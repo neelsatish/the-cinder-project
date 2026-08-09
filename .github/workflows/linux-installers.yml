@@ -7,7 +7,7 @@ on:
       - main
 
 concurrency:
-  group: lumina-linux-installers
+  group: cinder-linux-installers
   cancel-in-progress: true
 
 jobs:
@@ -51,15 +51,15 @@ jobs:
         run: |
           npm run bundle:student
           mkdir -p artifacts/student
-          cp target/release/bundle/deb/Lumina\ Student_*.deb artifacts/student/
-          cp target/release/bundle/appimage/Lumina\ Student_*.AppImage artifacts/student/
+          cp target/release/bundle/deb/Cinder\ Student_*.deb artifacts/student/Cinder-Student-Linux-x86_64.deb
+          cp target/release/bundle/appimage/Cinder\ Student_*.AppImage artifacts/student/Cinder-Student-Linux-x86_64.AppImage
 
       - name: Build Teacher installers
         run: |
           npm run bundle:teacher
           mkdir -p artifacts/teacher
-          cp target/release/bundle/deb/Lumina\ Teacher_*.deb artifacts/teacher/
-          cp target/release/bundle/appimage/Lumina\ Teacher_*.AppImage artifacts/teacher/
+          cp target/release/bundle/deb/Cinder\ Teacher_*.deb artifacts/teacher/Cinder-Teacher-Linux-x86_64.deb
+          cp target/release/bundle/appimage/Cinder\ Teacher_*.AppImage artifacts/teacher/Cinder-Teacher-Linux-x86_64.AppImage
 
       - name: Verify installer set
         run: |
@@ -68,6 +68,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: lumina-linux-x86_64
+          name: cinder-linux-x86_64
           if-no-files-found: error
           path: artifacts/

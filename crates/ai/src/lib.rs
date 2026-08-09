@@ -8,7 +8,7 @@
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use lumina_core::GeneratedCard;
+use cinder_core::GeneratedCard;
 use serde::Deserialize;
 
 pub mod grammar;

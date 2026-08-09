@@ -4,7 +4,7 @@
 use axum::extract::State;
 use axum::routing::get;
 use axum::{Json, Router};
-use lumina_core::HealthResponse;
+use cinder_core::HealthResponse;
 
 use crate::AppState;
 

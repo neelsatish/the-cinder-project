@@ -3,7 +3,7 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
-use lumina_core::ApiError;
+use cinder_core::ApiError;
 
 pub type HostResult<T> = Result<T, HostError>;
 

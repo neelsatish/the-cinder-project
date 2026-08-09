@@ -8,7 +8,7 @@ use std::net::IpAddr;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use lumina_core::MDNS_SERVICE_TYPE;
+use cinder_core::MDNS_SERVICE_TYPE;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 
 /// Announces this machine as the lab host. The returned daemon must be kept
@@ -98,7 +98,7 @@ fn sanitize(name: &str) -> String {
         .collect();
     let trimmed = cleaned.trim_matches('-');
     if trimmed.is_empty() {
-        "lumina-host".to_owned()
+        "cinder-host".to_owned()
     } else {
         trimmed.to_lowercase()
     }
@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn sanitizes_hostnames() {
         assert_eq!(sanitize("Lab PC 1"), "lab-pc-1");
-        assert_eq!(sanitize("शिक्षक"), "lumina-host", "non-ascii falls back");
-        assert_eq!(sanitize("---"), "lumina-host");
+        assert_eq!(sanitize("शिक्षक"), "cinder-host", "non-ascii falls back");
+        assert_eq!(sanitize("---"), "cinder-host");
     }
 }

@@ -7,7 +7,7 @@ use argon2::Argon2;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use chrono::{DateTime, Duration, Utc};
-use lumina_core::{Role, User};
+use cinder_core::{Role, User};
 use rand::RngCore;
 use rusqlite::OptionalExtension;
 use sha2::{Digest, Sha256};

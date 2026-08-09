@@ -4,7 +4,7 @@ use axum::extract::{Path, State};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use chrono::Utc;
-use lumina_core::{
+use cinder_core::{
     Classroom, ClassroomRoster, CreateClassroomRequest, EnrolStudentRequest, Role,
     UpdateClassroomRequest, User,
 };

@@ -7,7 +7,7 @@ use axum::extract::{Path, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::Utc;
-use lumina_core::{
+use cinder_core::{
     CreateNodeRequest, Node, NodeKind, TreeResponse, UpdateNodeRequest, POSITION_STEP,
 };
 use rusqlite::OptionalExtension;

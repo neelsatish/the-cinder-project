@@ -10,13 +10,14 @@ import {
 import {
   AppShell,
   Badge,
+  BrandMark,
   Button,
   DocumentEditor,
   EmptyState,
   Field,
   Icon,
   LoginScreen,
-  LuminaApi,
+  CinderApi,
   Metric,
   Modal,
   PageHeader,
@@ -35,7 +36,7 @@ import {
   type SubmissionComment,
   type StudyNode,
   type User,
-} from "@lumina/ui";
+} from "@cinder/ui";
 
 type TeacherTab =
   | "dashboard"
@@ -49,7 +50,8 @@ type TeacherTab =
 type StoredSession = { token: string; user: User };
 type HostInfo = { base_url: string; port: number };
 
-const SESSION_KEY = "lumina.teacher.session";
+const SESSION_KEY = "cinder.teacher.session";
+const LEGACY_SESSION_KEY = ["lu", "mina.teacher.session"].join("");
 const DEV_HOST = "http://127.0.0.1:7373";
 const navigation: NavigationItem<TeacherTab>[] = [
   { id: "dashboard", label: "Overview", icon: "dashboard" },
@@ -76,11 +78,37 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function storedSession(): StoredSession | null {
+  for (const key of [SESSION_KEY, LEGACY_SESSION_KEY]) {
+    const raw = localStorage.getItem(key);
+    if (!raw) continue;
+    try {
+      const session = JSON.parse(raw) as Partial<StoredSession>;
+      if (
+        typeof session.token !== "string" ||
+        !session.user ||
+        session.user.role !== "teacher"
+      ) {
+        throw new Error("Invalid saved session");
+      }
+      const valid = session as StoredSession;
+      if (key !== SESSION_KEY) {
+        localStorage.setItem(SESSION_KEY, JSON.stringify(valid));
+        localStorage.removeItem(key);
+      }
+      return valid;
+    } catch {
+      localStorage.removeItem(key);
+    }
+  }
+  return null;
+}
+
 export function App() {
   const [loading, setLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [baseUrl, setBaseUrl] = useState(DEV_HOST);
-  const [api, setApi] = useState(() => new LuminaApi(DEV_HOST));
+  const [api, setApi] = useState(() => new CinderApi(DEV_HOST));
   const [user, setUser] = useState<User | null>(null);
   const [tab, setTab] = useState<TeacherTab>("dashboard");
   const [stats, setStats] = useState<DashboardStats>({
@@ -96,7 +124,7 @@ export function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
 
-  const loadWorkspace = useCallback(async (activeApi: LuminaApi) => {
+  const loadWorkspace = useCallback(async (activeApi: CinderApi) => {
     setRefreshing(true);
     try {
       const [nextStats, nextStudents, nextClassrooms, nextAssignments] =
@@ -117,44 +145,46 @@ export function App() {
 
   useEffect(() => {
     void (async () => {
-      let host = DEV_HOST;
-      if (isTauri()) {
-        try {
-          host = (await invoke<HostInfo>("host_info")).base_url;
-        } catch {
-          /* dev fallback */
+      try {
+        let host = DEV_HOST;
+        if (isTauri()) {
+          try {
+            host = (await invoke<HostInfo>("host_info")).base_url;
+          } catch {
+            /* dev fallback */
+          }
         }
-      }
-      const activeApi = new LuminaApi(host);
-      setBaseUrl(host);
-      setApi(activeApi);
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        try {
-          const status = await activeApi.authStatus();
-          setNeedsSetup(status.needs_setup);
-          break;
-        } catch {
-          await new Promise((resolve) => window.setTimeout(resolve, 200));
+        const activeApi = new CinderApi(host);
+        setBaseUrl(host);
+        setApi(activeApi);
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          try {
+            const status = await activeApi.authStatus();
+            setNeedsSetup(status.needs_setup);
+            break;
+          } catch {
+            await new Promise((resolve) => window.setTimeout(resolve, 250));
+          }
         }
-      }
-      const raw = localStorage.getItem(SESSION_KEY);
-      if (raw) {
-        const session = JSON.parse(raw) as StoredSession;
-        activeApi.setToken(session.token);
-        try {
-          const current = await activeApi.me();
-          setUser(current);
-          localStorage.setItem(
-            SESSION_KEY,
-            JSON.stringify({ token: session.token, user: current }),
-          );
-          await loadWorkspace(activeApi);
-        } catch {
-          localStorage.removeItem(SESSION_KEY);
-          activeApi.setToken(null);
+        const session = storedSession();
+        if (session) {
+          activeApi.setToken(session.token);
+          try {
+            const current = await activeApi.me();
+            setUser(current);
+            localStorage.setItem(
+              SESSION_KEY,
+              JSON.stringify({ token: session.token, user: current }),
+            );
+            await loadWorkspace(activeApi);
+          } catch {
+            localStorage.removeItem(SESSION_KEY);
+            activeApi.setToken(null);
+          }
         }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
   }, [loadWorkspace]);
 
@@ -184,7 +214,7 @@ export function App() {
   if (loading)
     return (
       <div className="boot-screen">
-        <Icon name="assistant" />
+        <BrandMark size={58} />
         <span>Starting the classroom server…</span>
       </div>
     );
@@ -292,7 +322,7 @@ function BootstrapScreen({
   api,
   onComplete,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   onComplete: () => void;
 }) {
   const [username, setUsername] = useState("teacher");
@@ -351,7 +381,7 @@ function BootstrapScreen({
       >
         <Icon name="assistant" />
         <p className="eyebrow">First run</p>
-        <h1>Set up Lumina Teacher</h1>
+        <h1>Set up Cinder Teacher</h1>
         <p>
           Create the school’s single teacher account. Student accounts are added
           after sign-in.
@@ -511,7 +541,7 @@ function StudentsView({
   students,
   onUpdated,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   students: User[];
   onUpdated: () => Promise<void>;
 }) {
@@ -603,7 +633,7 @@ function StudentsView({
                         onClick={async () => {
                           if (
                             !window.confirm(
-                              `Remove ${student.display_name} from Lumina? Their account will be disabled, but submitted work and grades will be preserved.`,
+                              `Remove ${student.display_name} from Cinder? Their account will be disabled, but submitted work and grades will be preserved.`,
                             )
                           )
                             return;
@@ -672,8 +702,8 @@ function StudentsView({
               </code>
             </div>
             <p className="form-hint">
-              The student must replace the temporary PIN at first sign-in.
-              Store the recovery code separately.
+              The student must replace the temporary PIN at first sign-in. Store
+              the recovery code separately.
             </p>
           </div>
         </Modal>
@@ -714,7 +744,7 @@ function CreateStudentModal({
   return (
     <Modal
       title="Create student account"
-      description="Lumina generates a four-digit one-time PIN."
+      description="Cinder generates a four-digit one-time PIN."
       onClose={onClose}
     >
       <form
@@ -869,7 +899,7 @@ function ClassroomsView({
   assignments,
   onUpdated,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   classrooms: Classroom[];
   students: User[];
   assignments: Assignment[];
@@ -968,7 +998,7 @@ function ClassroomFormModal({
   const [name, setName] = useState(classroom?.name ?? "");
   const [code, setCode] = useState(classroom?.subject_code ?? "");
   const [description, setDescription] = useState(classroom?.description ?? "");
-  const [color, setColor] = useState(classroom?.color ?? "#8d96ff");
+  const [color, setColor] = useState(classroom?.color ?? "#d9631f");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   return (
@@ -1048,7 +1078,7 @@ function RosterModal({
   onDeleted,
   onUpdated,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   classroomId: string;
   students: User[];
   onClose: () => void;
@@ -1303,7 +1333,7 @@ function AssignmentsView({
   assignments,
   onUpdated,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   classrooms: Classroom[];
   assignments: Assignment[];
   onUpdated: () => Promise<void>;
@@ -1864,7 +1894,7 @@ function GradeModal({
   onClose,
   onSaved,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   assignment: Assignment;
   submission: Submission;
   onClose: () => void;
@@ -2000,7 +2030,7 @@ function AttendanceView({
   api,
   onUpdated,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   onUpdated: () => Promise<void>;
 }) {
   const [day, setDay] = useState(today());
@@ -2145,7 +2175,7 @@ function GradebookView({
   classrooms,
   assignments,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   classrooms: Classroom[];
   assignments: Assignment[];
 }) {
@@ -2203,7 +2233,7 @@ function GradebookView({
       setByAssignment(nextByAssignment);
       setScores(nextScores);
       setSuggestions({});
-      setStatus("Saved to Lumina");
+      setStatus("Saved to Cinder");
     } catch (failure) {
       setStatus(
         failure instanceof Error
@@ -2254,7 +2284,7 @@ function GradebookView({
           item.id === submission.id ? { ...item, grade } : item,
         ),
       }));
-      setStatus("Saved to Lumina");
+      setStatus("Saved to Cinder");
     } catch (failure) {
       setStatus(
         failure instanceof Error
@@ -2381,7 +2411,7 @@ function GradebookView({
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${classrooms.find((item) => item.id === classroomId)?.name ?? "Lumina"}-gradebook.csv`;
+    anchor.download = `${classrooms.find((item) => item.id === classroomId)?.name ?? "Cinder"}-gradebook.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -2408,7 +2438,7 @@ function GradebookView({
       <PageHeader
         eyebrow="Gradebook"
         title="Structured grading sheet"
-        description="Type into submitted-work cells. Every saved change uses the audited Lumina grade record."
+        description="Type into submitted-work cells. Every saved change uses the audited Cinder grade record."
         action={
           <div className="list-actions">
             <Field label="Classroom">
@@ -2629,7 +2659,7 @@ function parseAiGradebook(
   }
 }
 
-function AssistantView({ api }: { api: LuminaApi }) {
+function AssistantView({ api }: { api: CinderApi }) {
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -2721,7 +2751,7 @@ function AiSettingsPanel({
   settings,
   onSettings,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   settings: AiSettings | null;
   onSettings: (settings: AiSettings) => void;
 }) {
@@ -2879,7 +2909,7 @@ function TeacherRecoveryModal({
   api,
   onClose,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   onClose: () => void;
 }) {
   const [username, setUsername] = useState("");

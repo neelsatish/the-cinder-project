@@ -5,8 +5,8 @@ mod config;
 
 use std::time::{Duration, Instant};
 
+use cinder_core::MDNS_SERVICE_TYPE;
 use config::StudentConfig;
-use lumina_core::MDNS_SERVICE_TYPE;
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 use tauri::Manager;
 
@@ -14,7 +14,7 @@ fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,lumina_student=debug".into()),
+                .unwrap_or_else(|_| "info,cinder_student=debug".into()),
         )
         .init();
 
@@ -36,12 +36,13 @@ fn main() {
         ])
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
+            cinder_core::migrate_legacy_app_data(&data_dir, "student")?;
             std::fs::create_dir_all(&data_dir)?;
             app.manage(StudentConfig::load(&data_dir));
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running Lumina Student");
+        .expect("error while running Cinder Student");
 }
 
 mod commands {

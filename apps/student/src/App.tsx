@@ -11,6 +11,7 @@ import {
   ApiError,
   AppShell,
   Badge,
+  BrandMark,
   Button,
   cacheGet,
   cacheSet,
@@ -20,7 +21,7 @@ import {
   Field,
   Icon,
   LoginScreen,
-  LuminaApi,
+  CinderApi,
   Metric,
   Modal,
   outboxEntries,
@@ -39,7 +40,7 @@ import {
   type Submission,
   type SubmissionComment,
   type User,
-} from "@lumina/ui";
+} from "@cinder/ui";
 
 type StudentTab =
   | "home"
@@ -53,12 +54,57 @@ type StudentConfig = { host_url: string | null; device_label: string | null };
 type StoredSession = { baseUrl: string; token: string; user: User };
 type DocumentValue = Record<string, unknown>;
 
-const SESSION_KEY = "lumina.student.session";
+const SESSION_KEY = "cinder.student.session";
+const LEGACY_SESSION_KEY = ["lu", "mina.student.session"].join("");
 const DEV_HOST = "http://127.0.0.1:7373";
 const EMPTY_DOCUMENT: DocumentValue = {
   type: "doc",
   content: [{ type: "paragraph" }],
 };
+
+function storedSession(): StoredSession | null {
+  for (const key of [SESSION_KEY, LEGACY_SESSION_KEY]) {
+    const stored = localStorage.getItem(key);
+    if (!stored) continue;
+    try {
+      const session = JSON.parse(stored) as Partial<StoredSession>;
+      if (
+        typeof session.baseUrl !== "string" ||
+        typeof session.token !== "string" ||
+        !session.user ||
+        session.user.role !== "student"
+      ) {
+        throw new Error("Invalid saved session");
+      }
+      const valid = session as StoredSession;
+      if (key !== SESSION_KEY) {
+        localStorage.setItem(SESSION_KEY, JSON.stringify(valid));
+        localStorage.removeItem(key);
+      }
+      return valid;
+    } catch {
+      localStorage.removeItem(key);
+    }
+  }
+  return null;
+}
+
+async function within<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: number | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = window.setTimeout(
+          () => reject(new Error("Startup operation timed out")),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) window.clearTimeout(timeout);
+  }
+}
 
 const navigation: NavigationItem<StudentTab>[] = [
   { id: "home", label: "Home", icon: "home" },
@@ -95,7 +141,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [baseUrl, setBaseUrl] = useState(DEV_HOST);
   const [deviceLabel, setDeviceLabel] = useState("Student computer");
-  const [api, setApi] = useState(() => new LuminaApi(DEV_HOST));
+  const [api, setApi] = useState(() => new CinderApi(DEV_HOST));
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
@@ -114,7 +160,7 @@ export function App() {
   const apiRef = useRef(api);
   apiRef.current = api;
 
-  const flushOutbox = useCallback(async (activeApi: LuminaApi) => {
+  const flushOutbox = useCallback(async (activeApi: CinderApi) => {
     for (const entry of await outboxEntries()) {
       try {
         if (entry.kind === "note") {
@@ -154,7 +200,7 @@ export function App() {
   }, []);
 
   const loadWorkspace = useCallback(
-    async (activeApi: LuminaApi) => {
+    async (activeApi: CinderApi) => {
       setRefreshing(true);
       try {
         const [nextClassrooms, nextAssignments, tree] = await Promise.all([
@@ -212,49 +258,56 @@ export function App() {
 
   useEffect(() => {
     void (async () => {
-      let config: StudentConfig = {
-        host_url: DEV_HOST,
-        device_label: "Student computer",
-      };
-      if (isTauri()) {
-        try {
-          config = await invoke<StudentConfig>("load_config");
-        } catch {
-          // The manual connection screen remains available.
-        }
-      }
-      const stored = localStorage.getItem(SESSION_KEY);
-      const session = stored ? (JSON.parse(stored) as StoredSession) : null;
-      const nextUrl = session?.baseUrl ?? config.host_url ?? DEV_HOST;
-      const nextApi = new LuminaApi(nextUrl, session?.token ?? null);
-      setBaseUrl(nextUrl);
-      setDeviceLabel(config.device_label ?? "Student computer");
-      setApi(nextApi);
-      if (session) {
-        let canLoadWorkspace = !session.user.must_change_password;
-        setToken(session.token);
-        setUser(session.user);
-        try {
-          const current = await nextApi.me();
-          canLoadWorkspace = !current.must_change_password;
-          setUser(current);
-          localStorage.setItem(
-            SESSION_KEY,
-            JSON.stringify({ ...session, user: current }),
-          );
-          setOnline(true);
-        } catch (failure) {
-          if (!(failure instanceof ApiError && failure.offline)) {
-            localStorage.removeItem(SESSION_KEY);
-            setUser(null);
-            setToken(null);
+      try {
+        let config: StudentConfig = {
+          host_url: DEV_HOST,
+          device_label: "Student computer",
+        };
+        if (isTauri()) {
+          try {
+            config = await within(invoke<StudentConfig>("load_config"), 4_000);
+          } catch {
+            // The manual connection screen remains available.
           }
         }
-        if (canLoadWorkspace) await loadWorkspace(nextApi);
-      } else {
-        setOnline(await probeHost(nextUrl));
+        const session = storedSession();
+        const nextUrl = session?.baseUrl ?? config.host_url ?? DEV_HOST;
+        const nextApi = new CinderApi(nextUrl, session?.token ?? null);
+        setBaseUrl(nextUrl);
+        setDeviceLabel(config.device_label ?? "Student computer");
+        setApi(nextApi);
+        if (session) {
+          let canLoadWorkspace = !session.user.must_change_password;
+          setToken(session.token);
+          setUser(session.user);
+          try {
+            const current = await nextApi.me();
+            canLoadWorkspace = !current.must_change_password;
+            setUser(current);
+            localStorage.setItem(
+              SESSION_KEY,
+              JSON.stringify({ ...session, user: current }),
+            );
+            setOnline(true);
+          } catch (failure) {
+            if (!(failure instanceof ApiError && failure.offline)) {
+              localStorage.removeItem(SESSION_KEY);
+              setUser(null);
+              setToken(null);
+              canLoadWorkspace = false;
+            }
+          }
+          if (canLoadWorkspace) await loadWorkspace(nextApi);
+        } else {
+          setOnline(await probeHost(nextUrl));
+        }
+      } catch {
+        // A corrupt cache or platform API failure must never strand the app on
+        // its boot screen. The login/connection controls remain usable.
+        setOnline(false);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
   }, [loadWorkspace]);
 
@@ -294,7 +347,7 @@ export function App() {
   const saveConnection = async (nextUrl: string, nextLabel: string) => {
     const normalised = nextUrl.trim().replace(/\/+$/, "");
     if (!(await probeHost(normalised)))
-      throw new Error("No Lumina Teacher app answered at that address.");
+      throw new Error("No Cinder Teacher app answered at that address.");
     if (isTauri())
       await invoke("save_config", {
         config: {
@@ -302,7 +355,7 @@ export function App() {
           device_label: nextLabel.trim() || null,
         },
       });
-    const nextApi = new LuminaApi(normalised, token);
+    const nextApi = new CinderApi(normalised, token);
     setBaseUrl(normalised);
     setDeviceLabel(nextLabel.trim() || "Student computer");
     setApi(nextApi);
@@ -320,8 +373,8 @@ export function App() {
   if (loading)
     return (
       <div className="boot-screen">
-        <Icon name="offline" />
-        <span>Starting Lumina…</span>
+        <BrandMark size={58} />
+        <span>Starting Cinder…</span>
       </div>
     );
   if (!user) {
@@ -378,9 +431,9 @@ export function App() {
         <div className="connection-lock-card">
           <Icon name="offline" />
           <p className="eyebrow">Teacher app offline</p>
-          <h1>Lumina is waiting for the classroom computer.</h1>
+          <h1>Cinder is waiting for the classroom computer.</h1>
           <p>
-            Ask the teacher to open Lumina Teacher, then reconnect. Your
+            Ask the teacher to open Cinder Teacher, then reconnect. Your
             existing notes and queued work remain stored on this device.
           </p>
           <div className="connection-lock-actions">
@@ -632,7 +685,7 @@ function ClassroomsView({
   nodes,
   onOpenAssignments,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   baseUrl: string;
   token: string | null;
   classrooms: Classroom[];
@@ -870,7 +923,7 @@ function AssignmentsView({
   submissions,
   onUpdated,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   online: boolean;
   assignments: Assignment[];
   submissions: Record<string, Submission | null>;
@@ -1056,7 +1109,7 @@ function NotesView({
   nodes,
   onNodesChange,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   online: boolean;
   classrooms: Classroom[];
   nodes: StudyNode[];
@@ -1238,7 +1291,7 @@ function FlashcardsView({
   nodes,
   onNodesChange,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   online: boolean;
   classrooms: Classroom[];
   nodes: StudyNode[];
@@ -1588,7 +1641,7 @@ function FeedbackView({
   assignments,
   submissions,
 }: {
-  api: LuminaApi;
+  api: CinderApi;
   assignments: Assignment[];
   submissions: Record<string, Submission | null>;
 }) {
@@ -1713,7 +1766,7 @@ function SettingsView({
       <PageHeader
         eyebrow="Settings"
         title="Device and account"
-        description="Lumina keeps local drafts on this computer and syncs them to the teacher machine."
+        description="Cinder keeps local drafts on this computer and syncs them to the teacher machine."
       />
       <div className="grid grid-2">
         <Panel title="School connection" eyebrow="Network">

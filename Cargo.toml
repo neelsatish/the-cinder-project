@@ -9,15 +9,15 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.77"
 license = "MIT"
 
 [workspace.dependencies]
-lumina-core = { path = "crates/core" }
-lumina-host = { path = "crates/host" }
-lumina-ai = { path = "crates/ai" }
+cinder-core = { path = "crates/core" }
+cinder-host = { path = "crates/host" }
+cinder-ai = { path = "crates/ai" }
 
 anyhow = "1"
 thiserror = "2"

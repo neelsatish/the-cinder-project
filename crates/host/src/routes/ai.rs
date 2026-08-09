@@ -9,8 +9,8 @@ use aes_gcm::{Aes256Gcm, Nonce};
 use axum::extract::State;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use lumina_ai::ChatClient;
-use lumina_core::{AiSettings, ChatRequest, ChatResponse, ChatRole, SaveAiSettings};
+use cinder_ai::ChatClient;
+use cinder_core::{AiSettings, ChatRequest, ChatResponse, ChatRole, SaveAiSettings};
 use rand::{rngs::OsRng, RngCore};
 use rusqlite::OptionalExtension;
 
@@ -207,7 +207,7 @@ async fn chat(
 
     let mut messages: Vec<(String, String)> = vec![(
         "system".into(),
-        "You are Lumina's teacher assistant. Help the teacher understand submitted \
+        "You are Cinder's teacher assistant. Help the teacher understand submitted \
          student work, prepare questions, and draft constructive feedback. Never claim \
          that an AI suggestion is a final grade, and never invent evidence that is not \
          present in the selected classroom context."
@@ -220,7 +220,7 @@ async fn chat(
             let clipped: String = trimmed.chars().take(MAX_CONTEXT_CHARS).collect();
             messages.push((
                 "system".into(),
-                format!("Selected Lumina classroom data supplied by the teacher:\n\n{clipped}"),
+                format!("Selected Cinder classroom data supplied by the teacher:\n\n{clipped}"),
             ));
         }
     }

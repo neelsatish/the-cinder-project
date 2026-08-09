@@ -13,7 +13,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::Utc;
-use lumina_core::{FileMeta, Node, NodeKind, ALLOWED_UPLOAD_MIMES, MAX_UPLOAD_BYTES};
+use cinder_core::{FileMeta, Node, NodeKind, ALLOWED_UPLOAD_MIMES, MAX_UPLOAD_BYTES};
 use rusqlite::OptionalExtension;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -165,7 +165,7 @@ async fn upload(
                     query.parent_id.map(|p| p.to_string()),
                     query.classroom_id.map(|value| value.to_string()),
                     display_name,
-                    lumina_core::POSITION_STEP,
+                    cinder_core::POSITION_STEP,
                     now.to_rfc3339(),
                 ],
             )?;
@@ -192,7 +192,7 @@ async fn upload(
                 // Images are stored as `pdf` kind too — the tree only needs to
                 // know "this is a file"; the viewer branches on the mime type.
                 kind: NodeKind::Pdf,
-                position: lumina_core::POSITION_STEP,
+                position: cinder_core::POSITION_STEP,
                 icon: None,
                 created_at: now,
                 updated_at: now,

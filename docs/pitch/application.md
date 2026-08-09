@@ -1,6 +1,6 @@
 # Track 3 — Pitch Your Project: application answers
 
-**Project:** Lumina — a study lab built from e-waste, for a government school.
+**Project:** Cinder — a study lab built from e-waste, for a government school.
 **Deadline:** applications close **10 Aug**. Shortlist ~17 Aug. Panel pitch ~28 Aug.
 
 > `‹…›` marks something only the team can fill in. Every one of these must be
@@ -35,7 +35,7 @@ solution that assumes either one will not survive us leaving.
 We build software and we can bring dead computers back to life.
 
 Concretely: we recover end-of-life office PCs from e-waste and local repair shops,
-install a lightweight Linux on them, and run **Lumina** — an app we are writing
+install a lightweight Linux on them, and run **Cinder** — an app we are writing
 ourselves — so that each student has a private, password-protected space to organise
 their subjects, take notes, read PDFs, time their study, and revise with flashcards.
 One machine acts as the class computer: it stores everything and runs a small AI model
@@ -53,7 +53,7 @@ ourselves for twelve weeks, and we train a group of students to run it after us.
 | | |
 |---|---|
 | 0–15 min | **Digital skills.** One concrete thing: the mouse, typing, files, search. |
-| 15–45 min | **Guided study.** Students work in Lumina on real material from their own classes — organising a subject, typing notes from that week's lesson, reading a PDF the teacher uploaded. The Pomodoro timer runs, so the session logs itself. |
+| 15–45 min | **Guided study.** Students work in Cinder on real material from their own classes — organising a subject, typing notes from that week's lesson, reading a PDF the teacher uploaded. The Pomodoro timer runs, so the session logs itself. |
 | 45–55 min | **Flashcard review.** Cards from earlier sessions come back on a spaced schedule. Short, active, and it is the part they ask for. |
 
 **How it builds across twelve weeks:**
@@ -105,7 +105,7 @@ Four things stay, and none of them need us:
 3. **Trained student lab monitors.** ‹N› students from the school who by week 12 can
    open the lab, create accounts, reset a password and help a beginner. We hand over to
    them in week 12 while we are still there to catch mistakes.
-4. **The software, open, and a written handover.** Lumina is open source with
+4. **The software, open, and a written handover.** Cinder is open source with
    setup and repair documentation. The next Wider World cohort inherits a working
    codebase rather than starting over — and we will mentor them.
 
@@ -125,7 +125,7 @@ nothing to keep running.
 | 1 class computer (8 GB+ RAM) | Best machine we recover; bought if none is good enough | ₹‹x› |
 | Monitors, keyboards, mice | Same sources | ₹‹x› |
 | Network switch + router (**no internet line**) | Purchased once | ₹‹x› |
-| Operating system and all software | Debian Linux + Lumina, both free | ₹0 |
+| Operating system and all software | Debian Linux + Cinder, both free | ₹0 |
 | AI model | Open-weights, copied from a USB stick | ₹0 |
 | **Recurring cost to the school** | — | **₹0/month** |
 

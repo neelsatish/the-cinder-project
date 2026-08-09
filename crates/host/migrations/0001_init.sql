@@ -1,4 +1,4 @@
--- Lumina host schema.
+-- Cinder host schema.
 --
 -- Runs inside one transaction. Migrations are applied in filename order and
 -- recorded in `schema_migrations`; never edit a migration that has shipped to a

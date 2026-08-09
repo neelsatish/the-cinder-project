@@ -72,7 +72,7 @@ export function AppShell<T extends string>({
       <div className="app-stage">
         <header className="topbar">
           <div className="product-lockup">
-            <span className="product-name">Lumina</span>
+            <span className="product-name">Cinder</span>
             <span className="product-divider" />
             <span className="section-name">{activeItem?.label}</span>
           </div>
@@ -335,7 +335,7 @@ export function LoginScreen({
       <form className="auth-card" onSubmit={submit}>
         <div className="auth-heading">
           <span className="role-chip">{role}</span>
-          <h2>Welcome to Lumina</h2>
+          <h2>Welcome to Cinder</h2>
           <p>{helper ?? "Sign in with the account created by your teacher."}</p>
         </div>
         <Field label="Username">

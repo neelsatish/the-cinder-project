@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Minimal permissions for the Lumina Teacher window.",
+  "description": "Minimal permissions for the Cinder Teacher window.",
   "windows": ["main"],
   "permissions": [
     "core:default",

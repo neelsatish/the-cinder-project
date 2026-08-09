@@ -34,7 +34,7 @@ export class ApiError extends Error {
   }
 }
 
-export class LuminaApi {
+export class CinderApi {
   private token: string | null;
 
   constructor(
@@ -49,20 +49,44 @@ export class LuminaApi {
     this.token = token;
   }
 
-  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  private async request<T>(
+    path: string,
+    init: RequestInit = {},
+    timeoutMs = 10_000,
+  ): Promise<T> {
     const headers = new Headers(init.headers);
     if (this.token) headers.set("Authorization", `Bearer ${this.token}`);
-    if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    if (
+      init.body &&
+      !(init.body instanceof FormData) &&
+      !headers.has("Content-Type")
+    )
+      headers.set("Content-Type", "application/json");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}${path}`, { ...init, headers });
+      response = await fetch(`${this.baseUrl}${path}`, {
+        ...init,
+        headers,
+        signal: controller.signal,
+      });
     } catch {
-      throw new ApiError("offline", "The teacher computer is currently unreachable.", 0);
+      throw new ApiError(
+        controller.signal.aborted ? "timeout" : "offline",
+        controller.signal.aborted
+          ? "The teacher computer did not respond in time."
+          : "The teacher computer is currently unreachable.",
+        0,
+      );
+    } finally {
+      window.clearTimeout(timeout);
     }
     if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as
-        | { error?: string; message?: string }
-        | null;
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+        message?: string;
+      } | null;
       throw new ApiError(
         body?.error ?? "request_failed",
         body?.message ?? `Request failed (${response.status})`,
@@ -78,10 +102,19 @@ export class LuminaApi {
   }
 
   authStatus() {
-    return this.request<{ needs_setup: boolean }>("/api/auth/status");
+    return this.request<{ needs_setup: boolean }>(
+      "/api/auth/status",
+      {},
+      2_000,
+    );
   }
 
-  login(username: string, password: string, expectedRole: Role, deviceLabel?: string | null) {
+  login(
+    username: string,
+    password: string,
+    expectedRole: Role,
+    deviceLabel?: string | null,
+  ) {
     return this.request<LoginResponse>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({
@@ -94,7 +127,7 @@ export class LuminaApi {
   }
 
   me() {
-    return this.request<User>("/api/me");
+    return this.request<User>("/api/me", {}, 4_000);
   }
 
   logout() {
@@ -102,27 +135,36 @@ export class LuminaApi {
   }
 
   bootstrapTeacher(username: string, displayName: string, password: string) {
-    return this.request<{ user: User; recovery_code: string }>("/api/auth/bootstrap", {
-      method: "POST",
-      body: JSON.stringify({ username, display_name: displayName, password }),
-    });
+    return this.request<{ user: User; recovery_code: string }>(
+      "/api/auth/bootstrap",
+      {
+        method: "POST",
+        body: JSON.stringify({ username, display_name: displayName, password }),
+      },
+    );
   }
 
   recoverTeacher(username: string, recoveryCode: string, newPassword: string) {
-    return this.request<{ user: User; recovery_code: string }>("/api/auth/recover", {
-      method: "POST",
-      body: JSON.stringify({
-        username,
-        recovery_code: recoveryCode,
-        new_password: newPassword,
-      }),
-    });
+    return this.request<{ user: User; recovery_code: string }>(
+      "/api/auth/recover",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          username,
+          recovery_code: recoveryCode,
+          new_password: newPassword,
+        }),
+      },
+    );
   }
 
   changePassword(currentPassword: string, newPassword: string) {
     return this.request<User>("/api/auth/change-password", {
       method: "POST",
-      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
     });
   }
 
@@ -137,26 +179,34 @@ export class LuminaApi {
     section?: string | null;
     roll_number?: string | null;
   }) {
-    return this.request<{ user: User; temporary_password: string; recovery_code: string }>("/api/teacher/users", {
+    return this.request<{
+      user: User;
+      temporary_password: string;
+      recovery_code: string;
+    }>("/api/teacher/users", {
       method: "POST",
       body: JSON.stringify(input),
     });
   }
 
   resetStudentCredentials(studentId: string) {
-    return this.request<{ user: User; temporary_password: string; recovery_code: string }>(
-      `/api/teacher/users/${studentId}/reset-credentials`,
-      { method: "POST" },
-    );
+    return this.request<{
+      user: User;
+      temporary_password: string;
+      recovery_code: string;
+    }>(`/api/teacher/users/${studentId}/reset-credentials`, { method: "POST" });
   }
 
-  updateStudent(studentId: string, input: {
-    username: string;
-    display_name: string;
-    grade_level?: string | null;
-    section?: string | null;
-    roll_number?: string | null;
-  }) {
+  updateStudent(
+    studentId: string,
+    input: {
+      username: string;
+      display_name: string;
+      grade_level?: string | null;
+      section?: string | null;
+      roll_number?: string | null;
+    },
+  ) {
     return this.request<User>(`/api/teacher/users/${studentId}`, {
       method: "PATCH",
       body: JSON.stringify(input),
@@ -164,14 +214,23 @@ export class LuminaApi {
   }
 
   deleteStudent(studentId: string) {
-    return this.request<{ ok: true }>(`/api/teacher/users/${studentId}`, { method: "DELETE" });
+    return this.request<{ ok: true }>(`/api/teacher/users/${studentId}`, {
+      method: "DELETE",
+    });
   }
 
   recoverStudent(username: string, recoveryCode: string, newPassword: string) {
-    return this.request<{ user: User; recovery_code: string }>("/api/auth/student-recover", {
-      method: "POST",
-      body: JSON.stringify({ username, recovery_code: recoveryCode, new_password: newPassword }),
-    });
+    return this.request<{ user: User; recovery_code: string }>(
+      "/api/auth/student-recover",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          username,
+          recovery_code: recoveryCode,
+          new_password: newPassword,
+        }),
+      },
+    );
   }
 
   classrooms() {
@@ -190,12 +249,15 @@ export class LuminaApi {
     });
   }
 
-  updateClassroom(id: string, input: {
-    name: string;
-    subject_code?: string | null;
-    description: string;
-    color: string;
-  }) {
+  updateClassroom(
+    id: string,
+    input: {
+      name: string;
+      subject_code?: string | null;
+      description: string;
+      color: string;
+    },
+  ) {
     return this.request<Classroom>(`/api/classrooms/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
@@ -203,7 +265,9 @@ export class LuminaApi {
   }
 
   deleteClassroom(id: string) {
-    return this.request<{ ok: true }>(`/api/classrooms/${id}`, { method: "DELETE" });
+    return this.request<{ ok: true }>(`/api/classrooms/${id}`, {
+      method: "DELETE",
+    });
   }
 
   classroomRoster(id: string) {
@@ -211,10 +275,13 @@ export class LuminaApi {
   }
 
   enrolStudent(classroomId: string, studentId: string) {
-    return this.request<{ ok: true }>(`/api/classrooms/${classroomId}/students`, {
-      method: "POST",
-      body: JSON.stringify({ student_id: studentId }),
-    });
+    return this.request<{ ok: true }>(
+      `/api/classrooms/${classroomId}/students`,
+      {
+        method: "POST",
+        body: JSON.stringify({ student_id: studentId }),
+      },
+    );
   }
 
   removeStudent(classroomId: string, studentId: string) {
@@ -225,7 +292,9 @@ export class LuminaApi {
   }
 
   assignments(classroomId?: string) {
-    const query = classroomId ? `?classroom_id=${encodeURIComponent(classroomId)}` : "";
+    const query = classroomId
+      ? `?classroom_id=${encodeURIComponent(classroomId)}`
+      : "";
     return this.request<Assignment[]>(`/api/assignments${query}`);
   }
 
@@ -244,15 +313,18 @@ export class LuminaApi {
     });
   }
 
-  updateAssignment(id: string, input: {
-    classroom_id: string;
-    title: string;
-    instructions: string;
-    due_at: string | null;
-    max_points: number;
-    grading_scheme: unknown;
-    status: Assignment["status"];
-  }) {
+  updateAssignment(
+    id: string,
+    input: {
+      classroom_id: string;
+      title: string;
+      instructions: string;
+      due_at: string | null;
+      max_points: number;
+      grading_scheme: unknown;
+      status: Assignment["status"];
+    },
+  ) {
     return this.request<Assignment>(`/api/assignments/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
@@ -260,15 +332,21 @@ export class LuminaApi {
   }
 
   deleteAssignment(id: string) {
-    return this.request<{ ok: true }>(`/api/assignments/${id}`, { method: "DELETE" });
+    return this.request<{ ok: true }>(`/api/assignments/${id}`, {
+      method: "DELETE",
+    });
   }
 
   submissions(assignmentId: string) {
-    return this.request<Submission[]>(`/api/assignments/${assignmentId}/submissions`);
+    return this.request<Submission[]>(
+      `/api/assignments/${assignmentId}/submissions`,
+    );
   }
 
   mySubmission(assignmentId: string) {
-    return this.request<Submission | null>(`/api/assignments/${assignmentId}/submission`);
+    return this.request<Submission | null>(
+      `/api/assignments/${assignmentId}/submission`,
+    );
   }
 
   submitWork(
@@ -277,21 +355,36 @@ export class LuminaApi {
     plaintext: string,
     changeNote?: string,
   ) {
-    return this.request<Submission>(`/api/assignments/${assignmentId}/submission`, {
-      method: "PUT",
-      body: JSON.stringify({ doc_json: docJson, plaintext, change_note: changeNote || null }),
-    });
+    return this.request<Submission>(
+      `/api/assignments/${assignmentId}/submission`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          doc_json: docJson,
+          plaintext,
+          change_note: changeNote || null,
+        }),
+      },
+    );
   }
 
   withdrawWork(assignmentId: string) {
-    return this.request<{ ok: true }>(`/api/assignments/${assignmentId}/submission`, {
-      method: "DELETE",
-    });
+    return this.request<{ ok: true }>(
+      `/api/assignments/${assignmentId}/submission`,
+      {
+        method: "DELETE",
+      },
+    );
   }
 
   saveGrade(
     submissionId: string,
-    input: { points: number | null; grade_label: string | null; feedback: string; publish: boolean },
+    input: {
+      points: number | null;
+      grade_label: string | null;
+      feedback: string;
+      publish: boolean;
+    },
   ) {
     return this.request<Grade>(`/api/submissions/${submissionId}/grade`, {
       method: "PUT",
@@ -300,29 +393,44 @@ export class LuminaApi {
   }
 
   comments(submissionId: string) {
-    return this.request<SubmissionComment[]>(`/api/submissions/${submissionId}/comments`);
+    return this.request<SubmissionComment[]>(
+      `/api/submissions/${submissionId}/comments`,
+    );
   }
 
   addComment(submissionId: string, body: string, anchor: unknown = null) {
-    return this.request<SubmissionComment>(`/api/submissions/${submissionId}/comments`, {
-      method: "POST",
-      body: JSON.stringify({ body, anchor }),
-    });
+    return this.request<SubmissionComment>(
+      `/api/submissions/${submissionId}/comments`,
+      {
+        method: "POST",
+        body: JSON.stringify({ body, anchor }),
+      },
+    );
   }
 
   gradeHistory(submissionId: string) {
-    return this.request<GradeChange[]>(`/api/submissions/${submissionId}/grade-history`);
+    return this.request<GradeChange[]>(
+      `/api/submissions/${submissionId}/grade-history`,
+    );
   }
 
   attendance(day: string) {
     return this.request<AttendanceDay>(`/api/attendance/${day}`);
   }
 
-  saveAttendance(day: string, studentId: string, status: AttendanceStatus, note = "") {
-    return this.request<AttendanceDay["records"][number]>(`/api/attendance/${day}`, {
-      method: "PUT",
-      body: JSON.stringify({ student_id: studentId, status, note }),
-    });
+  saveAttendance(
+    day: string,
+    studentId: string,
+    status: AttendanceStatus,
+    note = "",
+  ) {
+    return this.request<AttendanceDay["records"][number]>(
+      `/api/attendance/${day}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ student_id: studentId, status, note }),
+      },
+    );
   }
 
   dashboard() {
@@ -346,7 +454,15 @@ export class LuminaApi {
     });
   }
 
-  updateNode(id: string, input: { name?: string; parent_id?: string | null; position?: number; icon?: string }) {
+  updateNode(
+    id: string,
+    input: {
+      name?: string;
+      parent_id?: string | null;
+      position?: number;
+      icon?: string;
+    },
+  ) {
     return this.request<StudyNode>(`/api/nodes/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
@@ -363,19 +479,38 @@ export class LuminaApi {
     return this.request<StudyNode>(
       `/api/files?shared=true&classroom_id=${encodeURIComponent(classroomId)}`,
       { method: "POST", body: form },
+      60_000,
     );
   }
 
   async materialBlob(id: string) {
     const headers = new Headers();
     if (this.token) headers.set("Authorization", `Bearer ${this.token}`);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 60_000);
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/api/files/${id}`, { headers });
+      response = await fetch(`${this.baseUrl}/api/files/${id}`, {
+        headers,
+        signal: controller.signal,
+      });
     } catch {
-      throw new ApiError("offline", "The teacher computer is currently unreachable.", 0);
+      throw new ApiError(
+        controller.signal.aborted ? "timeout" : "offline",
+        controller.signal.aborted
+          ? "The material download timed out."
+          : "The teacher computer is currently unreachable.",
+        0,
+      );
+    } finally {
+      window.clearTimeout(timeout);
     }
-    if (!response.ok) throw new ApiError("request_failed", "The material could not be opened.", response.status);
+    if (!response.ok)
+      throw new ApiError(
+        "request_failed",
+        "The material could not be opened.",
+        response.status,
+      );
     return response.blob();
   }
 
@@ -403,7 +538,11 @@ export class LuminaApi {
     return this.request<AiSettings>("/api/ai/settings");
   }
 
-  saveAiSettings(input: { base_url?: string; model: string; api_key?: string }) {
+  saveAiSettings(input: {
+    base_url?: string;
+    model: string;
+    api_key?: string;
+  }) {
     return this.request<AiSettings>("/api/ai/settings", {
       method: "PUT",
       body: JSON.stringify(input),
@@ -411,10 +550,14 @@ export class LuminaApi {
   }
 
   chat(messages: ChatMessage[], context?: string) {
-    return this.request<{ content: string }>("/api/ai/chat", {
-      method: "POST",
-      body: JSON.stringify({ messages, context }),
-    });
+    return this.request<{ content: string }>(
+      "/api/ai/chat",
+      {
+        method: "POST",
+        body: JSON.stringify({ messages, context }),
+      },
+      190_000,
+    );
   }
 
   cards(deckId: string) {
@@ -424,12 +567,19 @@ export class LuminaApi {
   createCard(deckId: string, front: string, back: string) {
     return this.request<Card>(`/api/decks/${deckId}/cards`, {
       method: "POST",
-      body: JSON.stringify({ front, back, source_node_id: null, source_excerpt: null }),
+      body: JSON.stringify({
+        front,
+        back,
+        source_node_id: null,
+        source_excerpt: null,
+      }),
     });
   }
 
   deleteCard(cardId: string) {
-    return this.request<{ ok: true }>(`/api/cards/${cardId}`, { method: "DELETE" });
+    return this.request<{ ok: true }>(`/api/cards/${cardId}`, {
+      method: "DELETE",
+    });
   }
 }
 

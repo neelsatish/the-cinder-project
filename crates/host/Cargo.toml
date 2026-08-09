@@ -1,12 +1,12 @@
 [package]
-name = "lumina-host"
+name = "cinder-host"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-lumina-core.workspace = true
-lumina-ai.workspace = true
+cinder-core.workspace = true
+cinder-ai.workspace = true
 
 anyhow.workspace = true
 thiserror.workspace = true

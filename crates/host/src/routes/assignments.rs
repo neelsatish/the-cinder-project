@@ -4,7 +4,7 @@ use axum::extract::{Path, Query, State};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
-use lumina_core::{
+use cinder_core::{
     AddCommentRequest, Assignment, AssignmentStatus, CreateAssignmentRequest, Grade, GradeChange,
     SaveGradeRequest, Submission, SubmissionComment, SubmissionStatus, SubmissionVersion,
     SubmitWorkRequest, UpdateAssignmentRequest,

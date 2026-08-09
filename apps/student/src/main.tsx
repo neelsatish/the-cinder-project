@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import "@lumina/ui/styles.css";
+import "@cinder/ui/styles.css";
 import "./student.css";
 import { App } from "./App";
 

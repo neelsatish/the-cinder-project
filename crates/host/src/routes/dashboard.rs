@@ -4,7 +4,7 @@ use axum::extract::State;
 use axum::routing::get;
 use axum::{Json, Router};
 use chrono::Local;
-use lumina_core::DashboardStats;
+use cinder_core::DashboardStats;
 
 use crate::auth::CurrentUser;
 use crate::error::HostResult;

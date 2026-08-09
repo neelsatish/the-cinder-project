@@ -4,7 +4,7 @@ use axum::extract::{Path, State};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use chrono::Utc;
-use lumina_core::{Card, CardOrigin, CreateCardRequest};
+use cinder_core::{Card, CardOrigin, CreateCardRequest};
 use rusqlite::OptionalExtension;
 use uuid::Uuid;
 
