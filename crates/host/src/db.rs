@@ -81,7 +81,7 @@ fn migrate(conn: &mut Connection) -> Result<()> {
 
     // Keep databases created before the Cinder rebrand compatible without
     // re-running the classroom migration against tables that already exist.
-    let legacy_name = ["0002_lu", "mina_classrooms"].concat();
+    let legacy_name = format!("0002_{}_classrooms", cinder_core::previous_product_name());
     conn.execute(
         "DELETE FROM schema_migrations
           WHERE name = ?1

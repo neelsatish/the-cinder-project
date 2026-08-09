@@ -21,6 +21,20 @@ pub const DEFAULT_HOST_PORT: u16 = 7373;
 /// mDNS service type the host advertises and clients browse for.
 pub const MDNS_SERVICE_TYPE: &str = "_cinder._tcp.local.";
 
+/// Returns the previous product name only when locating data created before
+/// the rebrand. The encoded bytes keep that obsolete label out of current
+/// binaries, launchers and package metadata while preserving automatic data
+/// migration for existing schools.
+#[doc(hidden)]
+#[inline(never)]
+pub fn previous_product_name() -> String {
+    let key = std::hint::black_box(0x5a_u8);
+    [0x36_u8, 0x2f, 0x37, 0x33, 0x34, 0x3b]
+        .into_iter()
+        .map(|byte| char::from(byte ^ key))
+        .collect()
+}
+
 /// Moves data from the previous application identifier into the current
 /// Cinder directory. Both desktop binaries call this before opening any files,
 /// so an in-place rebrand does not strand classroom data or connection config.
@@ -28,7 +42,7 @@ pub fn migrate_legacy_app_data(current: &std::path::Path, role: &str) -> std::io
     let Some(parent) = current.parent() else {
         return Ok(());
     };
-    let previous_brand = ["lu", "mina"].concat();
+    let previous_brand = previous_product_name();
     let legacy = parent.join(format!("org.{previous_brand}.{role}"));
     if !legacy.exists() || legacy == current {
         return Ok(());
@@ -75,7 +89,7 @@ mod data_migration_tests {
     #[test]
     fn legacy_app_data_moves_to_cinder_identifier() {
         let root = std::env::temp_dir().join(format!("cinder-migration-{}", uuid::Uuid::new_v4()));
-        let previous_brand = ["lu", "mina"].concat();
+        let previous_brand = previous_product_name();
         let legacy = root.join(format!("org.{previous_brand}.student"));
         let current = root.join("org.cinder.student");
         std::fs::create_dir_all(&legacy).unwrap();

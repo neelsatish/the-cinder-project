@@ -74,7 +74,7 @@ fn migrate_legacy_database(data_dir: &Path) -> Result<PathBuf> {
         .with_context(|| format!("creating data directory {}", data_dir.display()))?;
     let current_name = "cinder.db";
     let current = data_dir.join(current_name);
-    let legacy_name = format!("{}{}.db", "lu", "mina");
+    let legacy_name = format!("{}.db", cinder_core::previous_product_name());
     let legacy = data_dir.join(&legacy_name);
     if current.exists() || !legacy.exists() {
         return Ok(current);
@@ -197,7 +197,7 @@ mod data_migration_tests {
     #[test]
     fn legacy_database_and_sidecars_are_renamed_together() {
         let directory = tempfile::tempdir().unwrap();
-        let previous_name = format!("{}{}.db", "lu", "mina");
+        let previous_name = format!("{}.db", cinder_core::previous_product_name());
         for suffix in ["", "-wal", "-shm"] {
             std::fs::write(
                 directory.path().join(format!("{previous_name}{suffix}")),
