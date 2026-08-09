@@ -97,6 +97,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .product-divider { width: 1px; height: 24px; background: var(--border-strong); }
 .section-name { color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-actions { margin-left: auto; gap: 16px; min-width: 0; }
+.topbar-refresh { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--muted); cursor: pointer; }
+.topbar-refresh:hover:not(:disabled) { color: var(--primary); border-color: var(--border-strong); }
+.topbar-refresh svg { width: 17px; height: 17px; }
+.topbar-refresh.is-refreshing svg { animation: refresh-spin .8s linear infinite; }
+@keyframes refresh-spin { to { transform: rotate(360deg); } }
 .connection { gap: 7px; font-size: 12px; color: var(--muted); }
 .connection svg { width: 16px; height: 16px; }
 .connection.online { color: var(--cyan); }
@@ -233,14 +238,22 @@ input::placeholder, textarea::placeholder { color: #666873; }
 .auth-heading h2 { margin: 18px 0 6px; font-size: 26px; letter-spacing: -.035em; }
 .auth-heading p { margin: 0; color: var(--muted); line-height: 1.5; }
 .document-editor { min-height: 0; height: 100%; display: flex; flex-direction: column; background: #23242a; }
-.editor-toolbar { min-height: 54px; flex: 0 0 auto; display: flex; align-items: center; gap: 4px; padding: 8px 12px; overflow-x: auto; border-bottom: 1px solid var(--border); background: var(--surface); }
+.editor-toolbar { min-height: 54px; flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 8px 12px; overflow: hidden; border-bottom: 1px solid var(--border); background: var(--surface); }
 .editor-toolbar select { width: 135px; min-height: 32px; padding: 5px 8px; }
+.editor-toolbar select:nth-of-type(2) { width: 145px; }
+.editor-toolbar .font-size-select { width: 66px; }
 .toolbar-button { min-width: 32px; height: 32px; padding: 0 8px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-soft); cursor: pointer; white-space: nowrap; font-size: 12px; }
 .toolbar-button:hover, .toolbar-button.is-active { border-color: var(--border-strong); background: var(--surface-high); color: var(--primary); }
 .toolbar-divider { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+.toolbar-color { position: relative; width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--text-soft); font-weight: 700; font-size: 13px; cursor: pointer; }
+.toolbar-color:hover { border-color: var(--border-strong); background: var(--surface-high); }
+.toolbar-color input { position: absolute; inset: auto 5px 2px; width: 22px; height: 4px; min-height: 0; padding: 0; border: 0; opacity: .9; cursor: pointer; }
+.highlight-color { background: color-mix(in srgb, #fff19a 18%, transparent); }
+.align-center { display: block; text-align: center; }
+.align-right { display: block; text-align: right; }
 .editor-meta { display: flex; gap: 14px; margin-left: auto; padding-left: 12px; white-space: nowrap; color: var(--muted); font-size: 11px; }
-.document-canvas { min-height: 0; flex: 1; overflow: auto; padding: 34px; }
-.document-page { width: min(820px, 100%); min-height: 1050px; margin: 0 auto; padding: 72px 82px; border-radius: 3px; background: #fff; color: #202124; box-shadow: 0 4px 20px rgba(0,0,0,.28); }
+.document-canvas { min-height: 0; flex: 1; overflow: auto; padding: 38px; background: #e8eaed; }
+.document-page { width: min(820px, 100%); min-height: 1050px; margin: 0 auto; padding: 76px 84px; border: 1px solid #cfd2d7; border-radius: 2px; background: #fff; color: #202124; box-shadow: 0 2px 9px rgba(0,0,0,.16); }
 .document-body { min-height: 890px; outline: none; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.62; }
 .document-body > * + * { margin-top: .8em; }
 .document-body h1 { margin: 1.1em 0 .45em; font-size: 2em; line-height: 1.2; letter-spacing: -.03em; }
@@ -276,6 +289,7 @@ input::placeholder, textarea::placeholder { color: #666873; }
 .message-assistant { align-self: flex-start; background: var(--surface-raised); }
 .chat-compose { display: flex; gap: 10px; padding: 14px; border-top: 1px solid var(--border); }
 .chat-compose textarea { min-height: 48px; max-height: 130px; }
+.inline-error { margin: 0; padding: 12px 14px; color: var(--danger); border-bottom: 1px solid var(--border); font-size: 13px; }
 
 @media (max-width: 1120px) {
   .metrics { grid-template-columns: repeat(3, 1fr); }

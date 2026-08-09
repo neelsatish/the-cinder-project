@@ -19,6 +19,8 @@ export function AppShell<T extends string>({
   onNavigate,
   onLogout,
   online = true,
+  onRefresh,
+  refreshing = false,
   children,
 }: {
   roleLabel: string;
@@ -28,13 +30,17 @@ export function AppShell<T extends string>({
   onNavigate: (id: T) => void;
   onLogout: () => void;
   online?: boolean;
+  onRefresh?: () => void;
+  refreshing?: boolean;
   children: ReactNode;
 }) {
   const activeItem = items.find((item) => item.id === active);
   return (
     <div className="app-frame">
       <aside className="nav-rail">
-        <div className="rail-brand"><BrandMark size={38} /></div>
+        <div className="rail-brand">
+          <BrandMark size={38} />
+        </div>
         <nav className="rail-nav" aria-label={`${roleLabel} navigation`}>
           {items.map((item) => (
             <button
@@ -47,11 +53,18 @@ export function AppShell<T extends string>({
               aria-current={active === item.id ? "page" : undefined}
             >
               <Icon name={item.icon} />
-              {item.badge ? <span className="rail-badge">{item.badge}</span> : null}
+              {item.badge ? (
+                <span className="rail-badge">{item.badge}</span>
+              ) : null}
             </button>
           ))}
         </nav>
-        <button className="rail-button rail-logout" type="button" onClick={onLogout} title="Sign out">
+        <button
+          className="rail-button rail-logout"
+          type="button"
+          onClick={onLogout}
+          title="Sign out"
+        >
           <Icon name="logout" />
         </button>
       </aside>
@@ -64,6 +77,18 @@ export function AppShell<T extends string>({
             <span className="section-name">{activeItem?.label}</span>
           </div>
           <div className="topbar-actions">
+            {onRefresh ? (
+              <button
+                className={`topbar-refresh ${refreshing ? "is-refreshing" : ""}`}
+                type="button"
+                onClick={onRefresh}
+                disabled={refreshing}
+                title="Refresh data"
+                aria-label="Refresh data"
+              >
+                <Icon name="refresh" />
+              </button>
+            ) : null}
             <span className={`connection ${online ? "online" : "offline"}`}>
               <Icon name={online ? "wifi" : "offline"} />
               {online ? "Synced" : "Working offline"}
@@ -130,7 +155,15 @@ export function Panel({
   );
 }
 
-export function Metric({ label, value, detail }: { label: string; value: ReactNode; detail?: string }) {
+export function Metric({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: ReactNode;
+  detail?: string;
+}) {
   return (
     <div className="metric-card">
       <span>{label}</span>
@@ -140,13 +173,20 @@ export function Metric({ label, value, detail }: { label: string; value: ReactNo
   );
 }
 
-export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "good" | "warning" | "accent"; children: ReactNode }) {
+export function Badge({
+  tone = "neutral",
+  children,
+}: {
+  tone?: "neutral" | "good" | "warning" | "accent";
+  children: ReactNode;
+}) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 
 export function Button({
   variant = "secondary",
   icon,
+  className = "",
   children,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -154,7 +194,11 @@ export function Button({
   icon?: IconName;
 }) {
   return (
-    <button className={`button button-${variant}`} type="button" {...props}>
+    <button
+      className={`button button-${variant} ${className}`.trim()}
+      type="button"
+      {...props}
+    >
       {icon ? <Icon name={icon} /> : null}
       {children}
     </button>
@@ -193,15 +237,30 @@ export function Modal({
   lock?: boolean;
 }) {
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={lock ? undefined : onClose}>
-      <section className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={lock ? undefined : onClose}
+    >
+      <section
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <header className="modal-header">
           <div>
             <h2>{title}</h2>
             {description ? <p>{description}</p> : null}
           </div>
           {!lock && onClose ? (
-            <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
+            <button
+              className="icon-button"
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+            >
               <Icon name="close" />
             </button>
           ) : null}
@@ -212,7 +271,17 @@ export function Modal({
   );
 }
 
-export function EmptyState({ icon = "document", title, description, action }: { icon?: IconName; title: string; description: string; action?: ReactNode }) {
+export function EmptyState({
+  icon = "document",
+  title,
+  description,
+  action,
+}: {
+  icon?: IconName;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
   return (
     <div className="empty-state">
       <Icon name={icon} />
@@ -270,13 +339,27 @@ export function LoginScreen({
           <p>{helper ?? "Sign in with the account created by your teacher."}</p>
         </div>
         <Field label="Username">
-          <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus />
+          <input
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            autoComplete="username"
+            autoFocus
+          />
         </Field>
         <Field label="Password">
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+          />
         </Field>
         {error ? <p className="form-error">{error}</p> : null}
-        <Button variant="primary" type="submit" disabled={busy || !username.trim() || !password}>
+        <Button
+          variant="primary"
+          type="submit"
+          disabled={busy || !username.trim() || !password}
+        >
           {busy ? "Signing in…" : "Sign in"}
         </Button>
         {offlineHint ? <p className="form-hint">{offlineHint}</p> : null}
@@ -299,7 +382,11 @@ export function PasswordChange({
   const [error, setError] = useState("");
 
   return (
-    <Modal title="Create your password" description="Replace the temporary password before continuing." lock>
+    <Modal
+      title="Create your password"
+      description="Replace the temporary PIN before continuing."
+      lock
+    >
       <form
         className="form-stack"
         onSubmit={async (event) => {
@@ -311,25 +398,45 @@ export function PasswordChange({
           try {
             await onChange(current, next);
           } catch (failure) {
-            setError(failure instanceof Error ? failure.message : "Password could not be changed.");
+            setError(
+              failure instanceof Error
+                ? failure.message
+                : "Password could not be changed.",
+            );
           } finally {
             setBusy(false);
           }
         }}
       >
         {!currentPassword ? (
-          <Field label="Current temporary password">
-            <input type="password" value={current} onChange={(event) => setCurrent(event.target.value)} autoFocus />
+          <Field label="Current temporary PIN">
+            <input
+              type="password"
+              value={current}
+              onChange={(event) => setCurrent(event.target.value)}
+              autoFocus
+            />
           </Field>
         ) : null}
         <Field label="New password" hint="Use at least 8 characters.">
-          <input type="password" value={next} onChange={(event) => setNext(event.target.value)} autoFocus={Boolean(currentPassword)} />
+          <input
+            type="password"
+            value={next}
+            onChange={(event) => setNext(event.target.value)}
+            autoFocus={Boolean(currentPassword)}
+          />
         </Field>
         <Field label="Confirm password">
-          <input type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} />
+          <input
+            type="password"
+            value={confirm}
+            onChange={(event) => setConfirm(event.target.value)}
+          />
         </Field>
         {error ? <p className="form-error">{error}</p> : null}
-        <Button variant="primary" type="submit" disabled={busy}>Save password</Button>
+        <Button variant="primary" type="submit" disabled={busy}>
+          Save password
+        </Button>
       </form>
     </Modal>
   );

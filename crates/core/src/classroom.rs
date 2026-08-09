@@ -32,6 +32,15 @@ pub struct CreateClassroomRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
+pub struct UpdateClassroomRequest {
+    pub name: String,
+    pub subject_code: Option<String>,
+    pub description: String,
+    pub color: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct EnrolStudentRequest {
     #[ts(type = "string")]
     pub student_id: Uuid,
@@ -113,6 +122,21 @@ pub struct CreateAssignmentRequest {
     #[ts(type = "unknown")]
     pub grading_scheme: serde_json::Value,
     pub publish: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct UpdateAssignmentRequest {
+    #[ts(type = "string")]
+    pub classroom_id: Uuid,
+    pub title: String,
+    pub instructions: String,
+    #[ts(type = "string | null")]
+    pub due_at: Option<DateTime<Utc>>,
+    pub max_points: f64,
+    #[ts(type = "unknown")]
+    pub grading_scheme: serde_json::Value,
+    pub status: AssignmentStatus,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -345,9 +369,19 @@ pub struct CreateStudentRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
+pub struct UpdateStudentRequest {
+    pub username: String,
+    pub display_name: String,
+    pub grade_level: Option<String>,
+    pub section: Option<String>,
+    pub roll_number: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct CreateStudentResponse {
     pub user: User,
-    /// Eight-character temporary credential shown once to the teacher.
+    /// Four-digit, one-time PIN shown once to the teacher.
     pub temporary_password: String,
     /// A separate rotating recovery code. Only its Argon2id hash is stored.
     pub recovery_code: String,

@@ -4,10 +4,11 @@ use argon2::password_hash::rand_core::{OsRng, RngCore};
 use axum::extract::{Path, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use lumina_core::{
     AppLoginRequest, BootstrapTeacherRequest, BootstrapTeacherResponse, ChangePasswordRequest,
-    CreateStudentRequest, CreateStudentResponse, LoginResponse, RecoverTeacherRequest, Role, User,
+    CreateStudentRequest, CreateStudentResponse, LoginResponse, RecoverTeacherRequest, Role,
+    UpdateStudentRequest, User,
 };
 use rusqlite::OptionalExtension;
 use uuid::Uuid;
@@ -27,6 +28,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/change-password", post(change_password))
         .route("/api/me", get(me))
         .route("/api/teacher/users", get(list_users).post(create_student))
+        .route(
+            "/api/teacher/users/{id}",
+            axum::routing::patch(update_student).delete(delete_student),
+        )
         .route(
             "/api/teacher/users/{id}/reset-credentials",
             post(reset_student_credentials),
@@ -51,7 +56,8 @@ async fn login(
             let found = conn
                 .query_row(
                     "SELECT id, username, display_name, pw_hash, role, created_at, disabled_at,
-                            grade_level, section, roll_number, must_change_password
+                            grade_level, section, roll_number, must_change_password,
+                            failed_login_attempts, login_blocked_until
                        FROM users WHERE lower(username) = lower(?1)",
                     [&req.username],
                     |row| {
@@ -67,6 +73,8 @@ async fn login(
                             row.get::<_, Option<String>>(8)?,
                             row.get::<_, Option<String>>(9)?,
                             row.get::<_, bool>(10)?,
+                            row.get::<_, i64>(11)?,
+                            row.get::<_, Option<String>>(12)?,
                         ))
                     },
                 )
@@ -84,6 +92,8 @@ async fn login(
                 section,
                 roll_number,
                 must_change_password,
+                failed_login_attempts,
+                login_blocked_until,
             )) = found
             else {
                 let _ = auth::verify_password(DUMMY_HASH, &req.password);
@@ -93,14 +103,39 @@ async fn login(
             let parsed_role = role
                 .parse::<Role>()
                 .map_err(|error| HostError::Other(anyhow::anyhow!("{error}")))?;
-            if disabled_at.is_some()
-                || parsed_role != req.expected_role
-                || !auth::verify_password(&pw_hash, &req.password)
+            let now = Utc::now();
+            if login_blocked_until
+                .as_deref()
+                .and_then(|value| value.parse().ok())
+                .is_some_and(|until: chrono::DateTime<Utc>| until > now)
             {
+                return Err(HostError::RateLimited);
+            }
+            if disabled_at.is_some() || parsed_role != req.expected_role {
                 return Err(HostError::BadCredentials);
             }
 
-            let now = Utc::now();
+            if !auth::verify_password(&pw_hash, &req.password) {
+                let attempts = failed_login_attempts + 1;
+                if attempts >= 5 {
+                    conn.execute(
+                        "UPDATE users SET failed_login_attempts = 0, login_blocked_until = ?2 WHERE id = ?1",
+                        rusqlite::params![id, (now + Duration::minutes(5)).to_rfc3339()],
+                    )?;
+                    return Err(HostError::RateLimited);
+                }
+                conn.execute(
+                    "UPDATE users SET failed_login_attempts = ?2 WHERE id = ?1",
+                    rusqlite::params![id, attempts],
+                )?;
+                return Err(HostError::BadCredentials);
+            }
+
+            conn.execute(
+                "UPDATE users SET failed_login_attempts = 0, login_blocked_until = NULL WHERE id = ?1",
+                [&id],
+            )?;
+
             let expires_at = auth::session_expiry(now);
             let (token, digest) = auth::new_token();
 
@@ -208,7 +243,7 @@ async fn create_student(
     teacher.require_teacher()?;
     state
         .db(move |conn| {
-            let temporary_password = random_code(8);
+            let temporary_password = random_pin();
             let recovery_code = random_code(20);
             let tx = conn.transaction()?;
             let user = insert_user(
@@ -255,7 +290,7 @@ async fn reset_student_credentials(
                     "Only student credentials can be reset here.".into(),
                 ));
             }
-            let temporary_password = random_code(8);
+            let temporary_password = random_pin();
             let recovery_code = random_code(20);
             let now = Utc::now().to_rfc3339();
             let tx = conn.transaction()?;
@@ -423,7 +458,7 @@ async fn list_users(
     state
         .db(|conn| {
             let mut stmt = conn.prepare(
-                "SELECT id FROM users WHERE role = 'student' ORDER BY lower(display_name)",
+                "SELECT id FROM users WHERE role = 'student' AND disabled_at IS NULL ORDER BY lower(display_name)",
             )?;
             let ids = stmt
                 .query_map([], |row| row.get::<_, String>(0))?
@@ -433,6 +468,84 @@ async fn list_users(
                 .map(|id| load_user(conn, id))
                 .collect::<HostResult<Vec<_>>>()?;
             Ok(Json(users))
+        })
+        .await
+}
+
+async fn update_student(
+    State(state): State<AppState>,
+    teacher: CurrentUser,
+    Path(student_id): Path<Uuid>,
+    Json(req): Json<UpdateStudentRequest>,
+) -> HostResult<Json<User>> {
+    teacher.require_teacher()?;
+    state
+        .db(move |conn| {
+            let existing = load_user(conn, &student_id.to_string())?;
+            if existing.role != Role::Student {
+                return Err(HostError::BadRequest("Only student accounts can be edited here.".into()));
+            }
+            let username = req.username.trim();
+            let display_name = req.display_name.trim();
+            validate_identity(username, display_name)?;
+            conn.execute(
+                "UPDATE users
+                    SET username = ?2, display_name = ?3, grade_level = ?4, section = ?5, roll_number = ?6
+                  WHERE id = ?1 AND role = 'student' AND disabled_at IS NULL",
+                rusqlite::params![
+                    student_id.to_string(),
+                    username,
+                    display_name,
+                    clean_optional(req.grade_level),
+                    clean_optional(req.section),
+                    clean_optional(req.roll_number),
+                ],
+            )
+            .map_err(|error| match error {
+                rusqlite::Error::SqliteFailure(code, _)
+                    if code.code == rusqlite::ErrorCode::ConstraintViolation =>
+                {
+                    HostError::BadRequest(format!("The username \"{username}\" is already taken."))
+                }
+                other => HostError::Database(other),
+            })?;
+            load_user(conn, &student_id.to_string()).map(Json)
+        })
+        .await
+}
+
+async fn delete_student(
+    State(state): State<AppState>,
+    teacher: CurrentUser,
+    Path(student_id): Path<Uuid>,
+) -> HostResult<Json<serde_json::Value>> {
+    teacher.require_teacher()?;
+    state
+        .db(move |conn| {
+            let user = load_user(conn, &student_id.to_string())?;
+            if user.role != Role::Student {
+                return Err(HostError::BadRequest(
+                    "Only student accounts can be removed here.".into(),
+                ));
+            }
+            let tx = conn.transaction()?;
+            let changed = tx.execute(
+                "UPDATE users SET disabled_at = ?2 WHERE id = ?1 AND disabled_at IS NULL",
+                rusqlite::params![student_id.to_string(), Utc::now().to_rfc3339()],
+            )?;
+            if changed == 0 {
+                return Err(HostError::NotFound("student"));
+            }
+            tx.execute(
+                "DELETE FROM sessions WHERE user_id = ?1",
+                [student_id.to_string()],
+            )?;
+            tx.execute(
+                "DELETE FROM classroom_enrolments WHERE student_id = ?1",
+                [student_id.to_string()],
+            )?;
+            tx.commit()?;
+            Ok(Json(serde_json::json!({ "ok": true })))
         })
         .await
 }
@@ -451,19 +564,7 @@ fn insert_user(
 ) -> HostResult<User> {
     let username = username.trim();
     let display_name = display_name.trim();
-    if username.is_empty() || display_name.is_empty() {
-        return Err(HostError::BadRequest(
-            "Username and name are required.".into(),
-        ));
-    }
-    if !username
-        .chars()
-        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-'))
-    {
-        return Err(HostError::BadRequest(
-            "Username can only contain letters, numbers, dots, dashes, and underscores.".into(),
-        ));
-    }
+    validate_identity(username, display_name)?;
 
     let id = Uuid::new_v4();
     let now = Utc::now();
@@ -562,6 +663,35 @@ fn random_code(length: usize) -> String {
         .collect()
 }
 
+fn random_pin() -> String {
+    let mut bytes = [0u8; 2];
+    OsRng.fill_bytes(&mut bytes);
+    format!("{:04}", u16::from_le_bytes(bytes) % 10_000)
+}
+
+fn validate_identity(username: &str, display_name: &str) -> HostResult<()> {
+    if username.is_empty() || display_name.is_empty() {
+        return Err(HostError::BadRequest(
+            "Username and name are required.".into(),
+        ));
+    }
+    if !username
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-'))
+    {
+        return Err(HostError::BadRequest(
+            "Username can only contain letters, numbers, dots, dashes, and underscores.".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn clean_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|item| item.trim().to_owned())
+        .filter(|item| !item.is_empty())
+}
+
 fn parse_uuid(value: &str, what: &str) -> HostResult<Uuid> {
     value
         .parse()
@@ -570,14 +700,21 @@ fn parse_uuid(value: &str, what: &str) -> HostResult<Uuid> {
 
 #[cfg(test)]
 mod tests {
-    use super::random_code;
+    use super::{random_code, random_pin};
 
     #[test]
-    fn temporary_password_is_eight_readable_characters() {
-        let code = random_code(8);
-        assert_eq!(code.len(), 8);
+    fn recovery_code_is_readable() {
+        let code = random_code(20);
+        assert_eq!(code.len(), 20);
         assert!(code
             .chars()
             .all(|character| character.is_ascii_alphanumeric()));
+    }
+
+    #[test]
+    fn temporary_pin_is_four_digits() {
+        let pin = random_pin();
+        assert_eq!(pin.len(), 4);
+        assert!(pin.chars().all(|character| character.is_ascii_digit()));
     }
 }

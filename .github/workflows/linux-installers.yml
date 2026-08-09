@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
-      contents: write
+      contents: read
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -71,19 +71,3 @@ jobs:
           name: lumina-linux-x86_64
           if-no-files-found: error
           path: artifacts/
-
-      - name: Publish latest installers to GitHub Releases
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_NOTES: |
-            Automatically rebuilt from the current main branch.
-            Commit: ${{ github.sha }}
-
-            Linux Mint users should download the matching .deb package. The AppImage files are portable alternatives.
-        run: |
-          if gh release view pilot-latest >/dev/null 2>&1; then
-            gh release edit pilot-latest --target "$GITHUB_SHA" --title "Lumina Pilot — Latest Linux Installers" --notes "$RELEASE_NOTES" --latest
-          else
-            gh release create pilot-latest --target "$GITHUB_SHA" --title "Lumina Pilot — Latest Linux Installers" --notes "$RELEASE_NOTES" --latest
-          fi
-          gh release upload pilot-latest artifacts/student/* artifacts/teacher/* --clobber

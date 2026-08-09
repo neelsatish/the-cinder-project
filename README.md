@@ -14,13 +14,16 @@ The current architecture, rollout phases and acceptance checklist are in
 ## Included workflows
 
 - One teacher account with a rotating recovery code.
-- Teacher-created student accounts with an eight-character temporary password and a
+- Teacher-created student accounts with a four-digit, one-time temporary PIN and a
   separate rotating recovery code. Students choose a password on first login.
 - Canvas-style classrooms and explicit enrolment.
+- Reversible classroom, roster, material and assignment management.
 - Published assignments, offline drafts, versioned submission/resubmission and withdrawal.
+- Completed-assignment grouping and an auditable spreadsheet-style gradebook with CSV export.
 - Published grades, comments and an immutable grade-change log.
 - Per-school-day attendance; recent sign-in is only a hint and never the official mark.
 - Private student notes organised by subject, using a Word/Google Docs-style editor.
+- Student connection gate with a cached-work fallback when the Teacher app is offline.
 - Teacher-only cloud AI through an OpenAI-compatible endpoint. API keys are AES-GCM
   encrypted in SQLite using a machine-local key file.
 

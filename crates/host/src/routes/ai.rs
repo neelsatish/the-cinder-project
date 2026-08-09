@@ -28,9 +28,9 @@ const KEY_BASE_URL: &str = "ai.base_url";
 const KEY_MODEL: &str = "ai.model";
 const KEY_API_KEY: &str = "ai.api_key";
 
-/// Cap on note text sent as context, so a long note cannot blow the model's
-/// window or run up a bill in one click.
-const MAX_CONTEXT_CHARS: usize = 6000;
+/// Cap selected context so a whole gradebook can fit while one request still
+/// cannot consume an unbounded model window.
+const MAX_CONTEXT_CHARS: usize = 20_000;
 
 fn get_setting(conn: &rusqlite::Connection, key: &str) -> HostResult<Option<String>> {
     Ok(conn
@@ -220,7 +220,7 @@ async fn chat(
             let clipped: String = trimmed.chars().take(MAX_CONTEXT_CHARS).collect();
             messages.push((
                 "system".into(),
-                format!("The student's notes:\n\n{clipped}"),
+                format!("Selected Lumina classroom data supplied by the teacher:\n\n{clipped}"),
             ));
         }
     }

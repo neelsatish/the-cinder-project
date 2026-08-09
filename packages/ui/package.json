@@ -1,18 +1,22 @@
 {
   "name": "@lumina/ui",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./styles.css": "./src/styles.css"
   },
   "dependencies": {
+    "@tiptap/core": "^2.27.1",
+    "@tiptap/extension-color": "^2.27.1",
     "@tiptap/extension-character-count": "^2.27.1",
+    "@tiptap/extension-font-family": "^2.27.1",
     "@tiptap/extension-highlight": "^2.27.1",
     "@tiptap/extension-link": "^2.27.1",
     "@tiptap/extension-placeholder": "^2.27.1",
     "@tiptap/extension-text-align": "^2.27.1",
+    "@tiptap/extension-text-style": "^2.27.1",
     "@tiptap/extension-underline": "^2.27.1",
     "@tiptap/react": "^2.27.1",
     "@tiptap/starter-kit": "^2.27.1",

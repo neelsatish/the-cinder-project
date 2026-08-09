@@ -21,6 +21,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0003_student_recovery",
         include_str!("../migrations/0003_student_recovery.sql"),
     ),
+    (
+        "0004_reliability_and_editing",
+        include_str!("../migrations/0004_reliability_and_editing.sql"),
+    ),
 ];
 
 /// Opens (creating if needed) the database at `path` and brings it up to date.

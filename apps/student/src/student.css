@@ -3,6 +3,13 @@
 .connection-fab { position: fixed; right: 24px; bottom: 22px; display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); cursor: pointer; }
 .connection-fab svg { width: 17px; height: 17px; }
 .recovery-fab { position: fixed; right: 24px; bottom: 68px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.connection-lock { width: 100%; height: 100%; display: grid; place-items: center; padding: 32px; background: radial-gradient(circle at 50% 20%, rgba(190,194,255,.1), transparent 35%), var(--background); }
+.connection-lock-card { width: min(620px, 100%); padding: 38px; border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface); text-align: center; }
+.connection-lock-card > svg { width: 44px; height: 44px; color: var(--warning); }
+.connection-lock-card h1 { margin: 14px 0 10px; font-size: 30px; letter-spacing: -.04em; }
+.connection-lock-card p:not(.eyebrow) { margin: 0 auto; max-width: 500px; color: var(--muted); line-height: 1.6; }
+.connection-lock-card .eyebrow { margin-top: 22px; }
+.connection-lock-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 26px; }
 .student-metrics { grid-template-columns: repeat(4, minmax(140px, 1fr)); }
 .row-button { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .compact-subjects { display: grid; gap: 12px; }

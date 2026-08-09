@@ -152,6 +152,12 @@ export type ChatMessage = {
   content: string;
 };
 
+export type GradebookSuggestion = {
+  student_id: string;
+  assignment_id: string;
+  points: number;
+};
+
 export type Card = {
   id: string;
   deck_node_id: string;

@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use lumina_core::{
     AddCommentRequest, Assignment, AssignmentStatus, CreateAssignmentRequest, Grade, GradeChange,
     SaveGradeRequest, Submission, SubmissionComment, SubmissionStatus, SubmissionVersion,
-    SubmitWorkRequest,
+    SubmitWorkRequest, UpdateAssignmentRequest,
 };
 use rusqlite::OptionalExtension;
 use serde::Deserialize;
@@ -23,7 +23,12 @@ pub fn router() -> Router<AppState> {
             "/api/assignments",
             get(list_assignments).post(create_assignment),
         )
-        .route("/api/assignments/{id}", get(get_assignment))
+        .route(
+            "/api/assignments/{id}",
+            get(get_assignment)
+                .patch(update_assignment)
+                .delete(delete_assignment),
+        )
         .route(
             "/api/assignments/{id}/submission",
             get(get_my_submission)
@@ -60,13 +65,15 @@ async fn list_assignments(
                    FROM assignments a JOIN classrooms c ON c.id = a.classroom_id",
             );
             if teacher {
+                sql.push_str(" WHERE a.archived_at IS NULL AND c.archived_at IS NULL");
                 if query.classroom_id.is_some() {
-                    sql.push_str(" WHERE a.classroom_id = ?1");
+                    sql.push_str(" AND a.classroom_id = ?1");
                 }
             } else {
                 sql.push_str(
                     " JOIN classroom_enrolments e ON e.classroom_id = a.classroom_id
-                      WHERE e.student_id = ?1 AND a.status IN ('published','closed')",
+                      WHERE e.student_id = ?1 AND a.status IN ('published','closed')
+                        AND a.archived_at IS NULL AND c.archived_at IS NULL",
                 );
                 if query.classroom_id.is_some() {
                     sql.push_str(" AND a.classroom_id = ?2");
@@ -175,6 +182,94 @@ async fn get_assignment(
             let assignment = load_assignment(conn, id)?;
             assert_assignment_visible(conn, &user, &assignment)?;
             Ok(Json(assignment))
+        })
+        .await
+}
+
+async fn update_assignment(
+    State(state): State<AppState>,
+    teacher: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<UpdateAssignmentRequest>,
+) -> HostResult<Json<Assignment>> {
+    teacher.require_teacher()?;
+    state
+        .db(move |conn| {
+            load_assignment(conn, id)?;
+            if req.title.trim().is_empty() {
+                return Err(HostError::BadRequest(
+                    "Assignment title is required.".into(),
+                ));
+            }
+            if !req.max_points.is_finite() || req.max_points < 0.0 {
+                return Err(HostError::BadRequest(
+                    "Maximum points must be zero or greater.".into(),
+                ));
+            }
+            let highest_grade: Option<f64> = conn.query_row(
+                "SELECT max(g.points)
+                   FROM submissions s JOIN grades g ON g.submission_id = s.id
+                  WHERE s.assignment_id = ?1",
+                [id.to_string()],
+                |row| row.get(0),
+            )?;
+            if highest_grade.is_some_and(|points| points > req.max_points) {
+                return Err(HostError::BadRequest(
+                    "Maximum points cannot be lower than an existing grade.".into(),
+                ));
+            }
+            let classroom_exists: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM classrooms WHERE id = ?1 AND archived_at IS NULL)",
+                [req.classroom_id.to_string()],
+                |row| row.get(0),
+            )?;
+            if !classroom_exists {
+                return Err(HostError::NotFound("classroom"));
+            }
+            let grading_json = serde_json::to_string(&req.grading_scheme).map_err(|error| {
+                HostError::BadRequest(format!("Invalid grading scheme: {error}"))
+            })?;
+            conn.execute(
+                "UPDATE assignments
+                    SET classroom_id = ?2, title = ?3, instructions = ?4, due_at = ?5,
+                        max_points = ?6, grading_scheme_json = ?7, status = ?8, updated_at = ?9
+                  WHERE id = ?1 AND archived_at IS NULL",
+                rusqlite::params![
+                    id.to_string(),
+                    req.classroom_id.to_string(),
+                    req.title.trim(),
+                    req.instructions.trim(),
+                    req.due_at.map(|value| value.to_rfc3339()),
+                    req.max_points,
+                    grading_json,
+                    req.status.as_str(),
+                    Utc::now().to_rfc3339(),
+                ],
+            )?;
+            load_assignment(conn, id).map(Json)
+        })
+        .await
+}
+
+async fn delete_assignment(
+    State(state): State<AppState>,
+    teacher: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> HostResult<Json<serde_json::Value>> {
+    teacher.require_teacher()?;
+    state
+        .db(move |conn| {
+            load_assignment(conn, id)?;
+            let changed = conn.execute(
+                "UPDATE assignments
+                    SET archived_at = ?2, status = 'closed', updated_at = ?2
+                  WHERE id = ?1 AND archived_at IS NULL",
+                rusqlite::params![id.to_string(), Utc::now().to_rfc3339()],
+            )?;
+            if changed == 0 {
+                return Err(HostError::NotFound("assignment"));
+            }
+            Ok(Json(serde_json::json!({ "ok": true })))
         })
         .await
 }
@@ -640,7 +735,7 @@ fn load_assignment(conn: &rusqlite::Connection, id: Uuid) -> HostResult<Assignme
         "SELECT a.id, a.classroom_id, c.name, a.title, a.instructions, a.due_at,
                 a.max_points, a.grading_scheme_json, a.status, a.created_at, a.updated_at
            FROM assignments a JOIN classrooms c ON c.id = a.classroom_id
-          WHERE a.id = ?1",
+          WHERE a.id = ?1 AND a.archived_at IS NULL AND c.archived_at IS NULL",
         [id.to_string()],
         assignment_row,
     )

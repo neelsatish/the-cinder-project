@@ -5,7 +5,8 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use chrono::Utc;
 use lumina_core::{
-    Classroom, ClassroomRoster, CreateClassroomRequest, EnrolStudentRequest, Role, User,
+    Classroom, ClassroomRoster, CreateClassroomRequest, EnrolStudentRequest, Role,
+    UpdateClassroomRequest, User,
 };
 use rusqlite::OptionalExtension;
 use uuid::Uuid;
@@ -17,7 +18,10 @@ use crate::AppState;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/classrooms", get(list).post(create))
-        .route("/api/classrooms/{id}", get(roster))
+        .route(
+            "/api/classrooms/{id}",
+            get(roster).patch(update).delete(archive),
+        )
         .route("/api/classrooms/{id}/students", post(enrol))
         .route("/api/classrooms/{id}/students/{student_id}", delete(remove))
 }
@@ -103,6 +107,70 @@ async fn create(
         .await
 }
 
+async fn update(
+    State(state): State<AppState>,
+    teacher: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<UpdateClassroomRequest>,
+) -> HostResult<Json<Classroom>> {
+    teacher.require_teacher()?;
+    state
+        .db(move |conn| {
+            load_classroom(conn, id)?;
+            let name = req.name.trim();
+            if name.is_empty() {
+                return Err(HostError::BadRequest("Classroom name is required.".into()));
+            }
+            let color = normalize_color(&req.color)?;
+            conn.execute(
+                "UPDATE classrooms
+                    SET name = ?2, subject_code = ?3, description = ?4, color = ?5
+                  WHERE id = ?1 AND archived_at IS NULL",
+                rusqlite::params![
+                    id.to_string(),
+                    name,
+                    req.subject_code
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty()),
+                    req.description.trim(),
+                    color,
+                ],
+            )?;
+            load_classroom(conn, id).map(Json)
+        })
+        .await
+}
+
+async fn archive(
+    State(state): State<AppState>,
+    teacher: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> HostResult<Json<serde_json::Value>> {
+    teacher.require_teacher()?;
+    state
+        .db(move |conn| {
+            load_classroom(conn, id)?;
+            let now = Utc::now().to_rfc3339();
+            let tx = conn.transaction()?;
+            tx.execute(
+                "UPDATE classrooms SET archived_at = ?2 WHERE id = ?1 AND archived_at IS NULL",
+                rusqlite::params![id.to_string(), now],
+            )?;
+            tx.execute(
+                "UPDATE assignments SET status = 'closed', updated_at = ?2 WHERE classroom_id = ?1",
+                rusqlite::params![id.to_string(), now],
+            )?;
+            tx.execute(
+                "DELETE FROM classroom_enrolments WHERE classroom_id = ?1",
+                [id.to_string()],
+            )?;
+            tx.commit()?;
+            Ok(Json(serde_json::json!({ "ok": true })))
+        })
+        .await
+}
+
 async fn roster(
     State(state): State<AppState>,
     teacher: CurrentUser,
@@ -118,6 +186,7 @@ async fn roster(
                    FROM classroom_enrolments e
                    JOIN users u ON u.id = e.student_id
                   WHERE e.classroom_id = ?1
+                    AND u.disabled_at IS NULL
                   ORDER BY lower(u.display_name)",
             )?;
             let rows = stmt

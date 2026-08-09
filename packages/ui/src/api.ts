@@ -150,6 +150,23 @@ export class LuminaApi {
     );
   }
 
+  updateStudent(studentId: string, input: {
+    username: string;
+    display_name: string;
+    grade_level?: string | null;
+    section?: string | null;
+    roll_number?: string | null;
+  }) {
+    return this.request<User>(`/api/teacher/users/${studentId}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteStudent(studentId: string) {
+    return this.request<{ ok: true }>(`/api/teacher/users/${studentId}`, { method: "DELETE" });
+  }
+
   recoverStudent(username: string, recoveryCode: string, newPassword: string) {
     return this.request<{ user: User; recovery_code: string }>("/api/auth/student-recover", {
       method: "POST",
@@ -171,6 +188,22 @@ export class LuminaApi {
       method: "POST",
       body: JSON.stringify(input),
     });
+  }
+
+  updateClassroom(id: string, input: {
+    name: string;
+    subject_code?: string | null;
+    description: string;
+    color: string;
+  }) {
+    return this.request<Classroom>(`/api/classrooms/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteClassroom(id: string) {
+    return this.request<{ ok: true }>(`/api/classrooms/${id}`, { method: "DELETE" });
   }
 
   classroomRoster(id: string) {
@@ -209,6 +242,25 @@ export class LuminaApi {
       method: "POST",
       body: JSON.stringify(input),
     });
+  }
+
+  updateAssignment(id: string, input: {
+    classroom_id: string;
+    title: string;
+    instructions: string;
+    due_at: string | null;
+    max_points: number;
+    grading_scheme: unknown;
+    status: Assignment["status"];
+  }) {
+    return this.request<Assignment>(`/api/assignments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteAssignment(id: string) {
+    return this.request<{ ok: true }>(`/api/assignments/${id}`, { method: "DELETE" });
   }
 
   submissions(assignmentId: string) {

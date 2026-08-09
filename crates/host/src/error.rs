@@ -24,6 +24,9 @@ pub enum HostError {
     #[error("{0}")]
     BadRequest(String),
 
+    #[error("too many sign-in attempts; wait five minutes and try again")]
+    RateLimited,
+
     /// The row moved on since the client last read it. The client should reload
     /// and let the student decide, never silently overwrite.
     #[error("this was changed somewhere else since you last opened it")]
@@ -52,6 +55,7 @@ impl HostError {
             HostError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             HostError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found"),
             HostError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
+            HostError::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
             HostError::Conflict => (StatusCode::CONFLICT, "conflict"),
             HostError::AiUnavailable => (StatusCode::SERVICE_UNAVAILABLE, "ai_unavailable"),
             HostError::Database(_) | HostError::Pool(_) | HostError::Other(_) => {
