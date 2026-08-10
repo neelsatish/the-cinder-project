@@ -55,6 +55,7 @@ type StoredSession = { baseUrl: string; token: string; user: User };
 type DocumentValue = Record<string, unknown>;
 
 const SESSION_KEY = "cinder.student.session";
+const KNOWN_ACCOUNTS_KEY = "cinder.student.known-accounts";
 const LEGACY_SESSION_KEY = ["lu", "mina.student.session"].join("");
 const DEV_HOST = "http://127.0.0.1:7373";
 const EMPTY_DOCUMENT: DocumentValue = {
@@ -148,6 +149,14 @@ export function App() {
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [knownAccounts, setKnownAccounts] = useState<string[]>(() => {
+    try {
+      const value = JSON.parse(localStorage.getItem(KNOWN_ACCOUNTS_KEY) ?? "[]");
+      return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+    } catch {
+      return [];
+    }
+  });
   const [tab, setTab] = useState<StudentTab>("home");
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -328,6 +337,11 @@ export function App() {
     setTemporaryPassword(result.user.must_change_password ? password : "");
     setOnline(true);
     setOfflineUnlocked(false);
+    setKnownAccounts((current) => {
+      const next = [result.user.username, ...current.filter((item) => item !== result.user.username)].slice(0, 12);
+      localStorage.setItem(KNOWN_ACCOUNTS_KEY, JSON.stringify(next));
+      return next;
+    });
     localStorage.setItem(
       SESSION_KEY,
       JSON.stringify({ baseUrl, token: result.token, user: result.user }),
@@ -384,6 +398,7 @@ export function App() {
           role="student"
           subtitle="Your assignments, notes and feedback stay together—even when the classroom network briefly drops."
           onSubmit={login}
+          rememberedUsernames={knownAccounts}
           offlineHint={
             online
               ? `Connected to ${baseUrl}`

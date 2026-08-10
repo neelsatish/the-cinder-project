@@ -267,6 +267,10 @@
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 18px;
 }
+.legacy-gradebook-hidden { display: none; }
+.univer-gradebook-panel { min-width: 0; overflow: hidden; }
+.univer-gradebook { width: 100%; height: min(68vh, 760px); min-height: 520px; background: #fff; }
+.univer-loading { min-height: 520px; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--muted); }
 .gradebook-sheet {
   min-width: 0;
   display: flex;

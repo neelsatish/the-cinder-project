@@ -7,8 +7,8 @@ use axum::{Json, Router};
 use chrono::{Duration, Utc};
 use cinder_core::{
     AppLoginRequest, BootstrapTeacherRequest, BootstrapTeacherResponse, ChangePasswordRequest,
-    CreateStudentRequest, CreateStudentResponse, LoginResponse, RecoverTeacherRequest, Role,
-    UpdateStudentRequest, User,
+    CreateStudentRequest, CreateStudentResponse, LoginResponse, RecoverTeacherRequest,
+    RegisterTeacherRequest, Role, UpdateStudentRequest, User,
 };
 use rusqlite::OptionalExtension;
 use uuid::Uuid;
@@ -23,6 +23,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/login", post(login))
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/bootstrap", post(bootstrap))
+        .route("/api/auth/register-teacher", post(register_teacher))
         .route("/api/auth/recover", post(recover_teacher))
         .route("/api/auth/student-recover", post(recover_student))
         .route("/api/auth/change-password", post(change_password))
@@ -231,6 +232,58 @@ async fn bootstrap(
                 user,
                 recovery_code,
             }))
+        })
+        .await
+}
+
+async fn register_teacher(
+    State(state): State<AppState>,
+    Json(req): Json<RegisterTeacherRequest>,
+) -> HostResult<Json<BootstrapTeacherResponse>> {
+    state
+        .db(move |conn| {
+            let authorized = {
+                let mut statement = conn.prepare(
+                    "SELECT r.recovery_hash
+                       FROM teacher_recovery r
+                       JOIN users u ON u.id = r.user_id
+                      WHERE u.role = 'teacher' AND u.disabled_at IS NULL",
+                )?;
+                let hashes = statement
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<Result<Vec<_>, _>>()?;
+                hashes.iter().any(|hash| auth::verify_password(hash, &req.school_recovery_code))
+            };
+            if !authorized {
+                return Err(HostError::BadCredentials);
+            }
+            if req.password.len() < 8 {
+                return Err(HostError::BadRequest("Use at least 8 characters for the password.".into()));
+            }
+
+            let tx = conn.transaction()?;
+            let user = insert_user(
+                &tx,
+                &req.username,
+                &req.display_name,
+                &req.password,
+                Role::Teacher,
+                None,
+                None,
+                None,
+                false,
+            )?;
+            let recovery_code = random_code(20);
+            tx.execute(
+                "INSERT INTO teacher_recovery (user_id, recovery_hash, created_at) VALUES (?1, ?2, ?3)",
+                rusqlite::params![
+                    user.id.to_string(),
+                    auth::hash_password(&recovery_code)?,
+                    Utc::now().to_rfc3339()
+                ],
+            )?;
+            tx.commit()?;
+            Ok(Json(BootstrapTeacherResponse { user, recovery_code }))
         })
         .await
 }

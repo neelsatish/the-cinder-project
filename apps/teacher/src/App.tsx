@@ -2,7 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   useCallback,
   useEffect,
+  lazy,
   useMemo,
+  Suspense,
   useState,
   type ChangeEvent,
   type CSSProperties,
@@ -37,6 +39,10 @@ import {
   type StudyNode,
   type User,
 } from "@cinder/ui";
+
+const UniverGradebook = lazy(() =>
+  import("./UniverGradebook").then((module) => ({ default: module.UniverGradebook })),
+);
 
 type TeacherTab =
   | "dashboard"
@@ -123,6 +129,7 @@ export function App() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [createAccountOpen, setCreateAccountOpen] = useState(false);
 
   const loadWorkspace = useCallback(async (activeApi: CinderApi) => {
     setRefreshing(true);
@@ -230,6 +237,7 @@ export function App() {
           subtitle="Run the classroom, review work and support every learner from one uncluttered workspace."
           helper="Sign in with the school’s teacher account."
           onSubmit={login}
+          onCreateAccount={() => setCreateAccountOpen(true)}
         />
         <button
           className="teacher-recovery-button"
@@ -242,6 +250,12 @@ export function App() {
           <TeacherRecoveryModal
             api={api}
             onClose={() => setRecoveryOpen(false)}
+          />
+        ) : null}
+        {createAccountOpen ? (
+          <TeacherAccountModal
+            api={api}
+            onClose={() => setCreateAccountOpen(false)}
           />
         ) : null}
       </>
@@ -2195,6 +2209,7 @@ function GradebookView({
   );
   const [suggestions, setSuggestions] = useState<Record<string, number>>({});
   const [includeNames, setIncludeNames] = useState(false);
+  const [sheetRevision, setSheetRevision] = useState(0);
   const roomAssignments = useMemo(
     () =>
       assignments.filter(
@@ -2233,6 +2248,7 @@ function GradebookView({
       setByAssignment(nextByAssignment);
       setScores(nextScores);
       setSuggestions({});
+      setSheetRevision((current) => current + 1);
       setStatus("Saved to Cinder");
     } catch (failure) {
       setStatus(
@@ -2251,12 +2267,12 @@ function GradebookView({
   const saveScore = async (
     studentId: string,
     assignment: Assignment,
-    explicit?: number,
+    explicit?: number | null,
   ) => {
     const submission = submissionFor(studentId, assignment.id);
     if (!submission) return;
     const key = `${studentId}:${assignment.id}`;
-    const raw = explicit === undefined ? (scores[key] ?? "") : String(explicit);
+    const raw = explicit === undefined ? (scores[key] ?? "") : explicit === null ? "" : String(explicit);
     const points = raw.trim() === "" ? null : Number(raw);
     if (
       points !== null &&
@@ -2467,7 +2483,7 @@ function GradebookView({
         }
       />
       <div className="gradebook-layout">
-        <Panel className="gradebook-sheet panel-flush">
+        <Panel className="gradebook-sheet panel-flush legacy-gradebook-hidden">
           <div className="formula-bar">
             <span>{selectedCell || "Select a score cell"}</span>
             <strong>fx</strong>
@@ -2568,6 +2584,29 @@ function GradebookView({
             ) : null}
           </div>
           <div className="sheet-status">{status}</div>
+        </Panel>
+        <Panel className="gradebook-sheet panel-flush univer-gradebook-panel">
+          {roomAssignments.length ? (
+            <Suspense fallback={<div className="univer-loading"><BrandMark size={34} /><span>Opening spreadsheet…</span></div>}>
+              <UniverGradebook
+                key={`${classroomId}:${sheetRevision}:${roster.map((item) => item.id).join(",")}:${roomAssignments.map((item) => item.id).join(",")}`}
+                classroomId={classroomId}
+                classroomName={classrooms.find((item) => item.id === classroomId)?.name ?? "Cinder"}
+                roster={roster}
+                assignments={roomAssignments}
+                scores={scores}
+                submitted={(studentId, assignmentId) => Boolean(submissionFor(studentId, assignmentId))}
+                onScoreChange={(studentId, assignment, value) => {
+                  const key = `${studentId}:${assignment.id}`;
+                  setScores((current) => ({ ...current, [key]: value }));
+                  void saveScore(studentId, assignment, value.trim() === "" ? null : Number(value));
+                }}
+              />
+            </Suspense>
+          ) : (
+            <EmptyState icon="spreadsheet" title="No published assignments" description="Publish an assignment to add a gradebook column." />
+          )}
+          <div className="sheet-status">{savingCell ? "Saving audited grade…" : status}</div>
         </Panel>
         <Panel title="AI gradebook assistant" eyebrow="Review required">
           <div className="gradebook-ai">
@@ -2902,6 +2941,53 @@ function SettingsView({
         </Panel>
       </div>
     </div>
+  );
+}
+
+function TeacherAccountModal({ api, onClose }: { api: CinderApi; onClose: () => void }) {
+  const [displayName, setDisplayName] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [schoolCode, setSchoolCode] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  if (recoveryCode) {
+    return (
+      <Modal title="Teacher account created" description="Save this new teacher's recovery code now." onClose={onClose}>
+        <div className="form-stack">
+          <div className="credential-box"><span>Recovery code</span><code className="credential-code">{recoveryCode}</code></div>
+          <p className="form-hint">It is shown once and can reset this teacher's password or authorize another teacher account.</p>
+          <Button variant="primary" onClick={onClose}>Done</Button>
+        </div>
+      </Modal>
+    );
+  }
+  return (
+    <Modal title="Create teacher account" description="A current school recovery code is required so students cannot create teacher accounts." onClose={onClose}>
+      <form className="form-stack" onSubmit={async (event) => {
+        event.preventDefault();
+        if (password.length < 8) return setError("Use at least 8 characters.");
+        if (password !== confirm) return setError("The passwords do not match.");
+        setBusy(true); setError("");
+        try {
+          const result = await api.registerTeacher(username, displayName, password, schoolCode);
+          setRecoveryCode(result.recovery_code);
+        } catch (failure) {
+          setError(failure instanceof Error ? failure.message : "Account could not be created.");
+        } finally { setBusy(false); }
+      }}>
+        <Field label="Teacher name"><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoFocus /></Field>
+        <Field label="Username"><input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" /></Field>
+        <Field label="Password" hint="At least 8 characters"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>
+        <Field label="Confirm password"><input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></Field>
+        <Field label="School recovery code" hint="Use any active teacher's saved recovery code."><input type="password" value={schoolCode} onChange={(e) => setSchoolCode(e.target.value)} /></Field>
+        {error ? <p className="form-error">{error}</p> : null}
+        <Button variant="primary" type="submit" disabled={busy || !displayName.trim() || !username.trim() || !password || !schoolCode.trim()}>{busy ? "Creating…" : "Create account"}</Button>
+      </form>
+    </Modal>
   );
 }
 

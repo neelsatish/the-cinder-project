@@ -23,7 +23,20 @@ After downloading a `.deb`, double-click it and choose **Install Package**. No
 Codex installation is required. This repository is private, so the browser must
 be signed into a GitHub account with access.
 
-## Cinder 0.3.0 update
+## Cinder Matchbox 0.4.0 update
+
+- Made the Cinder light palette the default throughout Teacher and Student.
+- Replaced the basic Gradebook grid with Univer Sheets, including formulas,
+  formatting, undo/redo, multiple sheets and local workbook persistence.
+- Kept grade-cell writes connected to Cinder's audited grading records.
+- Kept the AI Gradebook assistant as a review-first side panel; it cannot apply
+  suggestions without the teacher's confirmation.
+- Added protected teacher account creation to the Teacher sign-in screen.
+- Added a polished Student account switcher that remembers usernames used on
+  that device, fills the username field, and never stores passwords.
+- Restored automatic publication of all four Linux installers to GitHub Releases.
+
+## Earlier 0.3.0 update
 
 - Fixed the Student app getting stuck indefinitely on the startup screen.
 - Added time limits and recovery paths for unavailable Teacher computers.

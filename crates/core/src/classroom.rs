@@ -369,6 +369,16 @@ pub struct CreateStudentRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
+pub struct RegisterTeacherRequest {
+    pub username: String,
+    pub display_name: String,
+    pub password: String,
+    /// A current teacher recovery code acts as the school's authorization code.
+    pub school_recovery_code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct UpdateStudentRequest {
     pub username: String,
     pub display_name: String,

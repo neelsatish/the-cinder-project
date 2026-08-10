@@ -298,12 +298,16 @@ export function LoginScreen({
   helper,
   onSubmit,
   offlineHint,
+  rememberedUsernames = [],
+  onCreateAccount,
 }: {
   role: Role;
   subtitle: string;
   helper?: string;
   onSubmit: (username: string, password: string) => Promise<void>;
   offlineHint?: string;
+  rememberedUsernames?: string[];
+  onCreateAccount?: () => void;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -338,6 +342,29 @@ export function LoginScreen({
           <h2>Welcome to Cinder</h2>
           <p>{helper ?? "Sign in with the account created by your teacher."}</p>
         </div>
+        {rememberedUsernames.length ? (
+          <div className="account-switcher" aria-label="Accounts on this device">
+            <span>Accounts on this device</span>
+            <div className="account-switcher-list">
+              {rememberedUsernames.map((name) => (
+                <button
+                  type="button"
+                  key={name}
+                  className={username === name ? "active" : ""}
+                  onClick={() => {
+                    setUsername(name);
+                    setPassword("");
+                    setError("");
+                  }}
+                >
+                  <span className="account-avatar">{name.slice(0, 1).toUpperCase()}</span>
+                  <span>{name}</span>
+                </button>
+              ))}
+            </div>
+            <small>Only usernames are remembered. Passwords stay private.</small>
+          </div>
+        ) : null}
         <Field label="Username">
           <input
             value={username}
@@ -362,6 +389,11 @@ export function LoginScreen({
         >
           {busy ? "Signing in…" : "Sign in"}
         </Button>
+        {onCreateAccount ? (
+          <button className="auth-secondary-action" type="button" onClick={onCreateAccount}>
+            Create a teacher account
+          </button>
+        ) : null}
         {offlineHint ? <p className="form-hint">{offlineHint}</p> : null}
       </form>
     </div>

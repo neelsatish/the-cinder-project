@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
-      contents: read
+      contents: write
     env:
       CARGO_TERM_COLOR: always
     steps:
@@ -71,3 +71,23 @@ jobs:
           name: cinder-linux-x86_64
           if-no-files-found: error
           path: artifacts/
+
+      - name: Publish latest installers to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: |
+            Cinder Matchbox update
+
+            - Light Cinder theme is now the default in both apps.
+            - Teacher Gradebook now uses Univer Sheets with formulas, formatting, multiple sheets and AI-assisted grade suggestions.
+            - Teachers can create additional protected teacher accounts from the sign-in screen.
+            - Students can switch between usernames previously used on that device; passwords are never stored.
+
+            Built automatically from commit ${{ github.sha }}.
+        run: |
+          if gh release view matchbox-latest >/dev/null 2>&1; then
+            gh release edit matchbox-latest --target "$GITHUB_SHA" --title "Cinder Matchbox — Latest Linux Installers" --notes "$RELEASE_NOTES" --latest
+          else
+            gh release create matchbox-latest --target "$GITHUB_SHA" --title "Cinder Matchbox — Latest Linux Installers" --notes "$RELEASE_NOTES" --latest
+          fi
+          gh release upload matchbox-latest artifacts/student/* artifacts/teacher/* --clobber

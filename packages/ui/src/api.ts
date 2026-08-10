@@ -144,6 +144,26 @@ export class CinderApi {
     );
   }
 
+  registerTeacher(
+    username: string,
+    displayName: string,
+    password: string,
+    schoolRecoveryCode: string,
+  ) {
+    return this.request<{ user: User; recovery_code: string }>(
+      "/api/auth/register-teacher",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          username,
+          display_name: displayName,
+          password,
+          school_recovery_code: schoolRecoveryCode,
+        }),
+      },
+    );
+  }
+
   recoverTeacher(username: string, recoveryCode: string, newPassword: string) {
     return this.request<{ user: User; recovery_code: string }>(
       "/api/auth/recover",
