@@ -1,8 +1,11 @@
 [package]
 name = "cinder-ai"
+description = "Cinder — client for the teacher's optional AI assistant"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [dependencies]
 cinder-core.workspace = true

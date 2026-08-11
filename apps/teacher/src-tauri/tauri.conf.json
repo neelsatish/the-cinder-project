@@ -29,6 +29,10 @@
     "createUpdaterArtifacts": true,
     "targets": ["deb", "appimage"],
     "category": "Education",
+    "publisher": "The Cinder Project",
+    "copyright": "Copyright 2026 The Cinder Project. Licensed under Apache-2.0.",
+    "homepage": "https://github.com/Alfie3542/cinder-classroom",
+    "licenseFile": "../../../LICENSE",
     "shortDescription": "Cinder classroom management for teachers",
     "longDescription": "Manage classrooms, student accounts, assignments, grading, attendance, feedback and AI-assisted lesson work from one teacher computer.",
     "icon": [

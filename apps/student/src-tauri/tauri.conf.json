@@ -29,6 +29,10 @@
     "createUpdaterArtifacts": true,
     "targets": ["deb", "appimage"],
     "category": "Education",
+    "publisher": "The Cinder Project",
+    "copyright": "Copyright 2026 The Cinder Project. Licensed under Apache-2.0.",
+    "homepage": "https://github.com/Alfie3542/cinder-classroom",
+    "licenseFile": "../../../LICENSE",
     "shortDescription": "Cinder classroom workspace for students",
     "longDescription": "A focused classroom workspace for assignments, private notes, teacher feedback, study materials and flashcards.",
     "icon": [

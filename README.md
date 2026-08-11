@@ -7,67 +7,27 @@
   A focused classroom workspace for Linux Mint Cinnamon.
 </p>
 
-## Download Cinder
+**Cinder Matchbox** turns donated computers into a working digital classroom that
+needs no internet, no subscription and no per-seat licence. It ships as two
+installers: **Cinder Teacher** runs on one machine and holds everything, and
+**Cinder Student** runs on the rest and connects to it over the classroom network.
+
+Free and open source under Apache 2.0.
+
+## Download
 
 Choose the installer for this computer. The `.deb` packages are recommended for
 64-bit Linux Mint Cinnamon.
 
-| Computer             | Recommended installer                                                                                                                    | Portable alternative                                                                                                            |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| **Teacher computer** | [Download Cinder Teacher `.deb`](https://github.com/Alfie3542/cinder-classroom/releases/latest/download/Cinder-Teacher-Linux-x86_64.deb) | [Teacher AppImage](https://github.com/Alfie3542/cinder-classroom/releases/latest/download/Cinder-Teacher-Linux-x86_64.AppImage) |
-| **Student computer** | [Download Cinder Student `.deb`](https://github.com/Alfie3542/cinder-classroom/releases/latest/download/Cinder-Student-Linux-x86_64.deb) | [Student AppImage](https://github.com/Alfie3542/cinder-classroom/releases/latest/download/Cinder-Student-Linux-x86_64.AppImage) |
+| Computer | Recommended | Portable alternative |
+| --- | --- | --- |
+| **Teacher computer** | [Cinder Teacher `.deb`](https://github.com/Alfie3542/cinder-classroom/releases/latest/download/Cinder-Teacher-Linux-x86_64.deb) | [Teacher AppImage](https://github.com/Alfie3542/cinder-classroom/releases/latest/download/Cinder-Teacher-Linux-x86_64.AppImage) |
+| **Student computer** | [Cinder Student `.deb`](https://github.com/Alfie3542/cinder-classroom/releases/latest/download/Cinder-Student-Linux-x86_64.deb) | [Student AppImage](https://github.com/Alfie3542/cinder-classroom/releases/latest/download/Cinder-Student-Linux-x86_64.AppImage) |
 
-[Open the latest release and update log](https://github.com/Alfie3542/cinder-classroom/releases/latest)
+After downloading a `.deb`, double-click it and choose **Install Package**.
 
-After downloading a `.deb`, double-click it and choose **Install Package**. No
-Codex installation is required. This repository is private, so the browser must
-be signed into a GitHub account with access.
-
-## Cinder Matchbox 0.5.0 update
-
-- Collapsed completed assignments on Student devices so active work stays clear.
-- Made Univer the only rendered Teacher Gradebook and improved its usable area,
-  internal scrolling and column widths.
-- Let the AI assistant propose multiple custom columns, formulas and safe cell
-  edits using the current workbook as context.
-- Kept assignment score changes on Cinder's reviewed, audited grade path.
-- Prevented malformed AI JSON from appearing in the sheet or chat response.
-- Added neutral-pronoun and grammar rules when a person's pronouns are unknown.
-- Added signed GitHub update checks to Settings in both desktop apps.
-- Kept Student and Teacher on separate updater feeds so the wrong binary cannot
-  be installed.
-
-AppImage users can install signed updates in place. Users who installed a `.deb`
-may need to download and install the latest package from this page when Linux
-does not permit replacing the system-installed executable.
-
-## Earlier 0.4.0 update
-
-- Made the Cinder light palette the default throughout Teacher and Student.
-- Replaced the basic Gradebook grid with Univer Sheets, including formulas,
-  formatting, undo/redo, multiple sheets and local workbook persistence.
-- Kept grade-cell writes connected to Cinder's audited grading records.
-- Kept the AI Gradebook assistant as a review-first side panel; it cannot apply
-  suggestions without the teacher's confirmation.
-- Added protected teacher account creation to the Teacher sign-in screen.
-- Added a polished Student account switcher that remembers usernames used on
-  that device, fills the username field, and never stores passwords.
-- Restored automatic publication of all four Linux installers to GitHub Releases.
-
-## Earlier 0.3.0 update
-
-- Fixed the Student app getting stuck indefinitely on the startup screen.
-- Added time limits and recovery paths for unavailable Teacher computers.
-- Rebranded both applications, installers and launcher icons to Cinder.
-- Applied the Cinder Tempered Focus palette: Ash, Ember, Spark and Ground.
-- Preserved existing teacher databases, materials and settings during migration.
-- Added classroom, assignment, material and student editing and removal.
-- Fixed attendance controls and stored attendance notes separately for each day.
-- Added refresh controls to both applications.
-- Improved the lightweight document editor for notes and submitted work.
-- Added collapsible completed assignments.
-- Added the spreadsheet-style Gradebook, CSV export and reviewed AI suggestions.
-- Fixed opening downloaded classroom materials on Linux.
+While the repository is private, the browser must be signed into a GitHub account
+with access.
 
 ## How it works
 
@@ -91,11 +51,26 @@ does not permit replacing the system-installed executable.
 - Teacher-only AI assistance through an OpenAI-compatible provider.
 - Reversible removal that preserves historical submissions and grades.
 
+## Documentation
+
+| Document | What it covers |
+| --- | --- |
+| [Product overview](docs/product-overview.md) | What Matchbox is, its mission, principles and deliberate limits |
+| [Product and delivery plan](docs/product-plan.md) | Architecture, data rules, delivery phases and acceptance checklist |
+| [Backup and recovery](docs/backup-and-recovery.md) | Proposed backup model — **not yet implemented** |
+| [Changelog](CHANGELOG.md) | Release notes |
+
 ## Developer setup
 
 ```bash
 bash scripts/setup.sh
+```
+
+```bash
 bash scripts/dev.sh teacher
+```
+
+```bash
 bash scripts/dev.sh student
 ```
 
@@ -105,11 +80,8 @@ Build and verify Linux installers:
 bash scripts/build-linux.sh
 ```
 
-Every push to `main` runs frontend checks, Rust tests and Linux packaging. Verified
-installers are then published on the repository's Releases page.
-
-Architecture and rollout details are in
-[`docs/product-plan.md`](docs/product-plan.md).
+Every push to `main` runs frontend checks, Rust tests and Linux packaging.
+Verified installers are then published on the Releases page.
 
 ## Security boundaries
 
@@ -118,4 +90,15 @@ Architecture and rollout details are in
 - Temporary-PIN sessions cannot access classroom data until a new password is set.
 - Personal notes are readable only by their owner unless submitted as work.
 - Student binaries do not include teacher administration or AI configuration code.
-- LAN traffic is HTTP in this phase, so Cinder should only run on a trusted school LAN.
+- LAN traffic is HTTP in this phase, so Cinder should only run on a trusted school
+  LAN, isolated from guest access.
+- There is currently **no backup or restore**. The teacher computer's disk is the
+  only copy of school data. See [backup and recovery](docs/backup-and-recovery.md).
+
+## Licence
+
+Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+You may run, study, modify, fork, redistribute and sell this software, for any
+purpose, without asking and without paying. The "Cinder" name and ember mark are
+not covered by that grant, so please give a fork its own name.
