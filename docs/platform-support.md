@@ -65,5 +65,6 @@ explicitly limits it to one platform. The GitHub release workflow therefore:
 4. Creates platform-specific signed updater artifacts.
 5. Publishes only after both platform jobs have succeeded.
 
-The human-downloadable Windows files end in `Setup.exe`. Files ending in
-`.nsis.zip` are signed updater payloads and should not be installed manually.
+The human-downloadable Windows files end in `Setup.exe` and are also reused by
+Tauri's v2 updater. Their adjacent `.exe.sig` files are updater signatures and
+should not be opened manually.

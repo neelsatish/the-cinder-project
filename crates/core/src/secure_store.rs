@@ -8,12 +8,16 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+#[cfg(not(windows))]
 use aes_gcm::aead::{Aead, KeyInit};
+#[cfg(not(windows))]
 use aes_gcm::{Aes256Gcm, Nonce};
 use rand::{rngs::OsRng, RngCore};
 
 const WINDOWS_HEADER: &[u8] = b"CINDER-DPAPI-V1\0";
+#[cfg(not(windows))]
 const PORTABLE_HEADER: &[u8] = b"CINDER-AESGCM-V1\0";
+#[cfg(not(windows))]
 const NONCE_BYTES: usize = 12;
 const MASTER_KEY_BYTES: usize = 32;
 const MAX_SECRET_BYTES: usize = 256 * 1024;

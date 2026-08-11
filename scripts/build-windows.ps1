@@ -31,7 +31,7 @@ try {
 
     Write-Host "Cinder Student and Teacher Windows installers are ready under target\release\bundle\nsis."
     Get-ChildItem "target\release\bundle\nsis" -File |
-        Where-Object { $_.Name -match "(setup\.exe|nsis\.zip|\.sig)$" } |
+        Where-Object { $_.Name -match "(setup\.exe|setup\.exe\.sig)$" } |
         Select-Object Name, Length
 }
 finally {

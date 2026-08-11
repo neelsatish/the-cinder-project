@@ -129,28 +129,23 @@ jobs:
           npm run bundle:windows:student
           New-Item -ItemType Directory -Force artifacts | Out-Null
           $setup = Get-ChildItem target\release\bundle\nsis -Filter 'Cinder Student_*-setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          $update = Get-ChildItem target\release\bundle\nsis -Filter 'Cinder Student_*.nsis.zip' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $setup -or -not $update -or -not (Test-Path "$($update.FullName).sig")) { throw 'Student NSIS artifacts are incomplete.' }
+          if (-not $setup -or -not (Test-Path "$($setup.FullName).sig")) { throw 'Student NSIS artifacts are incomplete.' }
           Copy-Item $setup.FullName artifacts\Cinder-Student-Windows-x86_64-Setup.exe
-          Copy-Item $update.FullName artifacts\Cinder-Student-Windows-x86_64-Setup.nsis.zip
-          Copy-Item "$($update.FullName).sig" artifacts\Cinder-Student-Windows-x86_64-Setup.nsis.zip.sig
+          Copy-Item "$($setup.FullName).sig" artifacts\Cinder-Student-Windows-x86_64-Setup.exe.sig
 
       - name: Build Teacher Windows installer
         shell: pwsh
         run: |
           npm run bundle:windows:teacher
           $setup = Get-ChildItem target\release\bundle\nsis -Filter 'Cinder Teacher_*-setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          $update = Get-ChildItem target\release\bundle\nsis -Filter 'Cinder Teacher_*.nsis.zip' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $setup -or -not $update -or -not (Test-Path "$($update.FullName).sig")) { throw 'Teacher NSIS artifacts are incomplete.' }
+          if (-not $setup -or -not (Test-Path "$($setup.FullName).sig")) { throw 'Teacher NSIS artifacts are incomplete.' }
           Copy-Item $setup.FullName artifacts\Cinder-Teacher-Windows-x86_64-Setup.exe
-          Copy-Item $update.FullName artifacts\Cinder-Teacher-Windows-x86_64-Setup.nsis.zip
-          Copy-Item "$($update.FullName).sig" artifacts\Cinder-Teacher-Windows-x86_64-Setup.nsis.zip.sig
+          Copy-Item "$($setup.FullName).sig" artifacts\Cinder-Teacher-Windows-x86_64-Setup.exe.sig
 
       - name: Verify Windows installer set
         shell: pwsh
         run: |
           if ((Get-ChildItem artifacts -Filter '*.exe').Count -ne 2) { throw 'Expected two Windows setup executables.' }
-          if ((Get-ChildItem artifacts -Filter '*.nsis.zip').Count -ne 2) { throw 'Expected two Windows updater bundles.' }
           if ((Get-ChildItem artifacts -Filter '*.sig').Count -ne 2) { throw 'Expected two Windows updater signatures.' }
           Get-ChildItem artifacts | Select-Object Name, Length
 
@@ -188,8 +183,8 @@ jobs:
             --arg notes "Cinder Matchbox $VERSION" \
             --arg linux_signature "$(cat artifacts/Cinder-Student-Linux-x86_64.AppImage.sig)" \
             --arg linux_url "$RELEASE_BASE/Cinder-Student-Linux-x86_64.AppImage" \
-            --arg windows_signature "$(cat artifacts/Cinder-Student-Windows-x86_64-Setup.nsis.zip.sig)" \
-            --arg windows_url "$RELEASE_BASE/Cinder-Student-Windows-x86_64-Setup.nsis.zip" \
+            --arg windows_signature "$(cat artifacts/Cinder-Student-Windows-x86_64-Setup.exe.sig)" \
+            --arg windows_url "$RELEASE_BASE/Cinder-Student-Windows-x86_64-Setup.exe" \
             '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"linux-x86_64": {signature: $linux_signature, url: $linux_url}, "windows-x86_64": {signature: $windows_signature, url: $windows_url}}}' \
             > artifacts/student-latest.json
           jq -n \
@@ -198,8 +193,8 @@ jobs:
             --arg notes "Cinder Matchbox $VERSION" \
             --arg linux_signature "$(cat artifacts/Cinder-Teacher-Linux-x86_64.AppImage.sig)" \
             --arg linux_url "$RELEASE_BASE/Cinder-Teacher-Linux-x86_64.AppImage" \
-            --arg windows_signature "$(cat artifacts/Cinder-Teacher-Windows-x86_64-Setup.nsis.zip.sig)" \
-            --arg windows_url "$RELEASE_BASE/Cinder-Teacher-Windows-x86_64-Setup.nsis.zip" \
+            --arg windows_signature "$(cat artifacts/Cinder-Teacher-Windows-x86_64-Setup.exe.sig)" \
+            --arg windows_url "$RELEASE_BASE/Cinder-Teacher-Windows-x86_64-Setup.exe" \
             '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"linux-x86_64": {signature: $linux_signature, url: $linux_url}, "windows-x86_64": {signature: $windows_signature, url: $windows_url}}}' \
             > artifacts/teacher-latest.json
 
@@ -208,7 +203,8 @@ jobs:
           test "$(find artifacts -maxdepth 1 -type f -name '*.exe' | wc -l)" -eq 2
           test "$(find artifacts -maxdepth 1 -type f -name '*.deb' | wc -l)" -eq 2
           test "$(find artifacts -maxdepth 1 -type f -name '*.AppImage' | wc -l)" -eq 2
-          test "$(find artifacts -maxdepth 1 -type f -name '*.nsis.zip' | wc -l)" -eq 2
+          test "$(find artifacts -maxdepth 1 -type f -name '*.AppImage.sig' | wc -l)" -eq 2
+          test "$(find artifacts -maxdepth 1 -type f -name '*.exe.sig' | wc -l)" -eq 2
           jq -e '.platforms["linux-x86_64"].signature | length > 0' artifacts/student-latest.json
           jq -e '.platforms["windows-x86_64"].signature | length > 0' artifacts/student-latest.json
           jq -e '.platforms["linux-x86_64"].signature | length > 0' artifacts/teacher-latest.json
