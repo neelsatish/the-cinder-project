@@ -45,6 +45,7 @@ jobs:
       - name: Verify source
         run: |
           npm run typecheck
+          npm run test:gradebook-intent
           cargo fmt --all -- --check
           cargo test --workspace --locked
 
@@ -108,12 +109,12 @@ jobs:
           RELEASE_NOTES: |
             Cinder Matchbox update
 
-            - Added a confirmed Reset sheet button for clearing local workbook customizations while preserving audited grades.
-            - Stopped the AI from claiming a reset or edit succeeded when it returned no valid actions.
-            - Validated AI actions against current students, assignments, sheets and protected Gradebook cells.
-            - Applied and read back each reviewed change, with an exact verified result in the assistant panel.
-            - Rejected malformed and duplicate actions that caused stray columns, booleans or structured content.
-            - Refreshed the saved gradebook after partial failures to make retries safe.
+            - Added reliable A1 and reversed-coordinate interpretation, including 1F to F1 normalization.
+            - Made assignment-heading edits update the real assignment instead of adding duplicate columns.
+            - Added direct audited grade-cell commands and local bulk grading by student name or username.
+            - Interpreted 100-point requests across mixed scales as full marks with a review message.
+            - Preserved custom columns while canonicalizing assignment columns in saved workbooks.
+            - Replaced routine Univer remounts with in-place synchronization to prevent intermittent apply races.
 
             Built automatically from commit ${{ github.sha }}.
         run: |

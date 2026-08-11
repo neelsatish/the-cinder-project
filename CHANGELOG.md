@@ -7,6 +7,24 @@ AppImage users can install signed updates in place. Users who installed a `.deb`
 may need to download the latest package, because Linux does not always permit
 replacing a system-installed executable.
 
+## 0.6.2
+
+- Added a deterministic Gradebook intent resolver for common teacher commands,
+  including reversed coordinates such as `1F`, direct grade cells and bulk
+  grading by student name or username.
+- Made assignment-heading edits update the authoritative classroom assignment
+  instead of creating duplicate local columns.
+- Interpreted 100-point bulk requests across mixed assignment scales as full
+  marks, while showing the interpretation before the teacher applies it.
+- Added percentage conversion, submission checks, protected identity cells and
+  safeguards against lowering an assignment maximum below an existing grade.
+- Canonicalized saved assignment columns while retaining genuine custom columns
+  after the graded assignments.
+- Replaced routine Univer remounts with in-place synchronization, eliminating
+  intermittent render races between the assistant panel and the sheet.
+- Added seven permanent Gradebook intent regression tests to the Linux release
+  workflow.
+
 ## 0.6.1
 
 - Added a confirmed **Reset sheet** control that removes custom local sheets,
