@@ -259,17 +259,29 @@
 .gradebook-page {
   max-width: none;
   margin: 0 auto;
+  height: calc(100vh - 140px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .gradebook-layout {
+  flex: 1;
   min-height: 0;
-  height: calc(100vh - 190px);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(620px, 1fr) minmax(290px, 330px);
   gap: 18px;
+  overflow: hidden;
 }
 .legacy-gradebook-hidden { display: none; }
-.univer-gradebook-panel { min-width: 0; overflow: hidden; }
-.univer-gradebook { width: 100%; height: min(68vh, 760px); min-height: 520px; background: #fff; }
+.univer-gradebook-panel { min-width: 0; min-height: 0; overflow: hidden; }
+.univer-gradebook-panel > .panel-body {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.univer-gradebook { width: 100%; min-height: 0; flex: 1; overflow: hidden; background: #fff; }
 .univer-loading { min-height: 520px; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--muted); }
 .gradebook-sheet {
   min-width: 0;
@@ -425,6 +437,20 @@
   line-height: 1.45;
   font-size: 12px;
 }
+.suggestion-list {
+  max-height: 180px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  overflow: auto;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.suggestion-list li + li { margin-top: 6px; }
+.gradebook-layout > .panel:last-child {
+  min-height: 0;
+  overflow: auto;
+}
 @media (max-width: 1150px) {
   .grade-modal-content {
     grid-template-columns: 1fr;
@@ -437,8 +463,11 @@
   .gradebook-layout {
     grid-template-columns: 1fr;
     height: auto;
+    overflow: visible;
   }
+  .gradebook-page { height: auto; overflow: visible; }
   .gradebook-sheet {
+    height: 650px;
     min-height: 560px;
   }
 }

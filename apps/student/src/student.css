@@ -95,6 +95,20 @@
   text-align: left;
   cursor: pointer;
 }
+.completed-section {
+  margin-top: 18px;
+}
+.completed-section > summary {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.completed-section[open] > summary {
+  margin-bottom: 10px;
+}
 .compact-subjects {
   display: grid;
   gap: 12px;

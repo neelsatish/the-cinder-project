@@ -754,6 +754,37 @@ textarea::placeholder {
 .account-switcher-list button:hover, .account-switcher-list button.active {
   border-color: var(--primary); background: rgba(217, 99, 31, 0.08);
 }
+.updater-card {
+  display: grid;
+  gap: 14px;
+}
+.updater-card > div:first-child strong,
+.updater-card > div:first-child span {
+  display: block;
+}
+.updater-card > div:first-child span,
+.updater-card > small {
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.updater-card > p {
+  margin: 0;
+  color: var(--text-soft);
+}
+.updater-progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-lowest);
+}
+.updater-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 160ms ease;
+}
 .account-avatar {
   display: grid; place-items: center; width: 23px; height: 23px; border-radius: 50%;
   background: var(--surface-high); color: var(--primary); font-size: 11px; font-weight: 800;

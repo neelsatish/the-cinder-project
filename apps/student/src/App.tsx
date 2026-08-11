@@ -10,6 +10,7 @@ import {
 import {
   ApiError,
   AppShell,
+  AppUpdater,
   Badge,
   BrandMark,
   Button,
@@ -607,8 +608,14 @@ function HomeView({
   onOpenAssignments: () => void;
 }) {
   const upcoming = assignments
-    .filter((item) => !submissions[item.id]?.grade?.published)
+    .filter(
+      (item) =>
+        item.status !== "closed" && !submissions[item.id]?.grade?.published,
+    )
     .slice(0, 5);
+  const openAssignments = assignments.filter(
+    (item) => item.status !== "closed",
+  );
   const submitted = Object.values(submissions).filter(Boolean).length;
   const graded = Object.values(submissions).filter(
     (item) => item?.grade?.published,
@@ -627,9 +634,9 @@ function HomeView({
           detail="Enrolled classrooms"
         />
         <Metric
-          label="Assignments"
-          value={assignments.length}
-          detail="Published to you"
+          label="Open work"
+          value={openAssignments.length}
+          detail="Active assignments"
         />
         <Metric
           label="Submitted"
@@ -719,6 +726,9 @@ function ClassroomsView({
           node.kind === "pdf",
       )
     : [];
+  const openAssignments = assignments.filter(
+    (item) => item.status !== "closed",
+  );
   if (selected)
     return (
       <div className="page">
@@ -815,10 +825,10 @@ function ClassroomsView({
             eyebrow="Published work"
             className="panel-flush"
           >
-            {assignments.filter((item) => item.classroom_id === selected.id)
+            {openAssignments.filter((item) => item.classroom_id === selected.id)
               .length ? (
               <div className="list">
-                {assignments
+                {openAssignments
                   .filter((item) => item.classroom_id === selected.id)
                   .map((assignment) => (
                     <AssignmentRow
@@ -863,7 +873,7 @@ function ClassroomsView({
               </p>
               <footer>
                 {
-                  assignments.filter((item) => item.classroom_id === room.id)
+                  openAssignments.filter((item) => item.classroom_id === room.id)
                     .length
                 }{" "}
                 assignments
@@ -910,7 +920,7 @@ function AssignmentRow({
       </span>
       <Badge
         tone={
-          submission?.grade?.published
+          assignment.status === "closed" || submission?.grade?.published
             ? "good"
             : late
               ? "warning"
@@ -919,8 +929,10 @@ function AssignmentRow({
                 : "neutral"
         }
       >
-        {submission?.grade?.published
-          ? "Graded"
+        {assignment.status === "closed"
+          ? "Completed"
+          : submission?.grade?.published
+            ? "Graded"
           : submission
             ? submission.status
             : late
@@ -949,6 +961,12 @@ function AssignmentsView({
   const [text, setText] = useState("");
   const [status, setStatus] = useState("Draft saved on this computer");
   const [busy, setBusy] = useState(false);
+  const activeAssignments = assignments.filter(
+    (assignment) => assignment.status !== "closed",
+  );
+  const completedAssignments = assignments.filter(
+    (assignment) => assignment.status === "closed",
+  );
 
   useEffect(() => {
     if (!selected) return;
@@ -1002,6 +1020,7 @@ function AssignmentsView({
 
   if (selected) {
     const current = submissions[selected.id];
+    const completed = selected.status === "closed";
     return (
       <div className="assignment-workspace">
         <div className="assignment-bar">
@@ -1021,7 +1040,7 @@ function AssignmentsView({
           <Badge tone={current ? "accent" : "neutral"}>
             {current ? current.status : "Draft"}
           </Badge>
-          {current && current.status !== "withdrawn" ? (
+          {!completed && current && current.status !== "withdrawn" ? (
             <Button
               variant="ghost"
               disabled={!online || busy}
@@ -1048,9 +1067,15 @@ function AssignmentsView({
           <Button
             variant="primary"
             onClick={() => void submit()}
-            disabled={busy || !text.trim()}
+            disabled={completed || busy || !text.trim()}
           >
-            {busy ? "Saving…" : current ? "Resubmit" : "Submit work"}
+            {completed
+              ? "Completed"
+              : busy
+                ? "Saving…"
+                : current
+                  ? "Resubmit"
+                  : "Submit work"}
           </Button>
         </div>
         <div className="assignment-instructions">
@@ -1094,9 +1119,9 @@ function AssignmentsView({
         description="Draft freely, then submit when you are ready. Resubmissions keep a version history."
       />
       <Panel className="panel-flush">
-        {assignments.length ? (
+        {activeAssignments.length ? (
           <div className="list">
-            {assignments.map((assignment) => (
+            {activeAssignments.map((assignment) => (
               <AssignmentRow
                 key={assignment.id}
                 assignment={assignment}
@@ -1113,6 +1138,25 @@ function AssignmentsView({
           />
         )}
       </Panel>
+      {completedAssignments.length ? (
+        <details className="completed-section">
+          <summary>
+            Completed assignments ({completedAssignments.length})
+          </summary>
+          <Panel className="panel-flush">
+            <div className="list">
+              {completedAssignments.map((assignment) => (
+                <AssignmentRow
+                  key={assignment.id}
+                  assignment={assignment}
+                  submission={submissions[assignment.id]}
+                  onClick={() => setSelected(assignment)}
+                />
+              ))}
+            </div>
+          </Panel>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -1835,6 +1879,7 @@ function SettingsView({
             </div>
           </dl>
         </Panel>
+        <AppUpdater appName="Cinder Student" />
       </div>
     </div>
   );

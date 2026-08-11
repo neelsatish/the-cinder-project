@@ -4,3 +4,4 @@ export * from "./components";
 export * from "./editor";
 export * from "./icons";
 export * from "./types";
+export * from "./updater";

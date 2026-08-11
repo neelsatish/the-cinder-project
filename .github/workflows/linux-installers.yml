@@ -18,6 +18,7 @@ jobs:
       contents: write
     env:
       CARGO_TERM_COLOR: always
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +54,7 @@ jobs:
           mkdir -p artifacts/student
           cp target/release/bundle/deb/Cinder\ Student_*.deb artifacts/student/Cinder-Student-Linux-x86_64.deb
           cp target/release/bundle/appimage/Cinder\ Student_*.AppImage artifacts/student/Cinder-Student-Linux-x86_64.AppImage
+          cp target/release/bundle/appimage/Cinder\ Student_*.AppImage.sig artifacts/student/Cinder-Student-Linux-x86_64.AppImage.sig
 
       - name: Build Teacher installers
         run: |
@@ -60,10 +62,38 @@ jobs:
           mkdir -p artifacts/teacher
           cp target/release/bundle/deb/Cinder\ Teacher_*.deb artifacts/teacher/Cinder-Teacher-Linux-x86_64.deb
           cp target/release/bundle/appimage/Cinder\ Teacher_*.AppImage artifacts/teacher/Cinder-Teacher-Linux-x86_64.AppImage
+          cp target/release/bundle/appimage/Cinder\ Teacher_*.AppImage.sig artifacts/teacher/Cinder-Teacher-Linux-x86_64.AppImage.sig
+
+      - name: Create separate updater feeds
+        env:
+          RELEASE_BASE: https://github.com/Alfie3542/cinder-classroom/releases/download/matchbox-latest
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          PUBLISHED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pub_date "$PUBLISHED_AT" \
+            --arg notes "Cinder Matchbox $VERSION" \
+            --arg signature "$(cat artifacts/student/Cinder-Student-Linux-x86_64.AppImage.sig)" \
+            --arg url "$RELEASE_BASE/Cinder-Student-Linux-x86_64.AppImage" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"linux-x86_64": {signature: $signature, url: $url}}}' \
+            > artifacts/student/student-latest.json
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pub_date "$PUBLISHED_AT" \
+            --arg notes "Cinder Matchbox $VERSION" \
+            --arg signature "$(cat artifacts/teacher/Cinder-Teacher-Linux-x86_64.AppImage.sig)" \
+            --arg url "$RELEASE_BASE/Cinder-Teacher-Linux-x86_64.AppImage" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"linux-x86_64": {signature: $signature, url: $url}}}' \
+            > artifacts/teacher/teacher-latest.json
 
       - name: Verify installer set
         run: |
           test "$(find artifacts -type f \( -name '*.deb' -o -name '*.AppImage' \) | wc -l)" -eq 4
+          test "$(find artifacts -type f -name '*.sig' | wc -l)" -eq 2
+          test "$(find artifacts -type f -name '*-latest.json' | wc -l)" -eq 2
+          jq -e '.platforms["linux-x86_64"].signature | length > 0' artifacts/student/student-latest.json
+          jq -e '.platforms["linux-x86_64"].signature | length > 0' artifacts/teacher/teacher-latest.json
           find artifacts -type f -print
 
       - uses: actions/upload-artifact@v4
@@ -78,10 +108,12 @@ jobs:
           RELEASE_NOTES: |
             Cinder Matchbox update
 
-            - Light Cinder theme is now the default in both apps.
-            - Teacher Gradebook now uses Univer Sheets with formulas, formatting, multiple sheets and AI-assisted grade suggestions.
-            - Teachers can create additional protected teacher accounts from the sign-in screen.
-            - Students can switch between usernames previously used on that device; passwords are never stored.
+            - Completed assignments are collapsed on Student devices.
+            - Univer is now the primary Teacher Gradebook with improved sizing and scrolling.
+            - The AI assistant can propose multiple columns and safe workbook cell changes for teacher review.
+            - Grade suggestions still use Cinder's audited grade records and are never applied automatically.
+            - AI responses use neutral pronouns when a person's pronouns are unknown.
+            - Both apps can check GitHub Releases for signed updates from Settings.
 
             Built automatically from commit ${{ github.sha }}.
         run: |

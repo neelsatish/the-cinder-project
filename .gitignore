@@ -6,3 +6,4 @@ apps/*/dist/
 .env
 .env.*
 !.env.example
+.tauri-signing/

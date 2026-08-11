@@ -4,6 +4,7 @@ import {
   useEffect,
   lazy,
   useMemo,
+  useRef,
   Suspense,
   useState,
   type ChangeEvent,
@@ -11,6 +12,7 @@ import {
 } from "react";
 import {
   AppShell,
+  AppUpdater,
   Badge,
   BrandMark,
   Button,
@@ -39,6 +41,12 @@ import {
   type StudyNode,
   type User,
 } from "@cinder/ui";
+import type {
+  GradebookAiContext,
+  GradebookAction,
+  UniverGradebookHandle,
+  WorkbookCellValue,
+} from "./UniverGradebook";
 
 const UniverGradebook = lazy(() =>
   import("./UniverGradebook").then((module) => ({ default: module.UniverGradebook })),
@@ -2178,12 +2186,6 @@ function AttendanceRow({
   );
 }
 
-type GradebookSuggestion = {
-  student_id: string;
-  assignment_id: string;
-  points: number;
-};
-
 function GradebookView({
   api,
   classrooms,
@@ -2199,7 +2201,6 @@ function GradebookView({
     Record<string, Submission[]>
   >({});
   const [scores, setScores] = useState<Record<string, string>>({});
-  const [selectedCell, setSelectedCell] = useState("");
   const [savingCell, setSavingCell] = useState("");
   const [status, setStatus] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -2207,9 +2208,10 @@ function GradebookView({
   const [aiMessage, setAiMessage] = useState(
     "Ask for a review, a pattern summary, or suggested scores. Suggestions are never applied automatically.",
   );
-  const [suggestions, setSuggestions] = useState<Record<string, number>>({});
+  const [pendingActions, setPendingActions] = useState<GradebookAction[]>([]);
   const [includeNames, setIncludeNames] = useState(false);
   const [sheetRevision, setSheetRevision] = useState(0);
+  const gradebookRef = useRef<UniverGradebookHandle>(null);
   const roomAssignments = useMemo(
     () =>
       assignments.filter(
@@ -2247,7 +2249,7 @@ function GradebookView({
       setRoster(nextRoster.students);
       setByAssignment(nextByAssignment);
       setScores(nextScores);
-      setSuggestions({});
+      setPendingActions([]);
       setSheetRevision((current) => current + 1);
       setStatus("Saved to Cinder");
     } catch (failure) {
@@ -2315,9 +2317,10 @@ function GradebookView({
   const askAi = async () => {
     if (!prompt.trim() || !classroomId) return;
     setAiBusy(true);
-    setSuggestions({});
+    setPendingActions([]);
     try {
       const classroom = classrooms.find((item) => item.id === classroomId);
+      const workbookContext = gradebookRef.current?.getAiContext() ?? null;
       const context = {
         classroom: classroom
           ? {
@@ -2345,39 +2348,38 @@ function GradebookView({
             };
           }),
         })),
+        workbook:
+          includeNames || !workbookContext
+            ? workbookContext
+            : redactWorkbookNames(workbookContext, roster),
       };
-      const instruction = `${prompt.trim()}\n\nIf you suggest cell changes, return JSON only in this exact form: {"message":"short explanation","updates":[{"student_id":"id","assignment_id":"id","points":0}]}. Only suggest scores for existing submissions and keep every score within the assignment maximum. If no score changes are needed, return {"message":"your answer","updates":[]}.`;
+      const instruction = `${prompt.trim()}\n\nReturn JSON only, without Markdown fences or commentary, using this form: {"message":"clear explanation","actions":[]}. Allowed actions are {"type":"set_grade","student_id":"id","assignment_id":"id","points":0}, {"type":"add_column","title":"Column name","assignment_id":"optional existing assignment id","values":[{"student_id":"id","value":"text, number, boolean, or null"}]}, and {"type":"set_cell","sheet":"existing sheet name","cell":"A1","value":"text, number, boolean, formula beginning with =, or null"}. Use set_grade for assignment score cells so Cinder keeps its audit log. You may add multiple columns and change multiple cells, but never create a new classroom assignment. Only use existing IDs and sheets from the context, never put JSON into a spreadsheet cell, and limit the response to 100 actions. Use singular they/them and “the student” when pronouns are unknown. Write the message with complete, grammatically correct sentences.`;
       const result = await api.chat(
         [{ role: "user", content: instruction }],
         JSON.stringify(context),
       );
       const parsed = parseAiGradebook(result.content);
       if (!parsed) {
-        setAiMessage(result.content);
+        setAiMessage(
+          looksLikeStructuredOutput(result.content)
+            ? "I could not safely interpret that spreadsheet response. No cells were changed; please try a more specific request."
+            : result.content.trim(),
+        );
         return;
       }
-      const valid: Record<string, number> = {};
-      for (const update of parsed.updates) {
-        const assignment = roomAssignments.find(
-          (item) => item.id === update.assignment_id,
-        );
-        if (
-          !assignment ||
-          !submissionFor(update.student_id, update.assignment_id)
-        )
-          continue;
-        if (
-          Number.isFinite(update.points) &&
-          update.points >= 0 &&
-          update.points <= assignment.max_points
-        ) {
-          valid[`${update.student_id}:${update.assignment_id}`] = update.points;
-        }
-      }
-      setSuggestions(valid);
+      const valid = validateGradebookActions(
+        parsed.actions,
+        roster,
+        roomAssignments,
+        submissionFor,
+        gradebookRef.current?.getAiContext().sheets.map((sheet) => sheet.name) ?? [
+          "Gradebook",
+        ],
+      );
+      setPendingActions(valid);
       setAiMessage(
         parsed.message ||
-          `${Object.keys(valid).length} suggested change(s) are ready for review.`,
+          `${valid.length} suggested change(s) are ready for review.`,
       );
     } catch (failure) {
       setAiMessage(
@@ -2392,14 +2394,23 @@ function GradebookView({
 
   const applySuggestions = async () => {
     setStatus("Applying reviewed suggestions…");
-    for (const [key, points] of Object.entries(suggestions)) {
-      const [studentId, assignmentId] = key.split(":");
+    for (const action of pendingActions) {
+      if (action.type !== "set_grade") continue;
       const assignment = roomAssignments.find(
-        (item) => item.id === assignmentId,
+        (item) => item.id === action.assignment_id,
       );
-      if (assignment) await saveScore(studentId, assignment, points);
+      if (assignment)
+        await saveScore(action.student_id, assignment, action.points);
     }
-    setSuggestions({});
+    const workbookResult = gradebookRef.current?.applyActions(
+      pendingActions.filter((action) => action.type !== "set_grade"),
+    );
+    setPendingActions([]);
+    if (workbookResult?.rejected.length) {
+      setAiMessage(
+        `${workbookResult.applied} spreadsheet change(s) applied. ${workbookResult.rejected.join(" ")}`,
+      );
+    }
     await load();
   };
 
@@ -2483,112 +2494,11 @@ function GradebookView({
         }
       />
       <div className="gradebook-layout">
-        <Panel className="gradebook-sheet panel-flush legacy-gradebook-hidden">
-          <div className="formula-bar">
-            <span>{selectedCell || "Select a score cell"}</span>
-            <strong>fx</strong>
-            <input
-              value={selectedCell ? (scores[selectedCell] ?? "") : ""}
-              disabled={!selectedCell}
-              onChange={(event) =>
-                selectedCell &&
-                setScores((current) => ({
-                  ...current,
-                  [selectedCell]: event.target.value,
-                }))
-              }
-              onBlur={() => {
-                if (!selectedCell) return;
-                const [studentId, assignmentId] = selectedCell.split(":");
-                const assignment = roomAssignments.find(
-                  (item) => item.id === assignmentId,
-                );
-                if (assignment) void saveScore(studentId, assignment);
-              }}
-            />
-          </div>
-          <div className="sheet-scroll">
-            <table className="sheet-table">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  {roomAssignments.map((assignment) => (
-                    <th key={assignment.id}>
-                      <span>{assignment.title}</span>
-                      <small>out of {assignment.max_points}</small>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {roster.map((student) => (
-                  <tr key={student.id}>
-                    <th>
-                      <strong>{student.display_name}</strong>
-                      <small>{student.username}</small>
-                    </th>
-                    {roomAssignments.map((assignment) => {
-                      const key = `${student.id}:${assignment.id}`;
-                      const submission = submissionFor(
-                        student.id,
-                        assignment.id,
-                      );
-                      return (
-                        <td
-                          key={assignment.id}
-                          className={
-                            suggestions[key] !== undefined
-                              ? "has-suggestion"
-                              : ""
-                          }
-                        >
-                          {submission ? (
-                            <input
-                              aria-label={`${student.display_name}, ${assignment.title}`}
-                              type="number"
-                              min="0"
-                              max={assignment.max_points}
-                              step="0.5"
-                              value={scores[key] ?? ""}
-                              onFocus={() => setSelectedCell(key)}
-                              onChange={(event) =>
-                                setScores((current) => ({
-                                  ...current,
-                                  [key]: event.target.value,
-                                }))
-                              }
-                              onBlur={() =>
-                                void saveScore(student.id, assignment)
-                              }
-                              disabled={savingCell === key}
-                            />
-                          ) : (
-                            <span title="No submission">—</span>
-                          )}
-                          {suggestions[key] !== undefined ? (
-                            <small>AI: {suggestions[key]}</small>
-                          ) : null}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!roomAssignments.length ? (
-              <EmptyState
-                icon="spreadsheet"
-                title="No published assignments"
-                description="Publish an assignment to add a gradebook column."
-              />
-            ) : null}
-          </div>
-          <div className="sheet-status">{status}</div>
-        </Panel>
         <Panel className="gradebook-sheet panel-flush univer-gradebook-panel">
           {roomAssignments.length ? (
             <Suspense fallback={<div className="univer-loading"><BrandMark size={34} /><span>Opening spreadsheet…</span></div>}>
               <UniverGradebook
+                ref={gradebookRef}
                 key={`${classroomId}:${sheetRevision}:${roster.map((item) => item.id).join(",")}:${roomAssignments.map((item) => item.id).join(",")}`}
                 classroomId={classroomId}
                 classroomName={classrooms.find((item) => item.id === classroomId)?.name ?? "Cinder"}
@@ -2632,15 +2542,23 @@ function GradebookView({
             >
               {aiBusy ? "Thinking…" : "Ask AI"}
             </Button>
-            {Object.keys(suggestions).length ? (
+            {pendingActions.length ? (
               <div className="suggestion-review">
                 <strong>
-                  {Object.keys(suggestions).length} cell suggestion(s)
+                  {pendingActions.length} proposed spreadsheet change(s)
                 </strong>
                 <p>
-                  Highlighted cells are proposals. Applying them writes audited,
-                  published grades after your review.
+                  Review every proposal below. Assignment scores use Cinder's
+                  audited grade record; other workbook cells remain local to
+                  this teacher computer.
                 </p>
+                <ul className="suggestion-list">
+                  {pendingActions.map((action, index) => (
+                    <li key={`${action.type}-${index}`}>
+                      {describeGradebookAction(action, roster, roomAssignments)}
+                    </li>
+                  ))}
+                </ul>
                 <div className="list-actions">
                   <Button
                     variant="primary"
@@ -2648,7 +2566,7 @@ function GradebookView({
                   >
                     Apply reviewed suggestions
                   </Button>
-                  <Button variant="ghost" onClick={() => setSuggestions({})}>
+                  <Button variant="ghost" onClick={() => setPendingActions([])}>
                     Discard
                   </Button>
                 </div>
@@ -2668,34 +2586,227 @@ function GradebookView({
 
 function parseAiGradebook(
   content: string,
-): { message: string; updates: GradebookSuggestion[] } | null {
+): { message: string; actions: GradebookAction[] } | null {
   const start = content.indexOf("{");
   const end = content.lastIndexOf("}");
   if (start < 0 || end <= start) return null;
   try {
     const parsed = JSON.parse(content.slice(start, end + 1)) as {
       message?: unknown;
+      actions?: unknown;
       updates?: unknown;
     };
-    if (!Array.isArray(parsed.updates)) return null;
-    const updates = parsed.updates.filter(
-      (item): item is GradebookSuggestion => {
-        if (!item || typeof item !== "object") return false;
-        const value = item as Partial<GradebookSuggestion>;
-        return (
-          typeof value.student_id === "string" &&
-          typeof value.assignment_id === "string" &&
-          typeof value.points === "number"
-        );
-      },
-    );
+    const source = Array.isArray(parsed.actions)
+      ? parsed.actions
+      : Array.isArray(parsed.updates)
+        ? parsed.updates.map((item) => ({
+            ...(item && typeof item === "object" ? item : {}),
+            type: "set_grade",
+          }))
+        : null;
+    if (!source) return null;
+    const actions = source.slice(0, 100).flatMap((item): GradebookAction[] => {
+      if (!item || typeof item !== "object") return [];
+      const value = item as Record<string, unknown>;
+      if (
+        value.type === "set_grade" &&
+        typeof value.student_id === "string" &&
+        typeof value.assignment_id === "string" &&
+        typeof value.points === "number"
+      ) {
+        return [
+          {
+            type: "set_grade",
+            student_id: value.student_id,
+            assignment_id: value.assignment_id,
+            points: value.points,
+          },
+        ];
+      }
+      if (value.type === "add_column" && typeof value.title === "string") {
+        const values = Array.isArray(value.values)
+          ? value.values.flatMap(
+              (entry): Array<{
+                student_id: string;
+                value: WorkbookCellValue;
+              }> => {
+                if (!entry || typeof entry !== "object") return [];
+                const candidate = entry as Record<string, unknown>;
+                return typeof candidate.student_id === "string" &&
+                  isWorkbookCellValue(candidate.value)
+                  ? [
+                      {
+                        student_id: candidate.student_id,
+                        value: candidate.value,
+                      },
+                    ]
+                  : [];
+              },
+            )
+          : undefined;
+        return [
+          {
+            type: "add_column",
+            title: value.title,
+            assignment_id:
+              typeof value.assignment_id === "string"
+                ? value.assignment_id
+                : undefined,
+            values,
+          },
+        ];
+      }
+      if (
+        value.type === "set_cell" &&
+        typeof value.sheet === "string" &&
+        typeof value.cell === "string" &&
+        isWorkbookCellValue(value.value)
+      ) {
+        return [
+          {
+            type: "set_cell",
+            sheet: value.sheet,
+            cell: value.cell.toUpperCase(),
+            value: value.value,
+          },
+        ];
+      }
+      return [];
+    });
     return {
       message: typeof parsed.message === "string" ? parsed.message : "",
-      updates,
+      actions,
     };
   } catch {
     return null;
   }
+}
+
+function isWorkbookCellValue(value: unknown): value is WorkbookCellValue {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
+}
+
+function redactWorkbookNames(
+  workbook: GradebookAiContext,
+  roster: User[],
+): GradebookAiContext {
+  const replacements = new Map<string, string>();
+  roster.forEach((student, index) => {
+    replacements.set(student.display_name, `Student ${index + 1}`);
+    replacements.set(student.username, `student-${index + 1}`);
+  });
+  return {
+    ...workbook,
+    sheets: workbook.sheets.map((sheet) => ({
+      ...sheet,
+      values: sheet.values.map((row) =>
+        row.map((value) =>
+          typeof value === "string" && replacements.has(value)
+            ? replacements.get(value)!
+            : value,
+        ),
+      ),
+    })),
+  };
+}
+
+function looksLikeStructuredOutput(content: string) {
+  const trimmed = content.trim();
+  return (
+    trimmed.startsWith("{") ||
+    trimmed.startsWith("[") ||
+    trimmed.startsWith("```json") ||
+    /"(?:actions|updates)"\s*:/.test(trimmed)
+  );
+}
+
+function validateGradebookActions(
+  actions: GradebookAction[],
+  roster: User[],
+  assignments: Assignment[],
+  submissionFor: (
+    studentId: string,
+    assignmentId: string,
+  ) => Submission | undefined,
+  sheetNames: string[],
+) {
+  const students = new Set(roster.map((student) => student.id));
+  const sheets = new Set(sheetNames);
+  return actions.slice(0, 100).flatMap((action): GradebookAction[] => {
+    if (action.type === "set_grade") {
+      const assignment = assignments.find(
+        (item) => item.id === action.assignment_id,
+      );
+      return assignment &&
+        students.has(action.student_id) &&
+        submissionFor(action.student_id, action.assignment_id) &&
+        Number.isFinite(action.points) &&
+        action.points >= 0 &&
+        action.points <= assignment.max_points
+        ? [action]
+        : [];
+    }
+    if (action.type === "add_column") {
+      const title = action.title.trim().slice(0, 80);
+      if (!title) return [];
+      if (
+        action.assignment_id &&
+        !assignments.some((item) => item.id === action.assignment_id)
+      )
+        return [];
+      return [
+        {
+          ...action,
+          title,
+          values: action.values
+            ?.filter((item) => students.has(item.student_id))
+            .slice(0, roster.length),
+        },
+      ];
+    }
+    const match = /^([A-Z]{1,2})([1-9]\d{0,2})$/i.exec(action.cell);
+    if (!match || !sheets.has(action.sheet)) return [];
+    const column = [...match[1].toUpperCase()].reduce(
+      (total, character) => total * 26 + character.charCodeAt(0) - 64,
+      0,
+    );
+    const row = Number(match[2]);
+    if (
+      action.sheet === "Gradebook" &&
+      row <= roster.length + 1 &&
+      column <= assignments.length + 2
+    )
+      return [];
+    if (
+      typeof action.value === "string" &&
+      action.value.length > (action.value.startsWith("=") ? 256 : 2_000)
+    )
+      return [];
+    return [{ ...action, cell: action.cell.toUpperCase() }];
+  });
+}
+
+function describeGradebookAction(
+  action: GradebookAction,
+  roster: User[],
+  assignments: Assignment[],
+) {
+  if (action.type === "set_grade") {
+    const student = roster.find((item) => item.id === action.student_id);
+    const assignment = assignments.find(
+      (item) => item.id === action.assignment_id,
+    );
+    return `Set ${student?.display_name ?? "a student"}’s ${assignment?.title ?? "assignment"} score to ${action.points}.`;
+  }
+  if (action.type === "add_column") {
+    return `Add the “${action.title}” column${action.values?.length ? ` with ${action.values.length} value(s)` : ""}.`;
+  }
+  return `Set ${action.sheet}!${action.cell} to ${String(action.value ?? "blank")}.`;
 }
 
 function AssistantView({ api }: { api: CinderApi }) {
@@ -2939,6 +3050,7 @@ function SettingsView({
             the teacher API key or database file.
           </p>
         </Panel>
+        <AppUpdater appName="Cinder Teacher" />
       </div>
     </div>
   );

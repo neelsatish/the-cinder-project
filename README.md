@@ -23,7 +23,25 @@ After downloading a `.deb`, double-click it and choose **Install Package**. No
 Codex installation is required. This repository is private, so the browser must
 be signed into a GitHub account with access.
 
-## Cinder Matchbox 0.4.0 update
+## Cinder Matchbox 0.5.0 update
+
+- Collapsed completed assignments on Student devices so active work stays clear.
+- Made Univer the only rendered Teacher Gradebook and improved its usable area,
+  internal scrolling and column widths.
+- Let the AI assistant propose multiple custom columns, formulas and safe cell
+  edits using the current workbook as context.
+- Kept assignment score changes on Cinder's reviewed, audited grade path.
+- Prevented malformed AI JSON from appearing in the sheet or chat response.
+- Added neutral-pronoun and grammar rules when a person's pronouns are unknown.
+- Added signed GitHub update checks to Settings in both desktop apps.
+- Kept Student and Teacher on separate updater feeds so the wrong binary cannot
+  be installed.
+
+AppImage users can install signed updates in place. Users who installed a `.deb`
+may need to download and install the latest package from this page when Linux
+does not permit replacing the system-installed executable.
+
+## Earlier 0.4.0 update
 
 - Made the Cinder light palette the default throughout Teacher and Student.
 - Replaced the basic Gradebook grid with Univer Sheets, including formulas,
