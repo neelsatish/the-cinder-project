@@ -7,6 +7,22 @@ AppImage users can install signed updates in place. Users who installed a `.deb`
 may need to download the latest package, because Linux does not always permit
 replacing a system-installed executable.
 
+## 0.6.1
+
+- Added a confirmed **Reset sheet** control that removes custom local sheets,
+  columns, formulas, values and formatting while preserving audited grades and
+  grade history.
+- Prevented AI reset requests from claiming success without changing the
+  workbook; full-sheet resets now route to the protected reset control.
+- Validated every AI spreadsheet action against the current classroom,
+  assignments, students, sheets and cell targets before review.
+- Applied AI grade and workbook actions deterministically, read the resulting
+  values back from Univer, and reported the exact verified result.
+- Rejected direct AI writes into protected Gradebook cells and duplicate or
+  malformed actions that caused stray columns, booleans and JSON-like content.
+- Refreshed the authoritative gradebook state after a partial AI failure so a
+  retry cannot silently duplicate an earlier change.
+
 ## 0.6.0
 
 - Fixed Gradebook edits so only the changed Univer cell is validated and saved,

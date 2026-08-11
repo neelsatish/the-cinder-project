@@ -108,12 +108,12 @@ jobs:
           RELEASE_NOTES: |
             Cinder Matchbox update
 
-            - Fixed audited grade editing and invalid-value rollback in Univer.
-            - Added orange review previews and reliable AI-created custom columns.
-            - Improved assignment headings, Gradebook sizing and AI chat scrolling.
-            - Added native CSV and question-paper exports.
-            - Added editable AI question papers using selected PDF references.
-            - Added remembered Teacher usernames and secure multi-teacher account management.
+            - Added a confirmed Reset sheet button for clearing local workbook customizations while preserving audited grades.
+            - Stopped the AI from claiming a reset or edit succeeded when it returned no valid actions.
+            - Validated AI actions against current students, assignments, sheets and protected Gradebook cells.
+            - Applied and read back each reviewed change, with an exact verified result in the assistant panel.
+            - Rejected malformed and duplicate actions that caused stray columns, booleans or structured content.
+            - Refreshed the saved gradebook after partial failures to make retries safe.
 
             Built automatically from commit ${{ github.sha }}.
         run: |

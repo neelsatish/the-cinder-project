@@ -2295,6 +2295,7 @@ function GradebookView({
   const [pendingActions, setPendingActions] = useState<GradebookAction[]>([]);
   const [includeNames, setIncludeNames] = useState(false);
   const [sheetRevision, setSheetRevision] = useState(0);
+  const [resetOpen, setResetOpen] = useState(false);
   const gradebookRef = useRef<UniverGradebookHandle>(null);
   const roomAssignments = useMemo(
     () =>
@@ -2406,6 +2407,14 @@ function GradebookView({
 
   const askAi = async () => {
     if (!prompt.trim() || !classroomId) return;
+    if (looksLikeFullSheetReset(prompt)) {
+      gradebookRef.current?.clearPreview();
+      setPendingActions([]);
+      setAiMessage(
+        "Nothing changed. To return the workbook to its default layout, use Reset sheet above the gradebook. That protected reset removes local custom spreadsheet data without deleting audited grades.",
+      );
+      return;
+    }
     setAiBusy(true);
     setPendingActions([]);
     gradebookRef.current?.clearPreview();
@@ -2444,21 +2453,26 @@ function GradebookView({
             ? workbookContext
             : redactWorkbookNames(workbookContext, roster),
       };
-      const instruction = `${prompt.trim()}\n\nReturn JSON only, without Markdown fences or commentary, using this form: {"message":"clear explanation","actions":[]}. Allowed actions are {"type":"set_grade","student_id":"id","assignment_id":"id","points":0}, {"type":"add_column","title":"Column name","assignment_id":"optional existing assignment id","values":[{"student_id":"id","value":"text, number, boolean, or null"}]}, and {"type":"set_cell","sheet":"existing sheet name","cell":"A1","value":"text, number, boolean, formula beginning with =, or null"}. Use set_grade for assignment score cells so Cinder keeps its audit log. You may add multiple columns and change multiple cells, but never create a new classroom assignment. Only use existing IDs and sheets from the context, never put JSON into a spreadsheet cell, and limit the response to 100 actions. Use singular they/them and “the student” when pronouns are unknown. Write the message with complete, grammatically correct sentences.`;
+      const instruction = `${prompt.trim()}\n\nReturn JSON only, without Markdown fences or commentary, using this form: {"message":"clear explanation of the proposed work","actions":[]}. Allowed actions are {"type":"set_grade","student_id":"id","assignment_id":"id","points":0}, {"type":"add_column","title":"Custom column name","values":[{"student_id":"id","value":"text, number, boolean, or null"}]}, and {"type":"set_cell","sheet":"an existing non-Gradebook sheet","cell":"A1","value":"text, number, boolean, formula beginning with =, or null"}. Every requested spreadsheet change must appear as an action. Never claim that a change was applied, completed, reset or cleared; actions are only proposals until the teacher reviews and applies them. All classroom assignments already have Gradebook columns: use set_grade for their score cells and never create duplicate assignment, total, or submission-status columns unless the teacher explicitly asks for a custom analysis column. Use add_column for any custom Gradebook column and include all intended row values in that action. Never use set_cell on the Gradebook sheet. Never reset or clear the whole workbook; tell the teacher to use the protected Reset sheet button and return no actions. Only use IDs and sheet names present in the context, never put JSON into a cell, and limit the response to 100 actions. Use singular they/them and “the student” when pronouns are unknown. Write complete, grammatically correct sentences.`;
       const result = await api.chat(
         [{ role: "user", content: instruction }],
         JSON.stringify(context),
       );
       const parsed = parseAiGradebook(result.content);
       if (!parsed) {
+        const explanation = result.content.trim();
+        const safeExplanation =
+          explanation &&
+          !looksLikeStructuredOutput(explanation) &&
+          !claimsSpreadsheetChangeWasApplied(explanation)
+            ? `${explanation}\n\n`
+            : "";
         setAiMessage(
-          looksLikeStructuredOutput(result.content)
-            ? "I could not safely interpret that spreadsheet response. No cells were changed; please try a more specific request."
-            : result.content.trim(),
+          `${safeExplanation}No spreadsheet changes were applied because the AI did not return valid action data. Please try a more specific request.`,
         );
         return;
       }
-      const valid = validateGradebookActions(
+      const validation = validateGradebookActions(
         parsed.actions,
         roster,
         roomAssignments,
@@ -2467,12 +2481,27 @@ function GradebookView({
           "Gradebook",
         ],
       );
-      setPendingActions(valid);
-      gradebookRef.current?.showPreview(valid);
-      setAiMessage(
-        parsed.message ||
-          `${valid.length} suggested change(s) are ready for review.`,
-      );
+      if (parsed.discarded) {
+        validation.rejected.unshift(
+          `Removed ${parsed.discarded} malformed AI action(s).`,
+        );
+      }
+      setPendingActions(validation.valid);
+      gradebookRef.current?.showPreview(validation.valid);
+      if (!validation.valid.length) {
+        const explanation = parsed.message.trim();
+        const safeExplanation =
+          explanation && !claimsSpreadsheetChangeWasApplied(explanation)
+            ? `${explanation}\n\n`
+            : "";
+        setAiMessage(
+          `${safeExplanation}No spreadsheet changes were applied.${validation.rejected.length ? ` ${validation.rejected.join(" ")}` : " The AI returned no actionable changes."}`,
+        );
+      } else {
+        setAiMessage(
+          `${validation.valid.length} safe change(s) are ready for review. Nothing has changed yet—check the orange cells and select Apply reviewed suggestions.${validation.rejected.length ? ` ${validation.rejected.length} unsafe or invalid proposal(s) were removed: ${validation.rejected.join(" ")}` : ""}`,
+        );
+      }
     } catch (failure) {
       setAiMessage(
         failure instanceof Error
@@ -2485,26 +2514,72 @@ function GradebookView({
   };
 
   const applySuggestions = async () => {
+    const reviewed = [...pendingActions];
+    if (!reviewed.length) return;
+    setAiBusy(true);
     setStatus("Applying reviewed suggestions…");
     gradebookRef.current?.clearPreview();
-    for (const action of pendingActions) {
-      if (action.type !== "set_grade") continue;
-      const assignment = roomAssignments.find(
-        (item) => item.id === action.assignment_id,
+    let applied = 0;
+    const failures: string[] = [];
+    try {
+      for (const action of reviewed) {
+        if (action.type !== "set_grade") continue;
+        const assignment = roomAssignments.find(
+          (item) => item.id === action.assignment_id,
+        );
+        if (!assignment) {
+          failures.push("An assignment grade target no longer exists.");
+          continue;
+        }
+        const saved = await saveScore(
+          action.student_id,
+          assignment,
+          action.points,
+        );
+        if (saved) applied += 1;
+        else
+          failures.push(
+            `The ${assignment.title} grade for one student was not saved.`,
+          );
+      }
+      const workbookActions = reviewed.filter(
+        (action) => action.type !== "set_grade",
       );
-      if (assignment)
-        await saveScore(action.student_id, assignment, action.points);
-    }
-    const workbookResult = gradebookRef.current?.applyActions(
-      pendingActions.filter((action) => action.type !== "set_grade"),
-    );
-    setPendingActions([]);
-    if (workbookResult?.rejected.length) {
+      if (workbookActions.length) {
+        const workbookResult = gradebookRef.current?.applyActions(
+          workbookActions,
+        );
+        if (!workbookResult) {
+          failures.push("The spreadsheet was not ready for workbook changes.");
+        } else {
+          applied += workbookResult.applied;
+          failures.push(...workbookResult.rejected);
+        }
+      }
+      setPendingActions([]);
+      await load();
+      const complete = applied === reviewed.length && !failures.length;
       setAiMessage(
-        `${workbookResult.applied} spreadsheet change(s) applied. ${workbookResult.rejected.join(" ")}`,
+        complete
+          ? `Applied and verified all ${applied} reviewed spreadsheet change(s).`
+          : `Applied and verified ${applied} of ${reviewed.length} reviewed spreadsheet change(s).${failures.length ? ` ${failures.join(" ")}` : ""}`,
       );
+      setStatus(
+        complete
+          ? "AI changes applied and verified."
+          : "Some AI changes could not be applied.",
+      );
+    } catch (failure) {
+      setPendingActions([]);
+      gradebookRef.current?.clearPreview();
+      await load();
+      setAiMessage(
+        `The reviewed changes stopped before Cinder could verify all of them. The gradebook was refreshed to show its saved state. ${failure instanceof Error ? failure.message : "The spreadsheet reported an unexpected error."}`,
+      );
+      setStatus("AI changes were not fully applied.");
+    } finally {
+      setAiBusy(false);
     }
-    await load();
   };
 
   const exportCsv = async () => {
@@ -2539,6 +2614,19 @@ function GradebookView({
           : "The gradebook could not be exported.",
       );
     }
+  };
+
+  const resetSheet = () => {
+    if (gradebookRef.current) gradebookRef.current.resetWorkbook();
+    else
+      localStorage.removeItem(`cinder.teacher.workbook.${classroomId}`);
+    setPendingActions([]);
+    setAiMessage(
+      "The local sheet was reset to Cinder's default layout. Saved grades and grade history were kept.",
+    );
+    setStatus("Sheet reset. Audited grades were kept.");
+    setSheetRevision((current) => current + 1);
+    setResetOpen(false);
   };
 
   if (!classrooms.length)
@@ -2580,6 +2668,9 @@ function GradebookView({
             </Field>
             <Button icon="refresh" onClick={() => void load()}>
               Refresh
+            </Button>
+            <Button variant="danger" onClick={() => setResetOpen(true)}>
+              Reset sheet
             </Button>
             <Button
               icon="download"
@@ -2665,8 +2756,9 @@ function GradebookView({
                   <Button
                     variant="primary"
                     onClick={() => void applySuggestions()}
+                    disabled={aiBusy}
                   >
-                    Apply reviewed suggestions
+                    {aiBusy ? "Applying…" : "Apply reviewed suggestions"}
                   </Button>
                   <Button
                     variant="ghost"
@@ -2688,13 +2780,36 @@ function GradebookView({
           </div>
         </Panel>
       </div>
+      {resetOpen ? (
+        <Modal
+          title="Reset this gradebook sheet?"
+          description="This removes custom sheets, columns, formulas, values and formatting from this classroom on this Teacher computer."
+          onClose={() => setResetOpen(false)}
+        >
+          <div className="form-stack">
+            <p className="form-hint">
+              Cinder will rebuild the default Student, Username and assignment
+              columns. Saved grades, feedback and grade history will not be
+              deleted.
+            </p>
+            <div className="list-actions">
+              <Button variant="danger" onClick={resetSheet}>
+                Reset local sheet
+              </Button>
+              <Button variant="ghost" onClick={() => setResetOpen(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }
 
 function parseAiGradebook(
   content: string,
-): { message: string; actions: GradebookAction[] } | null {
+): { message: string; actions: GradebookAction[]; discarded: number } | null {
   const start = content.indexOf("{");
   const end = content.lastIndexOf("}");
   if (start < 0 || end <= start) return null;
@@ -2713,21 +2828,31 @@ function parseAiGradebook(
           }))
         : null;
     if (!source) return null;
+    let discarded = 0;
     const actions = source.slice(0, 100).flatMap((item): GradebookAction[] => {
-      if (!item || typeof item !== "object") return [];
+      if (!item || typeof item !== "object") {
+        discarded += 1;
+        return [];
+      }
       const value = item as Record<string, unknown>;
+      const numericPoints =
+        typeof value.points === "number"
+          ? value.points
+          : typeof value.points === "string" && value.points.trim()
+            ? Number(value.points)
+            : Number.NaN;
       if (
         value.type === "set_grade" &&
         typeof value.student_id === "string" &&
         typeof value.assignment_id === "string" &&
-        typeof value.points === "number"
+        Number.isFinite(numericPoints)
       ) {
         return [
           {
             type: "set_grade",
             student_id: value.student_id,
             assignment_id: value.assignment_id,
-            points: value.points,
+            points: numericPoints,
           },
         ];
       }
@@ -2779,11 +2904,13 @@ function parseAiGradebook(
           },
         ];
       }
+      discarded += 1;
       return [];
     });
     return {
       message: typeof parsed.message === "string" ? parsed.message : "",
       actions,
+      discarded,
     };
   } catch {
     return null;
@@ -2833,6 +2960,24 @@ function looksLikeStructuredOutput(content: string) {
   );
 }
 
+function looksLikeFullSheetReset(value: string) {
+  const prompt = value.trim().toLocaleLowerCase();
+  return (
+    /\b(reset|wipe|clear|erase)\b.{0,40}\b(sheet|spreadsheet|gradebook|workbook)\b/.test(
+      prompt,
+    ) ||
+    /\b(sheet|spreadsheet|gradebook|workbook)\b.{0,40}\b(default|clean slate|start over)\b/.test(
+      prompt,
+    )
+  );
+}
+
+function claimsSpreadsheetChangeWasApplied(value: string) {
+  return /\b(?:applied|changed|cleared|completed|created|deleted|filled|inserted|removed|reset|updated|wiped|written)\b/i.test(
+    value,
+  );
+}
+
 function validateGradebookActions(
   actions: GradebookAction[],
   roster: User[],
@@ -2845,59 +2990,81 @@ function validateGradebookActions(
 ) {
   const students = new Set(roster.map((student) => student.id));
   const sheets = new Set(sheetNames);
-  return actions.slice(0, 100).flatMap((action): GradebookAction[] => {
+  const accepted: GradebookAction[] = [];
+  const rejected: string[] = [];
+  for (const action of actions.slice(0, 100)) {
     if (action.type === "set_grade") {
       const assignment = assignments.find(
         (item) => item.id === action.assignment_id,
       );
-      return assignment &&
+      if (
+        assignment &&
         students.has(action.student_id) &&
         submissionFor(action.student_id, action.assignment_id) &&
         Number.isFinite(action.points) &&
         action.points >= 0 &&
         action.points <= assignment.max_points
-        ? [action]
-        : [];
+      ) {
+        accepted.push(action);
+      } else {
+        rejected.push(
+          "Removed a grade proposal with an invalid student, assignment, submission or score.",
+        );
+      }
+      continue;
     }
     if (action.type === "add_column") {
       const title = action.title.trim().slice(0, 80);
-      if (!title) return [];
-      if (
-        action.assignment_id &&
-        !assignments.some((item) => item.id === action.assignment_id)
-      )
-        return [];
-      return [
-        {
-          ...action,
-          title,
-          values: action.values
-            ?.filter((item) => students.has(item.student_id))
-            .slice(0, roster.length),
-        },
-      ];
+      if (!title) {
+        rejected.push("Removed a custom column with no title.");
+        continue;
+      }
+      const values = action.values
+        ?.filter((item) => students.has(item.student_id))
+        .slice(0, roster.length);
+      const missingValues = (action.values?.length ?? 0) - (values?.length ?? 0);
+      if (missingValues) {
+        rejected.push(
+          `Removed ${missingValues} custom-column value(s) with unknown student IDs.`,
+        );
+      }
+      accepted.push({ type: "add_column", title, values });
+      continue;
     }
     const match = /^([A-Z]{1,2})([1-9]\d{0,2})$/i.exec(action.cell);
-    if (!match || !sheets.has(action.sheet)) return [];
-    const column = [...match[1].toUpperCase()].reduce(
-      (total, character) => total * 26 + character.charCodeAt(0) - 64,
-      0,
-    );
-    const row = Number(match[2]);
-    if (
-      action.sheet === "Gradebook" &&
-      row <= roster.length + 1 &&
-      column <= assignments.length + 2
-    )
-      return [];
+    if (!match || !sheets.has(action.sheet)) {
+      rejected.push("Removed a cell proposal with an invalid sheet or address.");
+      continue;
+    }
+    if (action.sheet === "Gradebook") {
+      rejected.push(
+        "Removed a direct Gradebook cell edit; grades must use audited grade actions and custom data must use a named column.",
+      );
+      continue;
+    }
     if (
       typeof action.value === "string" &&
       (action.value.length > (action.value.startsWith("=") ? 256 : 2_000) ||
         looksLikeStructuredOutput(action.value))
-    )
-      return [];
-    return [{ ...action, cell: action.cell.toUpperCase() }];
-  });
+    ) {
+      rejected.push("Removed an unsafe or oversized cell value.");
+      continue;
+    }
+    accepted.push({ ...action, cell: action.cell.toUpperCase() });
+  }
+
+  const unique = new Map<string, GradebookAction>();
+  for (const action of accepted) {
+    const key =
+      action.type === "set_grade"
+        ? `grade:${action.student_id}:${action.assignment_id}`
+        : action.type === "add_column"
+          ? `column:${action.title.toLocaleLowerCase()}`
+          : `cell:${action.sheet.toLocaleLowerCase()}:${action.cell}`;
+    if (unique.has(key)) rejected.push("Removed a duplicate AI proposal.");
+    unique.set(key, action);
+  }
+  return { valid: [...unique.values()], rejected };
 }
 
 function describeGradebookAction(

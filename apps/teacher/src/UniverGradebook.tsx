@@ -52,6 +52,7 @@ export type UniverGradebookHandle = {
   getAiContext: () => GradebookAiContext;
   showPreview: (actions: GradebookAction[]) => void;
   clearPreview: () => void;
+  resetWorkbook: () => void;
   applyActions: (actions: GradebookAction[]) => {
     applied: number;
     rejected: string[];
@@ -184,6 +185,15 @@ function columnIndexFromA1(cell: string) {
   return { column: column - 1, row: Number(match[2]) - 1 };
 }
 
+function cellValueMatches(
+  expected: WorkbookCellValue,
+  actual: WorkbookCellValue | undefined,
+) {
+  if (expected === null) return actual == null || actual === "";
+  if (typeof expected === "number") return Number(actual) === expected;
+  return actual === expected;
+}
+
 export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
   function UniverGradebook(props, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -197,8 +207,11 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         rejected: string[];
       }
     >(() => ({ applied: 0, rejected: ["The spreadsheet is still opening."] }));
-    const showPreviewRef = useRef<(actions: GradebookAction[]) => void>(() => undefined);
+    const showPreviewRef = useRef<(actions: GradebookAction[]) => void>(
+      () => undefined,
+    );
     const clearPreviewRef = useRef<() => void>(() => undefined);
+    const resetWorkbookRef = useRef<() => void>(() => undefined);
     propsRef.current = props;
 
     useImperativeHandle(
@@ -207,6 +220,7 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         getAiContext: () => getContextRef.current(),
         showPreview: (actions) => showPreviewRef.current(actions),
         clearPreview: () => clearPreviewRef.current(),
+        resetWorkbook: () => resetWorkbookRef.current(),
         applyActions: (actions) => applyActionsRef.current(actions),
       }),
       [],
@@ -228,7 +242,9 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
           .setVerticalAlignment("middle");
       }
 
+      let persistEnabled = true;
       const persist = () => {
+        if (!persistEnabled) return;
         const active = univerAPI.getWorkbook(workbook.getId());
         if (active) {
           localStorage.setItem(
@@ -306,6 +322,11 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         }
         previewed.clear();
       };
+      resetWorkbookRef.current = () => {
+        persistEnabled = false;
+        clearPreviewRef.current();
+        localStorage.removeItem(storageKey(propsRef.current.classroomId));
+      };
       showPreviewRef.current = (actions) => {
         clearPreviewRef.current();
         const active = univerAPI.getWorkbook(workbook.getId());
@@ -373,68 +394,113 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         const rejected: string[] = [];
         for (const action of actions.slice(0, 100)) {
           if (action.type === "set_grade") continue;
-          if (action.type === "add_column") {
-            const gradeSheet = active.getSheetByName("Gradebook");
-            if (!gradeSheet) {
-              rejected.push(`Could not add “${action.title}”: Gradebook is missing.`);
+          try {
+            if (action.type === "add_column") {
+              const gradeSheet = active.getSheetByName("Gradebook");
+              if (!gradeSheet) {
+                rejected.push(
+                  `Could not add “${action.title}”: Gradebook is missing.`,
+                );
+                continue;
+              }
+              const targetColumn = customColumnFor(
+                gradeSheet,
+                action.title,
+                true,
+              );
+              const title = action.title.trim().slice(0, 80);
+              gradeSheet
+                .getRange(0, targetColumn)
+                .setValue(title)
+                .setBackgroundColor("#f0e7de")
+                .setFontWeight("bold")
+                .setWrap(true)
+                .setVerticalAlignment("middle");
+              gradeSheet.setColumnWidth(targetColumn, 190);
+              const writtenTitle = gradeSheet
+                .getRange(0, targetColumn)
+                .getValues()[0]?.[0];
+              if (String(writtenTitle ?? "") !== title) {
+                throw new Error(`the “${title}” header was not written`);
+              }
+              let failedValues = 0;
+              for (const item of action.values ?? []) {
+                const row = propsRef.current.roster.findIndex(
+                  (student) => student.id === item.student_id,
+                );
+                if (row < 0) {
+                  failedValues += 1;
+                  continue;
+                }
+                const range = gradeSheet.getRange(row + 1, targetColumn);
+                range.setValue(item.value === null ? { v: null } : item.value);
+                const actual = range.getValues()[0]?.[0] as
+                  | WorkbookCellValue
+                  | undefined;
+                if (!cellValueMatches(item.value, actual)) failedValues += 1;
+              }
+              if (failedValues) {
+                rejected.push(
+                  `Added “${title}”, but ${failedValues} value(s) could not be verified.`,
+                );
+              }
+              applied += 1;
               continue;
             }
-            const targetColumn = customColumnFor(gradeSheet, action.title, true);
-            const title = action.title.trim().slice(0, 80);
-            gradeSheet
-              .getRange(0, targetColumn)
-              .setValue(title)
-              .setBackgroundColor("#f0e7de")
-              .setFontWeight("bold")
-              .setWrap(true)
-              .setVerticalAlignment("middle");
-            gradeSheet.setColumnWidth(targetColumn, 190);
-            for (const item of action.values ?? []) {
-              const row = propsRef.current.roster.findIndex(
-                (student) => student.id === item.student_id,
+
+            const worksheet = active.getSheetByName(action.sheet);
+            const location = columnIndexFromA1(action.cell);
+            if (!worksheet || !location) {
+              rejected.push(
+                `Skipped invalid cell ${action.sheet}!${action.cell}.`,
               );
-              if (row >= 0) {
-                gradeSheet
-                  .getRange(row + 1, targetColumn)
-                  .setValue(item.value === null ? { v: null } : item.value);
-              }
+              continue;
+            }
+            if (location.column >= worksheet.getMaxColumns()) {
+              worksheet.insertColumnsAfter(
+                worksheet.getMaxColumns() - 1,
+                location.column - worksheet.getMaxColumns() + 1,
+              );
+            }
+            if (location.row >= worksheet.getMaxRows()) {
+              worksheet.insertRowsAfter(
+                worksheet.getMaxRows() - 1,
+                location.row - worksheet.getMaxRows() + 1,
+              );
+            }
+            if (action.sheet === "Gradebook") {
+              rejected.push(
+                `Skipped Gradebook!${action.cell}; grade cells require set_grade and custom columns require add_column.`,
+              );
+              continue;
+            }
+            const target = worksheet.getRange(action.cell.toUpperCase());
+            target.setValue(
+              action.value === null ? { v: null } : action.value,
+            );
+            const verified =
+              typeof action.value === "string" &&
+              action.value.startsWith("=")
+                ? target.getFormula() === action.value
+                : cellValueMatches(
+                    action.value,
+                    target.getValues()[0]?.[0] as
+                      | WorkbookCellValue
+                      | undefined,
+                  );
+            if (!verified) {
+              throw new Error(
+                `${action.sheet}!${action.cell} did not contain the requested value`,
+              );
             }
             applied += 1;
-            continue;
-          }
-
-          const worksheet = active.getSheetByName(action.sheet);
-          const location = columnIndexFromA1(action.cell);
-          if (!worksheet || !location) {
-            rejected.push(`Skipped invalid cell ${action.sheet}!${action.cell}.`);
-            continue;
-          }
-          if (location.column >= worksheet.getMaxColumns()) {
-            worksheet.insertColumnsAfter(
-              worksheet.getMaxColumns() - 1,
-              location.column - worksheet.getMaxColumns() + 1,
+          } catch (failure) {
+            rejected.push(
+              failure instanceof Error
+                ? `Could not apply ${action.type}: ${failure.message}.`
+                : `Could not apply ${action.type}.`,
             );
           }
-          if (location.row >= worksheet.getMaxRows()) {
-            worksheet.insertRowsAfter(
-              worksheet.getMaxRows() - 1,
-              location.row - worksheet.getMaxRows() + 1,
-            );
-          }
-          if (action.sheet === "Gradebook") {
-            const protectedColumns = propsRef.current.assignments.length + 2;
-            const protectedRow = location.row <= propsRef.current.roster.length;
-            if (protectedRow && location.column < protectedColumns) {
-              rejected.push(
-                `Skipped protected cell Gradebook!${action.cell}; use a reviewed grade action instead.`,
-              );
-              continue;
-            }
-          }
-          worksheet
-            .getRange(action.cell.toUpperCase())
-            .setValue(action.value === null ? { v: null } : action.value);
-          applied += 1;
         }
         persist();
         return { applied, rejected };
@@ -542,6 +608,7 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         getContextRef.current = () => EMPTY_AI_CONTEXT;
         showPreviewRef.current = () => undefined;
         clearPreviewRef.current = () => undefined;
+        resetWorkbookRef.current = () => undefined;
         applyActionsRef.current = () => ({
           applied: 0,
           rejected: ["The spreadsheet is still opening."],
