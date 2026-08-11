@@ -50,6 +50,8 @@ export type GradebookAiContext = {
 
 export type UniverGradebookHandle = {
   getAiContext: () => GradebookAiContext;
+  showPreview: (actions: GradebookAction[]) => void;
+  clearPreview: () => void;
   applyActions: (actions: GradebookAction[]) => {
     applied: number;
     rejected: string[];
@@ -67,7 +69,7 @@ type Props = {
     studentId: string,
     assignment: Assignment,
     value: string,
-  ) => void;
+  ) => Promise<boolean>;
 };
 
 const storageKey = (classroomId: string) =>
@@ -195,12 +197,16 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         rejected: string[];
       }
     >(() => ({ applied: 0, rejected: ["The spreadsheet is still opening."] }));
+    const showPreviewRef = useRef<(actions: GradebookAction[]) => void>(() => undefined);
+    const clearPreviewRef = useRef<() => void>(() => undefined);
     propsRef.current = props;
 
     useImperativeHandle(
       ref,
       () => ({
         getAiContext: () => getContextRef.current(),
+        showPreview: (actions) => showPreviewRef.current(actions),
+        clearPreview: () => clearPreviewRef.current(),
         applyActions: (actions) => applyActionsRef.current(actions),
       }),
       [],
@@ -212,9 +218,14 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
       const workbook = univerAPI.createWorkbook(workbookData(propsRef.current));
       const sheet = workbook.getSheetByName("Gradebook");
       sheet?.setColumnWidth(0, 190);
-      sheet?.setColumnWidth(1, 125);
+      sheet?.setColumnWidth(1, 140);
+      sheet?.setRowHeight(0, 62);
       if (sheet && propsRef.current.assignments.length) {
-        sheet.setColumnWidths(2, propsRef.current.assignments.length, 132);
+        sheet.setColumnWidths(2, propsRef.current.assignments.length, 190);
+        sheet
+          .getRange(0, 0, 1, propsRef.current.assignments.length + 2)
+          .setWrap(true)
+          .setVerticalAlignment("middle");
       }
 
       const persist = () => {
@@ -255,6 +266,105 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         };
       };
 
+      const customColumnFor = (
+        gradeSheet: NonNullable<typeof sheet>,
+        title: string,
+        create: boolean,
+      ) => {
+        const firstCustomColumn = propsRef.current.assignments.length + 2;
+        const headers = gradeSheet
+          .getRange(0, 0, 1, gradeSheet.getMaxColumns())
+          .getValues()[0];
+        const existing = headers.findIndex(
+          (value, index) =>
+            index >= firstCustomColumn &&
+            String(value ?? "").trim().toLocaleLowerCase() ===
+              title.trim().toLocaleLowerCase(),
+        );
+        if (existing >= 0) return existing;
+        const blank = headers.findIndex(
+          (value, index) => index >= firstCustomColumn && value == null,
+        );
+        if (blank >= 0 || !create) return blank;
+        const previousLast = gradeSheet.getMaxColumns() - 1;
+        gradeSheet.insertColumnsAfter(previousLast, 10);
+        return previousLast + 1;
+      };
+
+      const previewed = new Map<
+        string,
+        { sheet: string; row: number; column: number; background: string }
+      >();
+      clearPreviewRef.current = () => {
+        const active = univerAPI.getWorkbook(workbook.getId());
+        if (!active) return;
+        for (const cell of previewed.values()) {
+          active
+            .getSheetByName(cell.sheet)
+            ?.getRange(cell.row, cell.column)
+            .setBackgroundColor(cell.background || "#ffffff");
+        }
+        previewed.clear();
+      };
+      showPreviewRef.current = (actions) => {
+        clearPreviewRef.current();
+        const active = univerAPI.getWorkbook(workbook.getId());
+        if (!active) return;
+        const highlight = (sheetName: string, row: number, column: number) => {
+          const worksheet = active.getSheetByName(sheetName);
+          if (
+            !worksheet ||
+            row < 0 ||
+            column < 0 ||
+            row >= worksheet.getMaxRows() ||
+            column >= worksheet.getMaxColumns()
+          )
+            return;
+          const key = `${sheetName}:${row}:${column}`;
+          const range = worksheet.getRange(row, column);
+          if (!previewed.has(key)) {
+            previewed.set(key, {
+              sheet: sheetName,
+              row,
+              column,
+              background: range.getBackground(),
+            });
+          }
+          range.setBackgroundColor("#ffe0cc");
+        };
+
+        const gradeSheet = active.getSheetByName("Gradebook");
+        for (const action of actions.slice(0, 100)) {
+          if (action.type === "set_grade") {
+            const row = propsRef.current.roster.findIndex(
+              (student) => student.id === action.student_id,
+            );
+            const column = propsRef.current.assignments.findIndex(
+              (assignment) => assignment.id === action.assignment_id,
+            );
+            if (row >= 0 && column >= 0) highlight("Gradebook", row + 1, column + 2);
+            continue;
+          }
+          if (action.type === "add_column" && gradeSheet) {
+            const column = customColumnFor(gradeSheet, action.title, false);
+            if (column >= 0) {
+              highlight("Gradebook", 0, column);
+              for (const value of action.values ?? []) {
+                const row = propsRef.current.roster.findIndex(
+                  (student) => student.id === value.student_id,
+                );
+                if (row >= 0) highlight("Gradebook", row + 1, column);
+              }
+            }
+            continue;
+          }
+          if (action.type === "set_cell") {
+            const location = columnIndexFromA1(action.cell);
+            if (location) highlight(action.sheet, location.row, location.column);
+          }
+        }
+      };
+
       applyActionsRef.current = (actions) => {
         const active = univerAPI.getWorkbook(workbook.getId());
         if (!active)
@@ -269,43 +379,21 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
               rejected.push(`Could not add “${action.title}”: Gradebook is missing.`);
               continue;
             }
-            const linkedAssignment = action.assignment_id
-              ? propsRef.current.assignments.find(
-                  (assignment) => assignment.id === action.assignment_id,
-                )
-              : null;
-            let targetColumn: number;
-            if (linkedAssignment) {
-              targetColumn =
-                propsRef.current.assignments.indexOf(linkedAssignment) + 2;
-            } else {
-              const firstCustomColumn = propsRef.current.assignments.length + 2;
-              const headers = gradeSheet
-                .getRange(0, 0, 1, gradeSheet.getMaxColumns())
-                .getValues()[0];
-              targetColumn = headers.findIndex(
-                (value, index) => index >= firstCustomColumn && value == null,
-              );
-              if (targetColumn < 0) {
-                const previousLast = gradeSheet.getMaxColumns() - 1;
-                gradeSheet.insertColumnsAfter(previousLast, 10);
-                targetColumn = previousLast + 1;
-              }
-            }
-            const title = linkedAssignment
-              ? `${linkedAssignment.title} / ${linkedAssignment.max_points}`
-              : action.title.trim().slice(0, 80);
+            const targetColumn = customColumnFor(gradeSheet, action.title, true);
+            const title = action.title.trim().slice(0, 80);
             gradeSheet
               .getRange(0, targetColumn)
               .setValue(title)
               .setBackgroundColor("#f0e7de")
-              .setFontWeight("bold");
-            gradeSheet.setColumnWidth(targetColumn, 140);
+              .setFontWeight("bold")
+              .setWrap(true)
+              .setVerticalAlignment("middle");
+            gradeSheet.setColumnWidth(targetColumn, 190);
             for (const item of action.values ?? []) {
               const row = propsRef.current.roster.findIndex(
                 (student) => student.id === item.student_id,
               );
-              if (row >= 0 && !linkedAssignment) {
+              if (row >= 0) {
                 gradeSheet
                   .getRange(row + 1, targetColumn)
                   .setValue(item.value === null ? { v: null } : item.value);
@@ -327,6 +415,12 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
               location.column - worksheet.getMaxColumns() + 1,
             );
           }
+          if (location.row >= worksheet.getMaxRows()) {
+            worksheet.insertRowsAfter(
+              worksheet.getMaxRows() - 1,
+              location.row - worksheet.getMaxRows() + 1,
+            );
+          }
           if (action.sheet === "Gradebook") {
             const protectedColumns = propsRef.current.assignments.length + 2;
             const protectedRow = location.row <= propsRef.current.roster.length;
@@ -346,48 +440,108 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         return { applied, rejected };
       };
 
-      let timer: number | undefined;
+      let persistTimer: number | undefined;
       let hydrated = false;
+      const gradeTimers = new Map<string, number>();
+      const gradeVersions = new Map<string, number>();
+      const gradeValues = new Map<string, string>();
+      const persistedGradeValues = new Map<string, string>();
+      const gradeSheet = workbook.getSheetByName("Gradebook");
+      if (gradeSheet) {
+        propsRef.current.roster.forEach((student, row) => {
+          propsRef.current.assignments.forEach((assignment, column) => {
+            const raw = gradeSheet.getRange(row + 1, column + 2).getValues()[0]?.[0];
+            const key = `${student.id}:${assignment.id}`;
+            const value = raw == null ? "" : String(raw);
+            gradeValues.set(key, value);
+            persistedGradeValues.set(key, value);
+          });
+        });
+      }
       window.setTimeout(() => {
         hydrated = true;
       }, 350);
-      const listener = univerAPI.addEvent(
+      const persistListener = univerAPI.addEvent(
         univerAPI.Event.CommandExecuted,
         () => {
           if (!hydrated) return;
-          window.clearTimeout(timer);
-          timer = window.setTimeout(() => {
-            const active = univerAPI.getWorkbook(workbook.getId());
-            if (!active) return;
-            persist();
-            const gradeSheet = active.getSheetByName("Gradebook");
-            if (!gradeSheet) return;
-            propsRef.current.roster.forEach((student, row) => {
-              propsRef.current.assignments.forEach((assignment, column) => {
-                if (!propsRef.current.submitted(student.id, assignment.id))
-                  return;
-                const raw = gradeSheet
-                  .getRange(row + 1, column + 2)
-                  .getValues()[0]?.[0];
-                const value = raw == null ? "" : String(raw);
-                if (
-                  value !==
-                  (propsRef.current.scores[
-                    `${student.id}:${assignment.id}`
-                  ] ?? "")
-                ) {
-                  propsRef.current.onScoreChange(student.id, assignment, value);
-                }
-              });
-            });
-          }, 650);
+          window.clearTimeout(persistTimer);
+          persistTimer = window.setTimeout(persist, 450);
+        },
+      );
+      const valueListener = univerAPI.addEvent(
+        univerAPI.Event.SheetValueChanged,
+        (event) => {
+          if (!hydrated) return;
+          const activeGradeSheet = univerAPI
+            .getWorkbook(workbook.getId())
+            ?.getSheetByName("Gradebook");
+          if (!activeGradeSheet) return;
+          for (const affected of event.effectedRanges) {
+            if (affected.getSheetName() !== "Gradebook") continue;
+            const range = affected.getRange();
+            const firstRow = Math.max(1, range.startRow);
+            const lastRow = Math.min(propsRef.current.roster.length, range.endRow);
+            const firstColumn = Math.max(2, range.startColumn);
+            const lastColumn = Math.min(
+              propsRef.current.assignments.length + 1,
+              range.endColumn,
+            );
+            for (let row = firstRow; row <= lastRow; row += 1) {
+              for (let column = firstColumn; column <= lastColumn; column += 1) {
+                const student = propsRef.current.roster[row - 1];
+                const assignment = propsRef.current.assignments[column - 2];
+                if (!student || !assignment) continue;
+                if (!propsRef.current.submitted(student.id, assignment.id)) continue;
+                const key = `${student.id}:${assignment.id}`;
+                const raw = activeGradeSheet.getRange(row, column).getValues()[0]?.[0];
+                const value = raw == null ? "" : String(raw).trim();
+                const previous = gradeValues.get(key) ?? "";
+                if (value === previous) continue;
+                gradeValues.set(key, value);
+                const version = (gradeVersions.get(key) ?? 0) + 1;
+                gradeVersions.set(key, version);
+                window.clearTimeout(gradeTimers.get(key));
+                gradeTimers.set(
+                  key,
+                  window.setTimeout(() => {
+                    void propsRef.current
+                      .onScoreChange(student.id, assignment, value)
+                      .then((saved) => {
+                        if (saved) {
+                          persistedGradeValues.set(key, value);
+                          return;
+                        }
+                        if (gradeVersions.get(key) !== version) return;
+                        const rollback = persistedGradeValues.get(key) ?? "";
+                        gradeValues.set(key, rollback);
+                        activeGradeSheet
+                          .getRange(row, column)
+                          .setValue(
+                            rollback === ""
+                              ? { v: null }
+                              : Number.isFinite(Number(rollback))
+                                ? Number(rollback)
+                                : rollback,
+                          );
+                      });
+                  }, 500),
+                );
+              }
+            }
+          }
         },
       );
       return () => {
-        window.clearTimeout(timer);
-        listener.dispose();
+        window.clearTimeout(persistTimer);
+        gradeTimers.forEach((timer) => window.clearTimeout(timer));
+        clearPreviewRef.current();
+        persistListener.dispose();
+        valueListener.dispose();
         persist();
         getContextRef.current = () => EMPTY_AI_CONTEXT;
+        showPreviewRef.current = () => undefined;
+        clearPreviewRef.current = () => undefined;
         applyActionsRef.current = () => ({
           applied: 0,
           rejected: ["The spreadsheet is still opening."],

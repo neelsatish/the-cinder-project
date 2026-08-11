@@ -164,6 +164,34 @@ export class CinderApi {
     );
   }
 
+  teacherAccounts() {
+    return this.request<User[]>("/api/teacher/accounts");
+  }
+
+  createTeacher(username: string, displayName: string, password: string) {
+    return this.request<{ user: User; recovery_code: string }>(
+      "/api/teacher/accounts",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          username,
+          display_name: displayName,
+          password,
+        }),
+      },
+    );
+  }
+
+  deleteTeacher(teacherId: string, currentPassword: string) {
+    return this.request<{ ok: true; deleted_current: boolean }>(
+      `/api/teacher/accounts/${teacherId}`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ current_password: currentPassword }),
+      },
+    );
+  }
+
   recoverTeacher(username: string, recoveryCode: string, newPassword: string) {
     return this.request<{ user: User; recovery_code: string }>(
       "/api/auth/recover",

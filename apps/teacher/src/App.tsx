@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { save as showSaveDialog } from "@tauri-apps/plugin-dialog";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import {
   useCallback,
   useEffect,
@@ -65,6 +67,7 @@ type StoredSession = { token: string; user: User };
 type HostInfo = { base_url: string; port: number };
 
 const SESSION_KEY = "cinder.teacher.session";
+const KNOWN_ACCOUNTS_KEY = "cinder.teacher.known-accounts";
 const LEGACY_SESSION_KEY = ["lu", "mina.teacher.session"].join("");
 const DEV_HOST = "http://127.0.0.1:7373";
 const navigation: NavigationItem<TeacherTab>[] = [
@@ -80,6 +83,48 @@ const navigation: NavigationItem<TeacherTab>[] = [
 
 function isTauri() {
   return "__TAURI_INTERNALS__" in window;
+}
+
+function safeFilename(value: string) {
+  return (
+    value
+      .trim()
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+      .replace(/\s+/g, " ")
+      .slice(0, 100) || "Cinder export"
+  );
+}
+
+async function saveTextExport(
+  defaultName: string,
+  contents: string,
+  extension: "csv" | "html" | "doc" | "txt",
+  label: string,
+) {
+  const filename = `${safeFilename(defaultName)}.${extension}`;
+  if (isTauri()) {
+    const path = await showSaveDialog({
+      defaultPath: filename,
+      filters: [{ name: label, extensions: [extension] }],
+    });
+    if (!path) return false;
+    await invoke("write_text_export", { path, contents });
+    return true;
+  }
+  const mime =
+    extension === "csv"
+      ? "text/csv;charset=utf-8"
+      : extension === "html" || extension === "doc"
+        ? "text/html;charset=utf-8"
+        : "text/plain;charset=utf-8";
+  const blob = new Blob([contents], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  return true;
 }
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -138,6 +183,37 @@ export function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
+  const [knownAccounts, setKnownAccounts] = useState<string[]>(() => {
+    try {
+      const value = JSON.parse(
+        localStorage.getItem(KNOWN_ACCOUNTS_KEY) ?? "[]",
+      );
+      return Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const rememberAccount = useCallback((username: string) => {
+    setKnownAccounts((current) => {
+      const next = [
+        username,
+        ...current.filter((item) => item !== username),
+      ].slice(0, 12);
+      localStorage.setItem(KNOWN_ACCOUNTS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const forgetAccount = useCallback((username: string) => {
+    setKnownAccounts((current) => {
+      const next = current.filter((item) => item !== username);
+      localStorage.setItem(KNOWN_ACCOUNTS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   const loadWorkspace = useCallback(async (activeApi: CinderApi) => {
     setRefreshing(true);
@@ -187,6 +263,7 @@ export function App() {
           try {
             const current = await activeApi.me();
             setUser(current);
+            rememberAccount(current.username);
             localStorage.setItem(
               SESSION_KEY,
               JSON.stringify({ token: session.token, user: current }),
@@ -212,6 +289,7 @@ export function App() {
     );
     api.setToken(result.token);
     setUser(result.user);
+    rememberAccount(result.user.username);
     localStorage.setItem(
       SESSION_KEY,
       JSON.stringify({ token: result.token, user: result.user }),
@@ -245,6 +323,7 @@ export function App() {
           subtitle="Run the classroom, review work and support every learner from one uncluttered workspace."
           helper="Sign in with the school’s teacher account."
           onSubmit={login}
+          rememberedUsernames={knownAccounts}
           onCreateAccount={() => setCreateAccountOpen(true)}
         />
         <button
@@ -327,13 +406,18 @@ export function App() {
           assignments={assignments}
         />
       ) : null}
-      {tab === "assistant" ? <AssistantView api={api} /> : null}
+      {tab === "assistant" ? (
+        <AssistantView api={api} classrooms={classrooms} />
+      ) : null}
       {tab === "settings" ? (
         <SettingsView
+          api={api}
           baseUrl={baseUrl}
           user={user}
           refreshing={refreshing}
           onRefresh={() => loadWorkspace(api)}
+          onCurrentDeleted={() => void logout()}
+          onForgetAccount={forgetAccount}
         />
       ) : null}
     </AppShell>
@@ -2222,6 +2306,7 @@ function GradebookView({
 
   const load = useCallback(async () => {
     if (!classroomId) return;
+    gradebookRef.current?.clearPreview();
     setStatus("Loading…");
     try {
       const [nextRoster, submissionPairs] = await Promise.all([
@@ -2272,8 +2357,9 @@ function GradebookView({
     explicit?: number | null,
   ) => {
     const submission = submissionFor(studentId, assignment.id);
-    if (!submission) return;
+    if (!submission) return false;
     const key = `${studentId}:${assignment.id}`;
+    const previousScore = submission.grade?.points?.toString() ?? "";
     const raw = explicit === undefined ? (scores[key] ?? "") : explicit === null ? "" : String(explicit);
     const points = raw.trim() === "" ? null : Number(raw);
     if (
@@ -2281,7 +2367,8 @@ function GradebookView({
       (!Number.isFinite(points) || points < 0 || points > assignment.max_points)
     ) {
       setStatus(`Use a score from 0 to ${assignment.max_points}.`);
-      return;
+      setScores((current) => ({ ...current, [key]: previousScore }));
+      return false;
     }
     setSavingCell(key);
     setStatus("Saving…");
@@ -2303,12 +2390,15 @@ function GradebookView({
         ),
       }));
       setStatus("Saved to Cinder");
+      return true;
     } catch (failure) {
+      setScores((current) => ({ ...current, [key]: previousScore }));
       setStatus(
         failure instanceof Error
           ? failure.message
           : "Score could not be saved.",
       );
+      return false;
     } finally {
       setSavingCell("");
     }
@@ -2318,6 +2408,7 @@ function GradebookView({
     if (!prompt.trim() || !classroomId) return;
     setAiBusy(true);
     setPendingActions([]);
+    gradebookRef.current?.clearPreview();
     try {
       const classroom = classrooms.find((item) => item.id === classroomId);
       const workbookContext = gradebookRef.current?.getAiContext() ?? null;
@@ -2377,6 +2468,7 @@ function GradebookView({
         ],
       );
       setPendingActions(valid);
+      gradebookRef.current?.showPreview(valid);
       setAiMessage(
         parsed.message ||
           `${valid.length} suggested change(s) are ready for review.`,
@@ -2394,6 +2486,7 @@ function GradebookView({
 
   const applySuggestions = async () => {
     setStatus("Applying reviewed suggestions…");
+    gradebookRef.current?.clearPreview();
     for (const action of pendingActions) {
       if (action.type !== "set_grade") continue;
       const assignment = roomAssignments.find(
@@ -2414,7 +2507,7 @@ function GradebookView({
     await load();
   };
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
     const quote = (value: unknown) =>
       `"${String(value ?? "").replace(/"/g, '""')}"`;
     const rows = [
@@ -2431,16 +2524,21 @@ function GradebookView({
         ),
       ]),
     ];
-    const blob = new Blob(
-      [rows.map((row) => row.map(quote).join(",")).join("\r\n")],
-      { type: "text/csv;charset=utf-8" },
-    );
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${classrooms.find((item) => item.id === classroomId)?.name ?? "Cinder"}-gradebook.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    try {
+      const saved = await saveTextExport(
+        `${classrooms.find((item) => item.id === classroomId)?.name ?? "Cinder"} gradebook`,
+        `\ufeff${rows.map((row) => row.map(quote).join(",")).join("\r\n")}`,
+        "csv",
+        "CSV gradebook",
+      );
+      if (saved) setStatus("Gradebook exported.");
+    } catch (failure) {
+      setStatus(
+        failure instanceof Error
+          ? failure.message
+          : "The gradebook could not be exported.",
+      );
+    }
   };
 
   if (!classrooms.length)
@@ -2485,7 +2583,7 @@ function GradebookView({
             </Button>
             <Button
               icon="download"
-              onClick={exportCsv}
+              onClick={() => void exportCsv()}
               disabled={!roster.length}
             >
               Export CSV
@@ -2509,7 +2607,11 @@ function GradebookView({
                 onScoreChange={(studentId, assignment, value) => {
                   const key = `${studentId}:${assignment.id}`;
                   setScores((current) => ({ ...current, [key]: value }));
-                  void saveScore(studentId, assignment, value.trim() === "" ? null : Number(value));
+                  return saveScore(
+                    studentId,
+                    assignment,
+                    value.trim() === "" ? null : Number(value),
+                  );
                 }}
               />
             </Suspense>
@@ -2566,7 +2668,13 @@ function GradebookView({
                   >
                     Apply reviewed suggestions
                   </Button>
-                  <Button variant="ghost" onClick={() => setPendingActions([])}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      gradebookRef.current?.clearPreview();
+                      setPendingActions([]);
+                    }}
+                  >
                     Discard
                   </Button>
                 </div>
@@ -2784,7 +2892,8 @@ function validateGradebookActions(
       return [];
     if (
       typeof action.value === "string" &&
-      action.value.length > (action.value.startsWith("=") ? 256 : 2_000)
+      (action.value.length > (action.value.startsWith("=") ? 256 : 2_000) ||
+        looksLikeStructuredOutput(action.value))
     )
       return [];
     return [{ ...action, cell: action.cell.toUpperCase() }];
@@ -2809,7 +2918,97 @@ function describeGradebookAction(
   return `Set ${action.sheet}!${action.cell} to ${String(action.value ?? "blank")}.`;
 }
 
-function AssistantView({ api }: { api: CinderApi }) {
+const EMPTY_PAPER_DOCUMENT: Record<string, unknown> = {
+  type: "doc",
+  content: [{ type: "paragraph" }],
+};
+
+function textToDocument(value: string): Record<string, unknown> {
+  const content = value.split(/\r?\n/).map((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) return { type: "paragraph" };
+    const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
+    const text = heading?.[2] ?? trimmed;
+    const type = heading || index === 0 ? "heading" : "paragraph";
+    return {
+      type,
+      ...(type === "heading"
+        ? { attrs: { level: heading ? heading[1].length : 1 } }
+        : {}),
+      content: [{ type: "text", text }],
+    };
+  });
+  return { type: "doc", content: content.length ? content : [{ type: "paragraph" }] };
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function paperHtml(title: string, text: string) {
+  const body = text
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const value = escapeHtml(line.trim()) || "&nbsp;";
+      return index === 0
+        ? `<h1>${value}</h1>`
+        : `<p>${value}</p>`;
+    })
+    .join("\n");
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>@page{size:A4;margin:20mm}body{font-family:"Liberation Serif",Georgia,serif;max-width:170mm;margin:0 auto;color:#181512;font-size:12pt;line-height:1.5}h1{font:700 22pt "Liberation Sans",Arial,sans-serif;margin:0 0 20pt}p{margin:0 0 8pt;white-space:pre-wrap}</style></head><body>${body}</body></html>`;
+}
+
+async function extractPdfText(blob: Blob, name: string) {
+  if (blob.size > 25 * 1024 * 1024) {
+    throw new Error(`${name} is larger than the 25 MB reference limit.`);
+  }
+  if (blob.type && blob.type !== "application/pdf") {
+    throw new Error(`${name} is an image, not a text PDF.`);
+  }
+  const pdfjs = await import("pdfjs-dist");
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+  const task = pdfjs.getDocument({
+    data: await blob.arrayBuffer(),
+  });
+  const pdf = await task.promise;
+  const pages: string[] = [];
+  try {
+    const pageLimit = Math.min(pdf.numPages, 40);
+    for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const text = content.items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (text) pages.push(`[Page ${pageNumber}] ${text}`);
+      if (pages.join("\n").length >= 24_000) break;
+    }
+  } finally {
+    await task.destroy();
+  }
+  const text = pages.join("\n").slice(0, 24_000);
+  if (!text) {
+    throw new Error(
+      `${name} has no selectable text. Scanned PDFs need OCR before the AI can use them.`,
+    );
+  }
+  return text;
+}
+
+function AssistantView({
+  api,
+  classrooms,
+}: {
+  api: CinderApi;
+  classrooms: Classroom[];
+}) {
+  const [mode, setMode] = useState<"chat" | "paper">("chat");
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -2820,9 +3019,16 @@ function AssistantView({ api }: { api: CinderApi }) {
   ]);
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
+  const messagesRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     void api.aiSettings().then(setSettings);
   }, [api]);
+  useEffect(() => {
+    messagesRef.current?.scrollTo({
+      top: messagesRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages, busy]);
   const send = async () => {
     if (!prompt.trim()) return;
     const outgoing: ChatMessage[] = [
@@ -2856,42 +3062,298 @@ function AssistantView({ api }: { api: CinderApi }) {
     }
   };
   return (
-    <div className="chat-layout">
-      <Panel
-        className="chat-panel panel-flush"
-        title="Teacher assistant"
-        eyebrow="AI"
-      >
-        <div className="chat-messages">
-          {messages.map((message, index) => (
-            <div key={index} className={`message message-${message.role}`}>
-              {message.content}
-            </div>
-          ))}
-        </div>
-        <div className="chat-compose">
-          <textarea
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                void send();
-              }
-            }}
-            placeholder="Ask about a lesson or student work…"
-          />
-          <Button
-            variant="primary"
-            icon="send"
-            onClick={() => void send()}
-            disabled={busy || !prompt.trim()}
+    <div className="assistant-page">
+      <div className="assistant-mode-switch" role="tablist" aria-label="AI tools">
+        <Button
+          variant={mode === "chat" ? "primary" : "secondary"}
+          onClick={() => setMode("chat")}
+        >
+          Ask AI
+        </Button>
+        <Button
+          variant={mode === "paper" ? "primary" : "secondary"}
+          onClick={() => setMode("paper")}
+        >
+          Create question paper
+        </Button>
+      </div>
+      {mode === "chat" ? (
+        <div className="chat-layout">
+          <Panel
+            className="chat-panel panel-flush"
+            title="Teacher assistant"
+            eyebrow="AI"
           >
-            {busy ? "Thinking…" : "Send"}
+            <div className="chat-messages" ref={messagesRef}>
+              {messages.map((message, index) => (
+                <div key={index} className={`message message-${message.role}`}>
+                  {message.content}
+                </div>
+              ))}
+              {busy ? <div className="message message-assistant">Thinking…</div> : null}
+            </div>
+            <div className="chat-compose">
+              <textarea
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void send();
+                  }
+                }}
+                placeholder="Ask about a lesson or student work…"
+              />
+              <Button
+                variant="primary"
+                icon="send"
+                onClick={() => void send()}
+                disabled={busy || !prompt.trim()}
+              >
+                {busy ? "Thinking…" : "Send"}
+              </Button>
+            </div>
+          </Panel>
+          <AiSettingsPanel api={api} settings={settings} onSettings={setSettings} />
+        </div>
+      ) : (
+        <QuestionPaperStudio api={api} classrooms={classrooms} />
+      )}
+    </div>
+  );
+}
+
+function QuestionPaperStudio({
+  api,
+  classrooms,
+}: {
+  api: CinderApi;
+  classrooms: Classroom[];
+}) {
+  const [materials, setMaterials] = useState<StudyNode[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [localFiles, setLocalFiles] = useState<File[]>([]);
+  const [title, setTitle] = useState("Practice question paper");
+  const [subject, setSubject] = useState("");
+  const [difficulty, setDifficulty] = useState("Mixed");
+  const [questionCount, setQuestionCount] = useState(10);
+  const [totalMarks, setTotalMarks] = useState(20);
+  const [instructions, setInstructions] = useState("");
+  const [document, setDocument] = useState<Record<string, unknown>>(
+    EMPTY_PAPER_DOCUMENT,
+  );
+  const [paperText, setPaperText] = useState("");
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void api
+      .tree()
+      .then((result) =>
+        setMaterials(result.nodes.filter((node) => node.kind === "pdf")),
+      )
+      .catch(() => setMaterials([]));
+  }, [api]);
+
+  const generate = async () => {
+    setBusy(true);
+    setStatus("Reading references…");
+    try {
+      const references: string[] = [];
+      const warnings: string[] = [];
+      for (const id of selected) {
+        const material = materials.find((item) => item.id === id);
+        if (!material) continue;
+        try {
+          references.push(
+            `REFERENCE: ${material.name}\n${await extractPdfText(await api.materialBlob(id), material.name)}`,
+          );
+        } catch (failure) {
+          warnings.push(
+            failure instanceof Error ? failure.message : `${material.name} could not be read.`,
+          );
+        }
+      }
+      for (const file of localFiles) {
+        try {
+          references.push(
+            `REFERENCE: ${file.name}\n${await extractPdfText(file, file.name)}`,
+          );
+        } catch (failure) {
+          warnings.push(
+            failure instanceof Error ? failure.message : `${file.name} could not be read.`,
+          );
+        }
+      }
+      const askedForReferences = selected.length + localFiles.length > 0;
+      if (askedForReferences && !references.length) {
+        throw new Error(warnings.join(" ") || "None of the references could be read.");
+      }
+      setStatus("Creating question paper…");
+      const request = `Create a classroom-ready question paper titled "${title.trim()}". Subject: ${subject.trim() || "General"}. Difficulty: ${difficulty}. Number of questions: ${questionCount}. Total marks: ${totalMarks}. ${instructions.trim() ? `Teacher instructions: ${instructions.trim()}` : ""} Use the supplied references when present. Return only the printable question paper, with clear instructions, numbered questions, marks beside each question, and an answer key on a clearly separated final section. Do not include commentary, JSON, Markdown tables, or invented citations. Use complete, grammatically correct sentences and neutral pronouns when a person's pronouns are unknown.`;
+      const result = await api.chat(
+        [{ role: "user", content: request }],
+        references.join("\n\n").slice(0, 60_000) || undefined,
+      );
+      const text = result.content.trim();
+      if (!text) throw new Error("The AI returned an empty paper.");
+      setPaperText(text);
+      setDocument(textToDocument(text));
+      setStatus(
+        warnings.length
+          ? `Paper created. ${warnings.join(" ")}`
+          : "Paper created. Review it before printing.",
+      );
+    } catch (failure) {
+      setStatus(
+        failure instanceof Error
+          ? failure.message
+          : "The question paper could not be created.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportPaper = async (extension: "doc" | "html" | "txt") => {
+    try {
+      const contents =
+        extension === "txt" ? paperText : paperHtml(title, paperText);
+      const saved = await saveTextExport(
+        title,
+        contents,
+        extension,
+        extension === "txt"
+          ? "Plain text"
+          : extension === "doc"
+            ? "LibreOffice / Word document"
+            : "HTML document",
+      );
+      if (saved) setStatus("Question paper exported.");
+    } catch (failure) {
+      setStatus(
+        failure instanceof Error
+          ? failure.message
+          : "The question paper could not be exported.",
+      );
+    }
+  };
+
+  return (
+    <div className="paper-studio">
+      <Panel title="Question paper setup" eyebrow="AI document">
+        <div className="paper-controls form-stack">
+          <Field label="Paper title">
+            <input value={title} onChange={(event) => setTitle(event.target.value)} />
+          </Field>
+          <Field label="Subject">
+            <input
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              placeholder="For example, Grade 8 Science"
+            />
+          </Field>
+          <div className="form-row">
+            <Field label="Difficulty">
+              <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>
+                <option>Foundational</option>
+                <option>Mixed</option>
+                <option>Challenging</option>
+              </select>
+            </Field>
+            <Field label="Questions">
+              <input type="number" min={1} max={50} value={questionCount} onChange={(event) => setQuestionCount(Math.max(1, Math.min(50, Number(event.target.value))))} />
+            </Field>
+            <Field label="Total marks">
+              <input type="number" min={1} max={500} value={totalMarks} onChange={(event) => setTotalMarks(Math.max(1, Math.min(500, Number(event.target.value))))} />
+            </Field>
+          </div>
+          <Field label="Extra instructions">
+            <textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder="Question types, chapters, learning goals, or accommodations…" />
+          </Field>
+          <div className="reference-picker">
+            <strong>Reference PDFs</strong>
+            <small>Select classroom material or add PDFs from this computer.</small>
+            <div className="reference-list">
+              {materials.length ? materials.map((material) => (
+                <label className="check-field" key={material.id}>
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(material.id)}
+                    onChange={(event) =>
+                      setSelected((current) =>
+                        event.target.checked
+                          ? [...current, material.id].slice(0, 8)
+                          : current.filter((id) => id !== material.id),
+                      )
+                    }
+                  />
+                  <span>
+                    {material.name}
+                    {material.classroom_id
+                      ? ` · ${classrooms.find((room) => room.id === material.classroom_id)?.name ?? "Classroom"}`
+                      : ""}
+                  </span>
+                </label>
+              )) : <small>No classroom materials have been uploaded yet.</small>}
+            </div>
+            <label className="button button-secondary upload-button">
+              Add local PDFs
+              <input
+                type="file"
+                accept="application/pdf,.pdf"
+                multiple
+                onChange={(event) => {
+                  const next = Array.from(event.target.files ?? []);
+                  setLocalFiles((current) => [...current, ...next].slice(0, 8));
+                  event.target.value = "";
+                }}
+              />
+            </label>
+            {localFiles.length ? (
+              <div className="reference-chips">
+                {localFiles.map((file, index) => (
+                  <button key={`${file.name}-${index}`} type="button" onClick={() => setLocalFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+                    {file.name} ×
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <small>
+              Selected PDF text is sent to the AI provider configured on this
+              Teacher computer. Image-only scans require OCR first.
+            </small>
+          </div>
+          <Button variant="primary" icon="assistant" onClick={() => void generate()} disabled={busy || !title.trim()}>
+            {busy ? "Creating…" : "Create editable paper"}
           </Button>
+          {status ? <p className={status.includes("could not") ? "form-error" : "form-hint"}>{status}</p> : null}
         </div>
       </Panel>
-      <AiSettingsPanel api={api} settings={settings} onSettings={setSettings} />
+      <Panel className="paper-editor-panel panel-flush" title="Editable paper" eyebrow="Print preview">
+        {paperText ? (
+          <>
+            <div className="paper-export-bar">
+              <Button icon="download" onClick={() => void exportPaper("doc")}>Export .doc</Button>
+              <Button icon="download" onClick={() => void exportPaper("html")}>Export HTML</Button>
+              <Button icon="download" onClick={() => void exportPaper("txt")}>Export text</Button>
+              <Button variant="primary" onClick={() => window.print()}>Print / Save PDF</Button>
+            </div>
+            <div className="question-paper-print">
+              <DocumentEditor
+                value={document}
+                status="Edit freely, then export or print"
+                onChange={(next, plaintext) => {
+                  setDocument(next);
+                  setPaperText(plaintext);
+                }}
+              />
+            </div>
+          </>
+        ) : (
+          <EmptyState icon="document" title="No paper yet" description="Choose the setup and optional references, then create an editable question paper." />
+        )}
+      </Panel>
     </div>
   );
 }
@@ -2991,16 +3453,43 @@ function AiSettingsPanel({
 }
 
 function SettingsView({
+  api,
   baseUrl,
   user,
   refreshing,
   onRefresh,
+  onCurrentDeleted,
+  onForgetAccount,
 }: {
+  api: CinderApi;
   baseUrl: string;
   user: User;
   refreshing: boolean;
   onRefresh: () => Promise<void>;
+  onCurrentDeleted: () => void;
+  onForgetAccount: (username: string) => void;
 }) {
+  const [teachers, setTeachers] = useState<User[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleting, setDeleting] = useState<User | null>(null);
+  const [password, setPassword] = useState("");
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountError, setAccountError] = useState("");
+  const loadTeachers = useCallback(async () => {
+    try {
+      setTeachers(await api.teacherAccounts());
+    } catch (failure) {
+      setAccountError(
+        failure instanceof Error
+          ? failure.message
+          : "Teacher accounts could not be loaded.",
+      );
+    }
+  }, [api]);
+  useEffect(() => {
+    void loadTeachers();
+  }, [loadTeachers]);
+
   return (
     <div className="page">
       <PageHeader
@@ -3031,32 +3520,123 @@ function SettingsView({
           </Button>
         </Panel>
         <Panel title="Teacher account" eyebrow="Security">
-          <dl className="detail-list">
-            <div>
-              <dt>Name</dt>
-              <dd>{user.display_name}</dd>
-            </div>
-            <div>
-              <dt>Username</dt>
-              <dd>{user.username}</dd>
-            </div>
-            <div>
-              <dt>Accounts</dt>
-              <dd>One teacher account</dd>
-            </div>
-          </dl>
+          <div className="teacher-account-list">
+            {teachers.map((teacher) => (
+              <div className="list-item" key={teacher.id}>
+                <span className="account-avatar">
+                  {teacher.display_name.slice(0, 1).toUpperCase()}
+                </span>
+                <div className="list-copy">
+                  <strong>{teacher.display_name}</strong>
+                  <small>
+                    @{teacher.username}
+                    {teacher.id === user.id ? " · signed in" : ""}
+                  </small>
+                </div>
+                <Button
+                  variant="danger"
+                  disabled={teachers.length <= 1}
+                  onClick={() => {
+                    setDeleting(teacher);
+                    setPassword("");
+                    setAccountError("");
+                  }}
+                >
+                  Delete
+                </Button>
+              </div>
+            ))}
+          </div>
+          {accountError && !deleting ? (
+            <p className="form-error">{accountError}</p>
+          ) : null}
+          <Button variant="primary" onClick={() => setCreateOpen(true)}>
+            Create teacher account
+          </Button>
           <p className="form-hint">
-            Keep the recovery code offline. Student devices should never receive
-            the teacher API key or database file.
+            A signed-in teacher can add another teacher without entering a
+            recovery code. Cinder will still create a new backup recovery code
+            for that account.
           </p>
         </Panel>
         <AppUpdater appName="Cinder Teacher" />
       </div>
+      {createOpen ? (
+        <TeacherAccountModal
+          api={api}
+          authenticated
+          onCreated={() => void loadTeachers()}
+          onClose={() => setCreateOpen(false)}
+        />
+      ) : null}
+      {deleting ? (
+        <Modal
+          title={`Delete ${deleting.display_name}?`}
+          description="This disables the account and signs it out everywhere. Classroom data is kept."
+          onClose={() => setDeleting(null)}
+        >
+          <form
+            className="form-stack"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setAccountBusy(true);
+              setAccountError("");
+              try {
+                const result = await api.deleteTeacher(deleting.id, password);
+                onForgetAccount(deleting.username);
+                setDeleting(null);
+                setPassword("");
+                if (result.deleted_current) onCurrentDeleted();
+                else await loadTeachers();
+              } catch (failure) {
+                setAccountError(
+                  failure instanceof Error
+                    ? failure.message
+                    : "The teacher account could not be deleted.",
+                );
+              } finally {
+                setAccountBusy(false);
+              }
+            }}
+          >
+            <Field
+              label="Your current password"
+              hint="Required to confirm this sensitive action."
+            >
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+                autoFocus
+              />
+            </Field>
+            {accountError ? <p className="form-error">{accountError}</p> : null}
+            <Button
+              variant="danger"
+              type="submit"
+              disabled={accountBusy || !password}
+            >
+              {accountBusy ? "Deleting…" : "Delete teacher account"}
+            </Button>
+          </form>
+        </Modal>
+      ) : null}
     </div>
   );
 }
 
-function TeacherAccountModal({ api, onClose }: { api: CinderApi; onClose: () => void }) {
+function TeacherAccountModal({
+  api,
+  onClose,
+  authenticated = false,
+  onCreated,
+}: {
+  api: CinderApi;
+  onClose: () => void;
+  authenticated?: boolean;
+  onCreated?: () => void;
+}) {
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -3078,15 +3658,31 @@ function TeacherAccountModal({ api, onClose }: { api: CinderApi; onClose: () => 
     );
   }
   return (
-    <Modal title="Create teacher account" description="A current school recovery code is required so students cannot create teacher accounts." onClose={onClose}>
+    <Modal
+      title="Create teacher account"
+      description={
+        authenticated
+          ? "The signed-in teacher authorizes this new school account."
+          : "A current school recovery code is required so students cannot create teacher accounts."
+      }
+      onClose={onClose}
+    >
       <form className="form-stack" onSubmit={async (event) => {
         event.preventDefault();
         if (password.length < 8) return setError("Use at least 8 characters.");
         if (password !== confirm) return setError("The passwords do not match.");
         setBusy(true); setError("");
         try {
-          const result = await api.registerTeacher(username, displayName, password, schoolCode);
+          const result = authenticated
+            ? await api.createTeacher(username, displayName, password)
+            : await api.registerTeacher(
+                username,
+                displayName,
+                password,
+                schoolCode,
+              );
           setRecoveryCode(result.recovery_code);
+          onCreated?.();
         } catch (failure) {
           setError(failure instanceof Error ? failure.message : "Account could not be created.");
         } finally { setBusy(false); }
@@ -3095,9 +3691,11 @@ function TeacherAccountModal({ api, onClose }: { api: CinderApi; onClose: () => 
         <Field label="Username"><input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" /></Field>
         <Field label="Password" hint="At least 8 characters"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>
         <Field label="Confirm password"><input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></Field>
-        <Field label="School recovery code" hint="Use any active teacher's saved recovery code."><input type="password" value={schoolCode} onChange={(e) => setSchoolCode(e.target.value)} /></Field>
+        {!authenticated ? (
+          <Field label="School recovery code" hint="Use any active teacher's saved recovery code."><input type="password" value={schoolCode} onChange={(e) => setSchoolCode(e.target.value)} /></Field>
+        ) : null}
         {error ? <p className="form-error">{error}</p> : null}
-        <Button variant="primary" type="submit" disabled={busy || !displayName.trim() || !username.trim() || !password || !schoolCode.trim()}>{busy ? "Creating…" : "Create account"}</Button>
+        <Button variant="primary" type="submit" disabled={busy || !displayName.trim() || !username.trim() || !password || (!authenticated && !schoolCode.trim())}>{busy ? "Creating…" : "Create account"}</Button>
       </form>
     </Modal>
   );

@@ -28,7 +28,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![host_info])
+        .invoke_handler(tauri::generate_handler![host_info, write_text_export])
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             cinder_core::migrate_legacy_app_data(&data_dir, "teacher")?;
@@ -69,4 +69,22 @@ fn host_info() -> HostInfo {
         base_url: format!("http://127.0.0.1:{DEFAULT_HOST_PORT}"),
         port: DEFAULT_HOST_PORT,
     }
+}
+
+#[tauri::command]
+fn write_text_export(path: String, contents: String) -> Result<(), String> {
+    const MAX_EXPORT_BYTES: usize = 10 * 1024 * 1024;
+    if contents.len() > MAX_EXPORT_BYTES {
+        return Err("The export is larger than 10 MB.".into());
+    }
+    let path = std::path::PathBuf::from(path);
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .ok_or_else(|| "Choose a filename ending in .csv, .html, .doc, or .txt.".to_owned())?;
+    if !matches!(extension.as_str(), "csv" | "html" | "doc" | "txt") {
+        return Err("Cinder can only write CSV, HTML, DOC, or TXT exports.".into());
+    }
+    std::fs::write(&path, contents).map_err(|error| format!("Could not save the export: {error}"))
 }

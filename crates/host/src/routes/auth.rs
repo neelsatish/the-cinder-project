@@ -7,8 +7,8 @@ use axum::{Json, Router};
 use chrono::{Duration, Utc};
 use cinder_core::{
     AppLoginRequest, BootstrapTeacherRequest, BootstrapTeacherResponse, ChangePasswordRequest,
-    CreateStudentRequest, CreateStudentResponse, LoginResponse, RecoverTeacherRequest,
-    RegisterTeacherRequest, Role, UpdateStudentRequest, User,
+    CreateStudentRequest, CreateStudentResponse, CreateTeacherRequest, DeleteTeacherRequest,
+    LoginResponse, RecoverTeacherRequest, RegisterTeacherRequest, Role, UpdateStudentRequest, User,
 };
 use rusqlite::OptionalExtension;
 use uuid::Uuid;
@@ -28,6 +28,14 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/student-recover", post(recover_student))
         .route("/api/auth/change-password", post(change_password))
         .route("/api/me", get(me))
+        .route(
+            "/api/teacher/accounts",
+            get(list_teachers).post(create_teacher),
+        )
+        .route(
+            "/api/teacher/accounts/{id}",
+            axum::routing::delete(delete_teacher),
+        )
         .route("/api/teacher/users", get(list_users).post(create_student))
         .route(
             "/api/teacher/users/{id}",
@@ -284,6 +292,126 @@ async fn register_teacher(
             )?;
             tx.commit()?;
             Ok(Json(BootstrapTeacherResponse { user, recovery_code }))
+        })
+        .await
+}
+
+async fn list_teachers(
+    State(state): State<AppState>,
+    teacher: CurrentUser,
+) -> HostResult<Json<Vec<User>>> {
+    teacher.require_teacher()?;
+    state
+        .db(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id FROM users WHERE role = 'teacher' AND disabled_at IS NULL ORDER BY lower(display_name)",
+            )?;
+            let ids = stmt
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            let users = ids
+                .iter()
+                .map(|id| load_user(conn, id))
+                .collect::<HostResult<Vec<_>>>()?;
+            Ok(Json(users))
+        })
+        .await
+}
+
+async fn create_teacher(
+    State(state): State<AppState>,
+    teacher: CurrentUser,
+    Json(req): Json<CreateTeacherRequest>,
+) -> HostResult<Json<BootstrapTeacherResponse>> {
+    teacher.require_teacher()?;
+    if req.password.len() < 8 {
+        return Err(HostError::BadRequest(
+            "Use at least 8 characters for the password.".into(),
+        ));
+    }
+    state
+        .db(move |conn| {
+            let tx = conn.transaction()?;
+            let user = insert_user(
+                &tx,
+                &req.username,
+                &req.display_name,
+                &req.password,
+                Role::Teacher,
+                None,
+                None,
+                None,
+                false,
+            )?;
+            let recovery_code = random_code(20);
+            tx.execute(
+                "INSERT INTO teacher_recovery (user_id, recovery_hash, created_at) VALUES (?1, ?2, ?3)",
+                rusqlite::params![
+                    user.id.to_string(),
+                    auth::hash_password(&recovery_code)?,
+                    Utc::now().to_rfc3339()
+                ],
+            )?;
+            tx.commit()?;
+            Ok(Json(BootstrapTeacherResponse {
+                user,
+                recovery_code,
+            }))
+        })
+        .await
+}
+
+async fn delete_teacher(
+    State(state): State<AppState>,
+    teacher: CurrentUser,
+    Path(teacher_id): Path<Uuid>,
+    Json(req): Json<DeleteTeacherRequest>,
+) -> HostResult<Json<serde_json::Value>> {
+    teacher.require_teacher()?;
+    let actor_id = teacher.id().to_string();
+    state
+        .db(move |conn| {
+            let actor_hash: String = conn.query_row(
+                "SELECT pw_hash FROM users WHERE id = ?1 AND role = 'teacher' AND disabled_at IS NULL",
+                [&actor_id],
+                |row| row.get(0),
+            )?;
+            if !auth::verify_password(&actor_hash, &req.current_password) {
+                return Err(HostError::BadCredentials);
+            }
+
+            let target = load_user(conn, &teacher_id.to_string())?;
+            if target.role != Role::Teacher {
+                return Err(HostError::BadRequest(
+                    "Only teacher accounts can be removed here.".into(),
+                ));
+            }
+            let active_teachers: i64 = conn.query_row(
+                "SELECT count(*) FROM users WHERE role = 'teacher' AND disabled_at IS NULL",
+                [],
+                |row| row.get(0),
+            )?;
+            if active_teachers <= 1 {
+                return Err(HostError::BadRequest(
+                    "Create another teacher account before deleting the final teacher.".into(),
+                ));
+            }
+
+            let target_id = teacher_id.to_string();
+            let tx = conn.transaction()?;
+            let changed = tx.execute(
+                "UPDATE users SET disabled_at = ?2 WHERE id = ?1 AND role = 'teacher' AND disabled_at IS NULL",
+                rusqlite::params![target_id, Utc::now().to_rfc3339()],
+            )?;
+            if changed == 0 {
+                return Err(HostError::NotFound("teacher"));
+            }
+            tx.execute("DELETE FROM sessions WHERE user_id = ?1", [&target_id])?;
+            tx.commit()?;
+            Ok(Json(serde_json::json!({
+                "ok": true,
+                "deleted_current": target_id == actor_id
+            })))
         })
         .await
 }

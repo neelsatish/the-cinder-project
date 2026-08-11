@@ -281,7 +281,7 @@
   flex-direction: column;
   overflow: hidden;
 }
-.univer-gradebook { width: 100%; min-height: 0; flex: 1; overflow: hidden; background: #fff; }
+.univer-gradebook { width: 100%; height: 100%; min-height: 0; flex: 1; overflow: hidden; background: #fff; }
 .univer-loading { min-height: 520px; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--muted); }
 .gradebook-sheet {
   min-width: 0;
@@ -451,6 +451,130 @@
   min-height: 0;
   overflow: auto;
 }
+.assistant-page {
+  height: calc(100vh - 140px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+.assistant-mode-switch {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.assistant-page .chat-layout {
+  height: auto;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.assistant-page .chat-panel > .panel-body {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.assistant-page .chat-messages {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.paper-studio {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) minmax(600px, 1fr);
+  gap: 18px;
+  overflow: hidden;
+}
+.paper-studio > .panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.paper-studio > .panel:first-child > .panel-body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+.paper-editor-panel > .panel-body {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.paper-controls textarea {
+  min-height: 88px;
+}
+.reference-picker {
+  display: grid;
+  gap: 9px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-lowest);
+}
+.reference-picker > small,
+.reference-list > small {
+  color: var(--muted);
+}
+.reference-list {
+  max-height: 145px;
+  display: grid;
+  gap: 8px;
+  overflow: auto;
+}
+.reference-list .check-field span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.reference-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.reference-chips button {
+  max-width: 100%;
+  padding: 6px 9px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.paper-export-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.question-paper-print {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.question-paper-print .document-editor {
+  height: 100%;
+}
+.teacher-account-list {
+  max-height: 300px;
+  margin: 0 0 14px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
 @media (max-width: 1150px) {
   .grade-modal-content {
     grid-template-columns: 1fr;
@@ -469,5 +593,19 @@
   .gradebook-sheet {
     height: 650px;
     min-height: 560px;
+  }
+  .assistant-page { height: auto; overflow: visible; }
+  .assistant-page .chat-layout { overflow: visible; }
+  .paper-studio {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+  .paper-editor-panel { min-height: 720px !important; }
+}
+
+@media print {
+  .paper-export-bar,
+  .question-paper-print .editor-toolbar {
+    display: none !important;
   }
 }

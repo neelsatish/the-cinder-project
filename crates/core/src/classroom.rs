@@ -379,6 +379,21 @@ pub struct RegisterTeacherRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
+pub struct CreateTeacherRequest {
+    pub username: String,
+    pub display_name: String,
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DeleteTeacherRequest {
+    /// The signed-in teacher confirms this sensitive action with their password.
+    pub current_password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct UpdateStudentRequest {
     pub username: String,
     pub display_name: String,
