@@ -27,6 +27,12 @@ pub const MDNS_SERVICE_TYPE: &str = "_cinder._tcp.local.";
 /// access and Student material downloads cannot drift apart.
 pub fn is_local_network_host(host: &str) -> bool {
     let host = host.trim_end_matches('.');
+    // URL implementations may expose IPv6 hosts either with or without the
+    // URI brackets. Normalize both forms before applying the IP policy.
+    let host = host
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(host);
     host.eq_ignore_ascii_case("localhost")
         || host.to_ascii_lowercase().ends_with(".local")
         || host
@@ -141,6 +147,7 @@ mod network_tests {
             "192.168.1.20",
             "169.254.10.20",
             "::1",
+            "[::1]",
             "fd00::1",
             "fe80::1",
         ] {
