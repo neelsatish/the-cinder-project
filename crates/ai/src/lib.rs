@@ -13,6 +13,8 @@ use serde::Deserialize;
 
 pub mod grammar;
 
+const MAX_PROVIDER_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
+
 /// Handle to the local model. `Ai::disabled()` is a fully working no-op, so a
 /// student machine and a host without a model behave identically: the UI simply
 /// hides every AI action.
@@ -100,8 +102,10 @@ impl Ai {
             .await
             .context("asking the local model for flashcards")?;
 
-        if !response.status().is_success() {
-            bail!("the local model returned {}", response.status());
+        let status = response.status();
+        let body = read_limited_response(response, MAX_PROVIDER_RESPONSE_BYTES).await?;
+        if !status.is_success() {
+            bail!("the local model returned {status}");
         }
 
         #[derive(Deserialize)]
@@ -109,10 +113,8 @@ impl Ai {
             content: String,
         }
 
-        let completion: Completion = response
-            .json()
-            .await
-            .context("reading the model's response")?;
+        let completion: Completion =
+            serde_json::from_slice(&body).context("reading the model's response")?;
 
         #[derive(Deserialize)]
         struct CardsPayload {
@@ -198,7 +200,10 @@ impl ChatClient {
 
         let response = request.send().await.context("asking the model")?;
         let status = response.status();
-        let body = response.text().await.unwrap_or_default();
+        let body = String::from_utf8_lossy(
+            &read_limited_response(response, MAX_PROVIDER_RESPONSE_BYTES).await?,
+        )
+        .into_owned();
 
         if !status.is_success() {
             // Surface the provider's own message — "insufficient quota" is far
@@ -236,6 +241,32 @@ impl ChatClient {
         }
         Ok(content)
     }
+}
+
+async fn read_limited_response(mut response: reqwest::Response, limit: usize) -> Result<Vec<u8>> {
+    if response
+        .content_length()
+        .is_some_and(|length| length > limit as u64)
+    {
+        bail!("the AI response exceeded Cinder's size limit");
+    }
+    let mut body = Vec::with_capacity(
+        response
+            .content_length()
+            .unwrap_or_default()
+            .min(limit as u64) as usize,
+    );
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .context("reading the model's response")?
+    {
+        if body.len().saturating_add(chunk.len()) > limit {
+            bail!("the AI response exceeded Cinder's size limit");
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 /// Pulls `error.message` out of an OpenAI-style error body.

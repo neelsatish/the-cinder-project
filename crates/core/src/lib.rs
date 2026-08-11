@@ -9,6 +9,7 @@ pub mod api;
 pub mod classroom;
 pub mod model;
 pub mod scheduler;
+pub mod secure_store;
 
 pub use api::*;
 pub use classroom::*;
@@ -20,6 +21,27 @@ pub const DEFAULT_HOST_PORT: u16 = 7373;
 
 /// mDNS service type the host advertises and clients browse for.
 pub const MDNS_SERVICE_TYPE: &str = "_cinder._tcp.local.";
+
+/// Whether a hostname is suitable for a classroom service that is deliberately
+/// confined to the same machine or LAN. Keep this policy shared so AI model
+/// access and Student material downloads cannot drift apart.
+pub fn is_local_network_host(host: &str) -> bool {
+    let host = host.trim_end_matches('.');
+    host.eq_ignore_ascii_case("localhost")
+        || host.to_ascii_lowercase().ends_with(".local")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| match address {
+                std::net::IpAddr::V4(value) => {
+                    value.is_loopback() || value.is_private() || value.is_link_local()
+                }
+                std::net::IpAddr::V6(value) => {
+                    value.is_loopback()
+                        || value.is_unique_local()
+                        || (value.segments()[0] & 0xffc0) == 0xfe80
+                }
+            })
+}
 
 /// Returns the previous product name only when locating data created before
 /// the rebrand. The encoded bytes keep that obsolete label out of current
@@ -100,5 +122,32 @@ mod data_migration_tests {
         assert_eq!(std::fs::read(current.join("config.json")).unwrap(), b"{}");
         assert!(!legacy.exists());
         std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod network_tests {
+    use super::is_local_network_host;
+
+    #[test]
+    fn accepts_only_loopback_private_link_local_and_dot_local_hosts() {
+        for host in [
+            "localhost",
+            "teacher.local",
+            "teacher.local.",
+            "127.0.0.1",
+            "10.20.30.40",
+            "172.16.0.1",
+            "192.168.1.20",
+            "169.254.10.20",
+            "::1",
+            "fd00::1",
+            "fe80::1",
+        ] {
+            assert!(is_local_network_host(host), "expected {host} to be local");
+        }
+        for host in ["example.com", "8.8.8.8", "1.1.1.1", "2001:4860:4860::8888"] {
+            assert!(!is_local_network_host(host), "expected {host} to be public");
+        }
     }
 }

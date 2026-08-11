@@ -1,6 +1,6 @@
 # Handoff — Cinder Matchbox
 
-Last updated 11 August 2026, at version **0.6.1**.
+Last updated 11 August 2026, at version **0.7.0**.
 
 For whoever picks this up next: a future you, a teammate, or an AI agent starting
 cold. It records where the project stands, how it got here, what is wrong with it,
@@ -10,19 +10,19 @@ and what to do next.
 
 ## Current state
 
-Cinder Matchbox 0.6.1. Both installers build and publish. The classroom workflow
+Cinder Matchbox 0.7.0. Both role-specific apps build for Windows and Linux. The classroom workflow
 works end to end: teacher creates accounts, enrols students in classrooms, uploads
 material, sets assignments, receives submissions, grades them in a spreadsheet
 gradebook, and marks attendance — all over a LAN with no internet.
 
 | | |
 | --- | --- |
-| Repository | `github.com/Alfie3542/cinder-classroom` — **still private** |
+| Repository | `github.com/Alfie3542/the-cinder-project` |
 | Licence | Apache-2.0, declared in `LICENSE`, `NOTICE`, `Cargo.toml`, `package.json` and both bundles |
-| Target | Linux Mint Cinnamon 22.x, x86_64 |
-| Artifacts | `.deb` and `.AppImage`, per app, signed updater feeds |
-| CI | `.github/workflows/linux-installers.yml` — typecheck, `cargo fmt --check`, `cargo test --workspace`, then bundles both apps |
-| Working tree | clean at `ca64693` |
+| Target | Windows 11 and Linux Mint Cinnamon 22.x, x86_64 |
+| Artifacts | Windows Setup `.exe`, Linux `.deb` and AppImage per role, plus signed updater feeds |
+| CI | `.github/workflows/release-installers.yml` - audits, tests and packages both operating systems before publishing |
+| Platform policy | Shared UI and domain source; normal updates apply to both operating systems |
 
 ### Layout
 
@@ -34,7 +34,7 @@ crates/ai                    client for the optional OpenAI-compatible assistant
 packages/ui                  shared UI components
 design/brand                 logo, app icon, brand reference PDF
 docs/                        this and the documents below
-scripts/                     setup.sh, dev.sh, build-linux.sh
+scripts/                     setup, development, Linux build and Windows build helpers
 ```
 
 ---

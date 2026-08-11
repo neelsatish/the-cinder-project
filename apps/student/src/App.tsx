@@ -16,12 +16,14 @@ import {
   Button,
   cacheGet,
   cacheSet,
+  clearSessionValue,
   clearStudentCache,
   DocumentEditor,
   EmptyState,
   Field,
   Icon,
   LoginScreen,
+  loadSessionValue,
   CinderApi,
   Metric,
   Modal,
@@ -32,6 +34,7 @@ import {
   probeHost,
   queueOffline,
   removeOutbox,
+  saveSessionValue,
   type Assignment,
   type Card,
   type Classroom,
@@ -58,37 +61,31 @@ type DocumentValue = Record<string, unknown>;
 const SESSION_KEY = "cinder.student.session";
 const KNOWN_ACCOUNTS_KEY = "cinder.student.known-accounts";
 const LEGACY_SESSION_KEY = ["lu", "mina.student.session"].join("");
+const SESSION_KEYS = [SESSION_KEY, LEGACY_SESSION_KEY] as const;
 const DEV_HOST = "http://127.0.0.1:7373";
 const EMPTY_DOCUMENT: DocumentValue = {
   type: "doc",
   content: [{ type: "paragraph" }],
 };
 
-function storedSession(): StoredSession | null {
-  for (const key of [SESSION_KEY, LEGACY_SESSION_KEY]) {
-    const stored = localStorage.getItem(key);
-    if (!stored) continue;
-    try {
-      const session = JSON.parse(stored) as Partial<StoredSession>;
-      if (
-        typeof session.baseUrl !== "string" ||
-        typeof session.token !== "string" ||
-        !session.user ||
-        session.user.role !== "student"
-      ) {
-        throw new Error("Invalid saved session");
-      }
-      const valid = session as StoredSession;
-      if (key !== SESSION_KEY) {
-        localStorage.setItem(SESSION_KEY, JSON.stringify(valid));
-        localStorage.removeItem(key);
-      }
-      return valid;
-    } catch {
-      localStorage.removeItem(key);
+async function storedSession(): Promise<StoredSession | null> {
+  const stored = await loadSessionValue(SESSION_KEYS);
+  if (!stored) return null;
+  try {
+    const session = JSON.parse(stored) as Partial<StoredSession>;
+    if (
+      typeof session.baseUrl !== "string" ||
+      typeof session.token !== "string" ||
+      !session.user ||
+      session.user.role !== "student"
+    ) {
+      throw new Error("Invalid saved session");
     }
+    return session as StoredSession;
+  } catch {
+    await clearSessionValue(SESSION_KEYS);
+    return null;
   }
-  return null;
 }
 
 async function within<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -120,6 +117,12 @@ const navigation: NavigationItem<StudentTab>[] = [
 
 function isTauri() {
   return "__TAURI_INTERNALS__" in window;
+}
+
+async function normalizeHostAddress(value: string) {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!isTauri()) return trimmed;
+  return invoke<string>("validate_host_address", { baseUrl: trimmed });
 }
 
 function formatDate(value: string | null) {
@@ -280,8 +283,16 @@ export function App() {
             // The manual connection screen remains available.
           }
         }
-        const session = storedSession();
-        const nextUrl = session?.baseUrl ?? config.host_url ?? DEV_HOST;
+        let session = await storedSession();
+        let nextUrl = session?.baseUrl ?? config.host_url ?? DEV_HOST;
+        try {
+          nextUrl = await within(normalizeHostAddress(nextUrl), 4_000);
+        } catch {
+          // Never send a saved token to an invalid or non-local destination.
+          if (session) await clearSessionValue(SESSION_KEYS);
+          session = null;
+          nextUrl = DEV_HOST;
+        }
         const nextApi = new CinderApi(nextUrl, session?.token ?? null);
         setBaseUrl(nextUrl);
         setDeviceLabel(config.device_label ?? "Student computer");
@@ -294,14 +305,14 @@ export function App() {
             const current = await nextApi.me();
             canLoadWorkspace = !current.must_change_password;
             setUser(current);
-            localStorage.setItem(
-              SESSION_KEY,
+            await saveSessionValue(
+              SESSION_KEYS,
               JSON.stringify({ ...session, user: current }),
             );
             setOnline(true);
           } catch (failure) {
             if (!(failure instanceof ApiError && failure.offline)) {
-              localStorage.removeItem(SESSION_KEY);
+              await clearSessionValue(SESSION_KEYS);
               setUser(null);
               setToken(null);
               canLoadWorkspace = false;
@@ -343,8 +354,8 @@ export function App() {
       localStorage.setItem(KNOWN_ACCOUNTS_KEY, JSON.stringify(next));
       return next;
     });
-    localStorage.setItem(
-      SESSION_KEY,
+    await saveSessionValue(
+      SESSION_KEYS,
       JSON.stringify({ baseUrl, token: result.token, user: result.user }),
     );
     if (!result.user.must_change_password) await loadWorkspace(api);
@@ -352,7 +363,7 @@ export function App() {
 
   const logout = async () => {
     if (online) await api.logout().catch(() => undefined);
-    localStorage.removeItem(SESSION_KEY);
+    await clearSessionValue(SESSION_KEYS);
     api.setToken(null);
     setToken(null);
     setUser(null);
@@ -360,7 +371,7 @@ export function App() {
   };
 
   const saveConnection = async (nextUrl: string, nextLabel: string) => {
-    const normalised = nextUrl.trim().replace(/\/+$/, "");
+    const normalised = await normalizeHostAddress(nextUrl);
     if (!(await probeHost(normalised)))
       throw new Error("No Cinder Teacher app answered at that address.");
     if (isTauri())
@@ -377,8 +388,8 @@ export function App() {
     setOnline(true);
     setConnectionOpen(false);
     if (user && token) {
-      localStorage.setItem(
-        SESSION_KEY,
+      await saveSessionValue(
+        SESSION_KEYS,
         JSON.stringify({ baseUrl: normalised, token, user }),
       );
       await loadWorkspace(nextApi);
@@ -574,8 +585,8 @@ export function App() {
             setUser(updated);
             setTemporaryPassword("");
             if (token)
-              localStorage.setItem(
-                SESSION_KEY,
+              await saveSessionValue(
+                SESSION_KEYS,
                 JSON.stringify({ baseUrl, token, user: updated }),
               );
             await loadWorkspace(api);

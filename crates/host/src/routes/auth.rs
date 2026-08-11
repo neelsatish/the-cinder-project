@@ -1,7 +1,7 @@
 //! Authentication, first-run setup, recovery, and teacher-managed students.
 
 use argon2::password_hash::rand_core::{OsRng, RngCore};
-use axum::extract::{Path, State};
+use axum::extract::{ConnectInfo, Path, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::{Duration, Utc};
@@ -60,6 +60,15 @@ async fn login(
     State(state): State<AppState>,
     Json(req): Json<AppLoginRequest>,
 ) -> HostResult<Json<LoginResponse>> {
+    if req.username.chars().count() > 64
+        || req.password.chars().count() > auth::MAX_PASSWORD_CHARS
+        || req
+            .device_label
+            .as_deref()
+            .is_some_and(|label| label.chars().count() > 120)
+    {
+        return Err(HostError::BadCredentials);
+    }
     state
         .db(move |conn| {
             let found = conn
@@ -206,8 +215,12 @@ async fn me(user: CurrentUser) -> Json<User> {
 
 async fn bootstrap(
     State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<std::net::SocketAddr>,
     Json(req): Json<BootstrapTeacherRequest>,
 ) -> HostResult<Json<BootstrapTeacherResponse>> {
+    if !peer.ip().is_loopback() {
+        return Err(HostError::Forbidden);
+    }
     state
         .db(move |conn| {
             let count: i64 = conn.query_row("SELECT count(*) FROM users", [], |row| row.get(0))?;
@@ -479,7 +492,7 @@ async fn reset_student_credentials(
                 "UPDATE users SET pw_hash = ?2, must_change_password = 1 WHERE id = ?1",
                 rusqlite::params![
                     student_id.to_string(),
-                    auth::hash_password(&temporary_password)?
+                    auth::hash_temporary_pin(&temporary_password)?
                 ],
             )?;
             tx.execute(
@@ -677,9 +690,9 @@ async fn update_student(
                     student_id.to_string(),
                     username,
                     display_name,
-                    clean_optional(req.grade_level),
-                    clean_optional(req.section),
-                    clean_optional(req.roll_number),
+                    clean_optional(req.grade_level, "Grade level")?,
+                    clean_optional(req.section, "Section")?,
+                    clean_optional(req.roll_number, "Roll number")?,
                 ],
             )
             .map_err(|error| match error {
@@ -749,7 +762,14 @@ fn insert_user(
 
     let id = Uuid::new_v4();
     let now = Utc::now();
-    let password_hash = auth::hash_password(password)?;
+    let password_hash = if role == Role::Student && must_change_password {
+        auth::hash_temporary_pin(password)?
+    } else {
+        auth::hash_password(password)?
+    };
+    let grade_level = clean_optional(grade_level, "Grade level")?;
+    let section = clean_optional(section, "Section")?;
+    let roll_number = clean_optional(roll_number, "Roll number")?;
     conn.execute(
         "INSERT INTO users
             (id, username, display_name, pw_hash, role, created_at, grade_level, section,
@@ -864,13 +884,32 @@ fn validate_identity(username: &str, display_name: &str) -> HostResult<()> {
             "Username can only contain letters, numbers, dots, dashes, and underscores.".into(),
         ));
     }
+    if username.chars().count() > 64 {
+        return Err(HostError::BadRequest(
+            "Username must be 64 characters or fewer.".into(),
+        ));
+    }
+    if display_name.chars().count() > 120 {
+        return Err(HostError::BadRequest(
+            "Name must be 120 characters or fewer.".into(),
+        ));
+    }
     Ok(())
 }
 
-fn clean_optional(value: Option<String>) -> Option<String> {
-    value
+fn clean_optional(value: Option<String>, label: &str) -> HostResult<Option<String>> {
+    let value = value
         .map(|item| item.trim().to_owned())
-        .filter(|item| !item.is_empty())
+        .filter(|item| !item.is_empty());
+    if value
+        .as_deref()
+        .is_some_and(|item| item.chars().count() > 80)
+    {
+        return Err(HostError::BadRequest(format!(
+            "{label} must be 80 characters or fewer."
+        )));
+    }
+    Ok(value)
 }
 
 fn parse_uuid(value: &str, what: &str) -> HostResult<Uuid> {

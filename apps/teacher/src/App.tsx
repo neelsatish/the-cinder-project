@@ -24,10 +24,13 @@ import {
   Icon,
   LoginScreen,
   CinderApi,
+  clearSessionValue,
+  loadSessionValue,
   Metric,
   Modal,
   PageHeader,
   Panel,
+  saveSessionValue,
   type AiSettings,
   type Assignment,
   type AttendanceDay,
@@ -75,6 +78,7 @@ type HostInfo = { base_url: string; port: number };
 const SESSION_KEY = "cinder.teacher.session";
 const KNOWN_ACCOUNTS_KEY = "cinder.teacher.known-accounts";
 const LEGACY_SESSION_KEY = ["lu", "mina.teacher.session"].join("");
+const SESSION_KEYS = [SESSION_KEY, LEGACY_SESSION_KEY] as const;
 const DEV_HOST = "http://127.0.0.1:7373";
 const navigation: NavigationItem<TeacherTab>[] = [
   { id: "dashboard", label: "Overview", icon: "dashboard" },
@@ -143,30 +147,23 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function storedSession(): StoredSession | null {
-  for (const key of [SESSION_KEY, LEGACY_SESSION_KEY]) {
-    const raw = localStorage.getItem(key);
-    if (!raw) continue;
-    try {
-      const session = JSON.parse(raw) as Partial<StoredSession>;
-      if (
-        typeof session.token !== "string" ||
-        !session.user ||
-        session.user.role !== "teacher"
-      ) {
-        throw new Error("Invalid saved session");
-      }
-      const valid = session as StoredSession;
-      if (key !== SESSION_KEY) {
-        localStorage.setItem(SESSION_KEY, JSON.stringify(valid));
-        localStorage.removeItem(key);
-      }
-      return valid;
-    } catch {
-      localStorage.removeItem(key);
+async function storedSession(): Promise<StoredSession | null> {
+  const raw = await loadSessionValue(SESSION_KEYS);
+  if (!raw) return null;
+  try {
+    const session = JSON.parse(raw) as Partial<StoredSession>;
+    if (
+      typeof session.token !== "string" ||
+      !session.user ||
+      session.user.role !== "teacher"
+    ) {
+      throw new Error("Invalid saved session");
     }
+    return session as StoredSession;
+  } catch {
+    await clearSessionValue(SESSION_KEYS);
+    return null;
   }
-  return null;
 }
 
 export function App() {
@@ -263,20 +260,20 @@ export function App() {
             await new Promise((resolve) => window.setTimeout(resolve, 250));
           }
         }
-        const session = storedSession();
+        const session = await storedSession();
         if (session) {
           activeApi.setToken(session.token);
           try {
             const current = await activeApi.me();
             setUser(current);
             rememberAccount(current.username);
-            localStorage.setItem(
-              SESSION_KEY,
+            await saveSessionValue(
+              SESSION_KEYS,
               JSON.stringify({ token: session.token, user: current }),
             );
             await loadWorkspace(activeApi);
           } catch {
-            localStorage.removeItem(SESSION_KEY);
+            await clearSessionValue(SESSION_KEYS);
             activeApi.setToken(null);
           }
         }
@@ -296,8 +293,8 @@ export function App() {
     api.setToken(result.token);
     setUser(result.user);
     rememberAccount(result.user.username);
-    localStorage.setItem(
-      SESSION_KEY,
+    await saveSessionValue(
+      SESSION_KEYS,
       JSON.stringify({ token: result.token, user: result.user }),
     );
     await loadWorkspace(api);
@@ -305,7 +302,7 @@ export function App() {
 
   const logout = async () => {
     await api.logout().catch(() => undefined);
-    localStorage.removeItem(SESSION_KEY);
+    await clearSessionValue(SESSION_KEYS);
     api.setToken(null);
     setUser(null);
   };

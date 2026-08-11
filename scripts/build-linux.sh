@@ -10,10 +10,12 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR"
 
 npm run typecheck
+npm run test:gradebook-intent
+npm run audit:dependencies
 npm run build:student
 npm run build:teacher
 cargo fmt --all -- --check
-cargo test --workspace
+cargo test --workspace --locked
 npm run bundle:student
 npm run bundle:teacher
 

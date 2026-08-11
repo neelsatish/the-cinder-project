@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Panel } from "./components";
 
 const RELEASE_URL =
-  "https://github.com/Alfie3542/cinder-classroom/releases/tag/matchbox-latest";
+  "https://github.com/Alfie3542/the-cinder-project/releases/tag/matchbox-latest";
 
 function isTauri() {
   return (
@@ -129,8 +129,8 @@ export function AppUpdater({ appName }: { appName: string }) {
           </Button>
         </div>
         <small>
-          AppImage installations update in place. Linux package-manager installs
-          may ask you to download the newest .deb manually.
+          Windows setup and AppImage installations update in place. Linux
+          package-manager installs may ask you to download the newest .deb manually.
         </small>
       </div>
     </Panel>

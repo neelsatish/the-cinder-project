@@ -5,3 +5,4 @@ export * from "./editor";
 export * from "./icons";
 export * from "./types";
 export * from "./updater";
+export * from "./session";

@@ -16,7 +16,9 @@ impl StudentConfig {
     }
 
     pub fn load(data_dir: &Path) -> Self {
-        std::fs::read_to_string(Self::path(data_dir))
+        let path = Self::path(data_dir);
+        std::fs::read_to_string(&path)
+            .or_else(|_| std::fs::read_to_string(path.with_extension("json.bak")))
             .ok()
             .and_then(|raw| serde_json::from_str(&raw).ok())
             .unwrap_or_default()
@@ -26,8 +28,17 @@ impl StudentConfig {
         std::fs::create_dir_all(data_dir)?;
         let path = Self::path(data_dir);
         let temporary = path.with_extension("json.tmp");
+        let backup = path.with_extension("json.bak");
         std::fs::write(&temporary, serde_json::to_vec_pretty(self)?)?;
-        std::fs::rename(temporary, path)?;
+        let _ = std::fs::remove_file(&backup);
+        if path.exists() {
+            std::fs::rename(&path, &backup)?;
+        }
+        if let Err(error) = std::fs::rename(&temporary, &path) {
+            let _ = std::fs::rename(&backup, &path);
+            return Err(error.into());
+        }
+        let _ = std::fs::remove_file(backup);
         Ok(())
     }
 }

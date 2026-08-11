@@ -19,6 +19,7 @@ use crate::AppState;
 /// How long a login lasts. Long, on purpose: students should not be locked out
 /// mid-session by an expiry, and the LAN has no route to the internet.
 pub const SESSION_DAYS: i64 = 30;
+pub const MAX_PASSWORD_CHARS: usize = 1_024;
 
 pub fn hash_password(password: &str) -> Result<String, HostError> {
     if password.chars().count() < 8 {
@@ -26,10 +27,28 @@ pub fn hash_password(password: &str) -> Result<String, HostError> {
             "Password must be at least 8 characters.".into(),
         ));
     }
+    hash_secret(password)
+}
+
+pub fn hash_temporary_pin(pin: &str) -> Result<String, HostError> {
+    if pin.len() != 4 || !pin.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(HostError::BadRequest(
+            "A temporary PIN must contain exactly four digits.".into(),
+        ));
+    }
+    hash_secret(pin)
+}
+
+fn hash_secret(secret: &str) -> Result<String, HostError> {
+    if secret.chars().count() > MAX_PASSWORD_CHARS {
+        return Err(HostError::BadRequest(
+            "Password or recovery value is too long.".into(),
+        ));
+    }
 
     let salt = SaltString::generate(&mut OsRng);
     Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(secret.as_bytes(), &salt)
         .map(|h| h.to_string())
         .map_err(|e| HostError::Other(anyhow::anyhow!("hashing password: {e}")))
 }
@@ -37,6 +56,9 @@ pub fn hash_password(password: &str) -> Result<String, HostError> {
 /// Returns false for a malformed stored hash rather than erroring, so one
 /// corrupt row cannot be used to distinguish accounts.
 pub fn verify_password(stored_hash: &str, password: &str) -> bool {
+    if password.chars().count() > MAX_PASSWORD_CHARS {
+        return false;
+    }
     let Ok(parsed) = PasswordHash::new(stored_hash) else {
         tracing::error!("stored password hash is malformed");
         return false;
@@ -226,6 +248,21 @@ mod tests {
     }
 
     #[test]
+    fn temporary_pin_has_a_separate_narrow_policy() {
+        let hash = hash_temporary_pin("0427").unwrap();
+        assert!(verify_password(&hash, "0427"));
+        assert!(hash_temporary_pin("427").is_err());
+        assert!(hash_temporary_pin("four").is_err());
+    }
+
+    #[test]
+    fn oversized_secrets_are_rejected_before_argon2() {
+        let oversized = "x".repeat(MAX_PASSWORD_CHARS + 1);
+        assert!(hash_password(&oversized).is_err());
+        assert!(!verify_password(DUMMY_TEST_HASH, &oversized));
+    }
+
+    #[test]
     fn malformed_hash_verifies_false_instead_of_panicking() {
         assert!(!verify_password("not-a-phc-string", "anything"));
     }
@@ -246,4 +283,7 @@ mod tests {
             "digest must be reproducible"
         );
     }
+
+    const DUMMY_TEST_HASH: &str =
+        "$argon2id$v=19$m=19456,t=2,p=1$c3R1ZHlib3hkdW1teXNhbHQ$b3JCJ0N0k1Zj3iWQxk7yLXJ7l1RfQvJmVXQ0kx5s2Yc";
 }

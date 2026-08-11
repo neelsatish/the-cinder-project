@@ -28,7 +28,13 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![host_info, write_text_export])
+        .invoke_handler(tauri::generate_handler![
+            host_info,
+            write_text_export,
+            load_secure_session,
+            save_secure_session,
+            clear_secure_session,
+        ])
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             cinder_core::migrate_legacy_app_data(&data_dir, "teacher")?;
@@ -87,4 +93,38 @@ fn write_text_export(path: String, contents: String) -> Result<(), String> {
         return Err("Cinder can only write CSV, HTML, DOC, or TXT exports.".into());
     }
     std::fs::write(&path, contents).map_err(|error| format!("Could not save the export: {error}"))
+}
+
+const SESSION_SECRET: &str = "teacher-session";
+
+#[tauri::command]
+fn load_secure_session(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    cinder_core::secure_store::load(&data_dir, SESSION_SECRET)
+        .map_err(|error| error.to_string())?
+        .map(String::from_utf8)
+        .transpose()
+        .map_err(|_| "The saved session is not valid text.".to_owned())
+}
+
+#[tauri::command]
+fn save_secure_session(app: tauri::AppHandle, session: String) -> Result<(), String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    cinder_core::secure_store::store(&data_dir, SESSION_SECRET, session.as_bytes())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn clear_secure_session(app: tauri::AppHandle) -> Result<(), String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    cinder_core::secure_store::delete(&data_dir, SESSION_SECRET).map_err(|error| error.to_string())
 }

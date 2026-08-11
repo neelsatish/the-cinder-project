@@ -15,9 +15,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use axum::http::{header, HeaderValue, Method};
 use axum::Router;
 use cinder_ai::Ai;
-use rand::{rngs::OsRng, RngCore};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
@@ -39,7 +39,8 @@ impl AppState {
         let files_dir = data_dir.join("files");
         std::fs::create_dir_all(&files_dir)
             .with_context(|| format!("creating {}", files_dir.display()))?;
-        let ai_key_secret = load_or_create_secret(&data_dir.join("ai-key-secret.bin"))?;
+        let ai_key_secret =
+            cinder_core::secure_store::load_or_create_key(&data_dir.join("ai-key-secret.bin"))?;
 
         Ok(Self {
             pool,
@@ -96,39 +97,6 @@ fn migrate_legacy_database(data_dir: &Path) -> Result<PathBuf> {
     Ok(current)
 }
 
-fn load_or_create_secret(path: &Path) -> Result<[u8; 32]> {
-    if let Ok(bytes) = std::fs::read(path) {
-        return bytes
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("AI secret file has the wrong size"));
-    }
-
-    let mut secret = [0u8; 32];
-    OsRng.fill_bytes(&mut secret);
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    match options.open(path) {
-        Ok(mut file) => {
-            use std::io::Write;
-            file.write_all(&secret)?;
-            file.sync_all()?;
-            Ok(secret)
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let bytes = std::fs::read(path)?;
-            bytes
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("AI secret file has the wrong size"))
-        }
-        Err(error) => Err(error.into()),
-    }
-}
-
 pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(routes::health::router())
@@ -147,11 +115,41 @@ pub fn router(state: AppState) -> Router {
         .layer(axum::extract::DefaultBodyLimit::max(
             cinder_core::MAX_UPLOAD_BYTES + 1024 * 1024,
         ))
-        // The client is a Tauri webview on a different origin, and the LAN has
-        // no route to the internet, so permissive CORS costs nothing here.
-        .layer(CorsLayer::permissive())
+        // Only packaged Cinder webviews and the two local development servers
+        // may call the classroom host. A random website opened on a lab machine
+        // must not be able to probe login or recovery endpoints on the LAN.
+        .layer(cinder_cors())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+fn cinder_cors() -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin([
+            HeaderValue::from_static("tauri://localhost"),
+            HeaderValue::from_static("http://tauri.localhost"),
+            HeaderValue::from_static("https://tauri.localhost"),
+            HeaderValue::from_static("http://localhost:5173"),
+            HeaderValue::from_static("http://localhost:5174"),
+            HeaderValue::from_static("http://127.0.0.1:5173"),
+            HeaderValue::from_static("http://127.0.0.1:5174"),
+        ])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::RANGE])
+        .expose_headers([
+            header::ACCEPT_RANGES,
+            header::CONTENT_DISPOSITION,
+            header::CONTENT_LENGTH,
+            header::CONTENT_RANGE,
+            header::CONTENT_TYPE,
+        ])
 }
 
 /// Claims the port before anything else starts.
@@ -177,10 +175,13 @@ pub async fn serve_on(state: AppState, listener: std::net::TcpListener) -> Resul
     let bound = listener.local_addr()?;
     tracing::info!(%bound, "host listening");
 
-    axum::serve(listener, router(state))
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .context("serving")?;
+    axum::serve(
+        listener,
+        router(state).into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .context("serving")?;
 
     Ok(())
 }

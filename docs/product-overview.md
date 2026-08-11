@@ -7,15 +7,15 @@
 Cinder Matchbox is a classroom workspace that runs on old computers and does not
 need the internet.
 
-It ships as two Linux installers backed by one codebase. **Cinder Teacher** runs on
+It ships as two role-specific apps for Windows and Linux backed by one codebase. **Cinder Teacher** runs on
 one machine in the room and holds everything: student accounts, classrooms,
 materials, assignments, submissions, grades and attendance. **Cinder Student** runs
 on every other machine and connects to it over the local network. A teacher can set
 up a working digital classroom with a router, a handful of recovered PCs, and no
 internet line, no subscription and no per-seat licence.
 
-The target machine is a 64-bit Linux Mint Cinnamon desktop — the kind of hardware
-schools are given, inherit, or recover from e-waste.
+The target machine is a 64-bit Windows 11 or Linux Mint Cinnamon desktop - the
+kind of hardware schools are given, inherit, or recover from e-waste.
 
 ## The problem
 
@@ -89,9 +89,9 @@ can propose gradebook columns, formulas and cell edits using the current workboo
 context, but nothing reaches a student without the teacher confirming it. It cannot
 publish a grade or a comment.
 
-**Recovery is designed for a school with no IT desk.** Temporary passwords are eight
-readable characters. Recovery codes are separate, hashed, rotated after use, and
-shown exactly once.
+**Recovery is designed for a school with no IT desk.** Temporary passwords are
+four-digit one-time PINs. Recovery codes are separate, hashed, rotated after use,
+and shown exactly once.
 
 ## What it does
 
@@ -138,10 +138,11 @@ Discovery is mDNS with a manual IP fallback. KDE Connect was considered and reje
 it is built for pairing personal devices and moving files, not for concurrent
 classroom records.
 
-Both apps are Tauri desktop applications — a Rust core with a web UI — sharing
-`crates/core`, `crates/host` and `crates/ai`. Distributed as `.deb` and `.AppImage`,
-with signed update checks and separate update feeds per binary so the wrong
-installer cannot land on the wrong machine.
+Both apps are Tauri desktop applications - a Rust core with a web UI - sharing
+`crates/core`, `crates/host` and `crates/ai`. They are distributed as Windows
+Setup `.exe`, Linux `.deb` and AppImage installers, with signed update checks and
+separate update feeds per binary so the wrong installer cannot land on the wrong
+machine.
 
 ## What it deliberately does not do
 

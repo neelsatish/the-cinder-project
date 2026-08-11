@@ -7,7 +7,10 @@
     "core:default",
     "dialog:allow-open",
     "dialog:allow-message",
-    "opener:allow-open-url",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://*" }]
+    },
     "process:allow-restart",
     "updater:default"
   ]

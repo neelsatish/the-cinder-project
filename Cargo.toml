@@ -9,13 +9,13 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.2"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.77"
 license = "Apache-2.0"
 authors = ["The Cinder Project"]
-repository = "https://github.com/Alfie3542/cinder-classroom"
-homepage = "https://github.com/Alfie3542/cinder-classroom"
+repository = "https://github.com/Alfie3542/the-cinder-project"
+homepage = "https://github.com/Alfie3542/the-cinder-project"
 
 [workspace.dependencies]
 cinder-core = { path = "crates/core" }

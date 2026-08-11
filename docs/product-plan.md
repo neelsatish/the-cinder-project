@@ -45,14 +45,16 @@ NGO gateway should replace individual provider keys before a multi-school rollou
 - Grade changes are append-only audit entries.
 - Attendance is one authoritative manual mark per student per school day. Sign-in is a
   hint, not an automatic attendance decision.
-- Temporary passwords are eight readable alphanumeric characters. Recovery codes are
-  separate, hashed, rotated after use and displayed only once.
+- Temporary passwords are four-digit one-time PINs. Permanent passwords remain at
+  least eight characters. Recovery codes are separate, hashed, rotated after use
+  and displayed only once.
 
 ## Delivery phases
 
-1. **Linux build and two-machine test**
-   Build both `.deb` and `.AppImage` artifacts on Linux Mint 22.x x86_64. Test discovery,
-   login, forced password change and reconnect on a real classroom router.
+1. **Cross-platform build and two-machine test**
+   Build Windows Setup, Linux `.deb` and AppImage artifacts for both roles. Test
+   discovery, login, forced password change and reconnect across Windows/Linux
+   combinations on a real classroom router.
 2. **Pilot content and grading test**
    Create real subjects, upload scanned PDFs, enrol a small student group, submit work,
    withdraw/resubmit, publish feedback and export the teacher data directory as backup.
@@ -60,8 +62,8 @@ NGO gateway should replace individual provider keys before a multi-school rollou
    Stop the teacher app while a note is being edited, restart it and verify the outbox.
    Test a full disk, power loss during a write, duplicate usernames and a changed grade.
 4. **School rollout**
-   Install Cinnamon x86_64 images, pin the two correct installers to the appropriate
-   machines, configure a stable teacher-machine address and document daily backup.
+   Install supported Windows 11 or Linux Mint x86_64 images, pin the correct role
+   installer to each machine, configure a stable Teacher address and document backup.
 5. **NGO scale-up**
    Add TLS, central identity and an API gateway before connecting multiple schools.
    Do not expose port 7373 directly to the public internet.
@@ -77,7 +79,8 @@ NGO gateway should replace individual provider keys before a multi-school rollou
   newer server copy.
 - Students see only published grades/comments; teachers see grade history.
 - The Student binary has no host or AI crate dependency.
-- Both packages install and launch on a clean Linux Mint Cinnamon x86_64 machine.
+- Both role apps install and launch on clean Windows 11 and Linux Mint Cinnamon
+  x86_64 machines.
 
 ## Deliberate limits for the pilot
 

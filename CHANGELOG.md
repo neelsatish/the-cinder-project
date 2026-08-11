@@ -1,11 +1,42 @@
 # Changelog
 
 Release notes for Cinder Matchbox. Installers for each release are on the
-[Releases page](https://github.com/Alfie3542/cinder-classroom/releases).
+[Releases page](https://github.com/Alfie3542/the-cinder-project/releases).
 
-AppImage users can install signed updates in place. Users who installed a `.deb`
-may need to download the latest package, because Linux does not always permit
-replacing a system-installed executable.
+Windows Setup installs and AppImages can install signed updates in place. Users
+who installed a `.deb` download the latest package again.
+
+## 0.7.0
+
+- Added matching 64-bit Cinder Teacher and Cinder Student installers for
+  Windows 11 while preserving the Linux Mint `.deb` and AppImage builds.
+- Kept one shared React interface and Rust domain layer across both operating
+  systems, with small platform configuration overlays for maintainable UI work.
+- Added one release gate that tests and packages Windows and Linux together;
+  neither platform is published when the other platform fails.
+- Added signed Windows updater bundles and separate Teacher and Student updater
+  feeds alongside the existing signed Linux updates.
+- Moved installed-app sessions out of WebView local storage and into native
+  encrypted storage, including automatic migration of existing sessions.
+- Protected Windows secret keys with current-user DPAPI and retained
+  AES-256-GCM encryption for saved AI credentials.
+- Restricted browser-origin access to the classroom server and restricted the
+  first Teacher account setup to the Teacher computer itself.
+- Required HTTPS for cloud AI providers, limited local HTTP providers to local
+  or private-network addresses, and bounded AI request and response sizes.
+- Treated classroom context as untrusted quoted content in AI prompts to reduce
+  prompt-injection risk.
+- Removed Windows shell invocation from material opening, limited material
+  downloads, validated file identifiers, and validated every saved or entered
+  Student host before any session token or request is sent.
+- Fixed atomic configuration replacement on Windows and added URL, path and
+  native secret-storage regression tests.
+- Fixed four-digit one-time student PIN creation/reset by separating PIN
+  hashing from the eight-character permanent-password policy.
+- Bounded account identity, password, recovery and device-label inputs before
+  expensive password hashing or database writes.
+- Patched Univer's inherited Nano ID dependency and added npm and Rust advisory
+  checks to the release gate.
 
 ## 0.6.2
 
