@@ -232,9 +232,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # `gh release edit --target` does not move an already-existing Git
+          # tag. This release intentionally uses one mutable "latest" tag, so
+          # update the ref only after every platform build has passed.
+          git tag --force matchbox-latest "$GITHUB_SHA"
+          git push origin refs/tags/matchbox-latest --force
+
           if gh release view matchbox-latest >/dev/null 2>&1; then
             gh release edit matchbox-latest --target "$GITHUB_SHA" --title "Cinder Matchbox - Latest Windows and Linux Installers" --notes-file release-notes.md --latest
           else
             gh release create matchbox-latest --target "$GITHUB_SHA" --title "Cinder Matchbox - Latest Windows and Linux Installers" --notes-file release-notes.md --latest
           fi
+
+          # Keep the download list tidy if an artifact is renamed in a future
+          # release. GitHub's generated source archives are not release assets
+          # and are therefore unaffected by this cleanup.
+          mapfile -t existing_assets < <(gh release view matchbox-latest --json assets --jq '.assets[].name')
+          for asset in "${existing_assets[@]}"; do
+            if [ ! -f "artifacts/$asset" ]; then
+              gh release delete-asset matchbox-latest "$asset" --yes
+            fi
+          done
           gh release upload matchbox-latest artifacts/* --clobber
