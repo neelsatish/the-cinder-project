@@ -55,6 +55,7 @@ with access.
 
 | Document | What it covers |
 | --- | --- |
+| [Handoff](docs/handoff.md) | **Start here** — current state, history, what needs doing next |
 | [Product overview](docs/product-overview.md) | What Matchbox is, its mission, principles and deliberate limits |
 | [Product and delivery plan](docs/product-plan.md) | Architecture, data rules, delivery phases and acceptance checklist |
 | [Backup and recovery](docs/backup-and-recovery.md) | Proposed backup model — **not yet implemented** |
