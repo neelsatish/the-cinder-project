@@ -2,6 +2,7 @@ import type { ButtonHTMLAttributes, FormEvent, ReactNode } from "react";
 import { useState } from "react";
 
 import { BrandMark, Icon, type IconName } from "./icons";
+import { ThemeToggle } from "./theme";
 import type { Role, User } from "./types";
 
 export type NavigationItem<T extends string> = {
@@ -77,6 +78,7 @@ export function AppShell<T extends string>({
             <span className="section-name">{activeItem?.label}</span>
           </div>
           <div className="topbar-actions">
+            <ThemeToggle className="topbar-theme" />
             {onRefresh ? (
               <button
                 className={`topbar-refresh ${refreshing ? "is-refreshing" : ""}`}
@@ -329,6 +331,7 @@ export function LoginScreen({
 
   return (
     <div className="auth-screen">
+      <ThemeToggle className="auth-theme-toggle" />
       <div className="auth-visual">
         <BrandMark size={64} />
         <p className="eyebrow">Learning, clearly organised</p>

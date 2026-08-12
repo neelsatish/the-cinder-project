@@ -58,6 +58,21 @@ import {
   resolveGradebookCellTarget,
   resolveGradebookIntent,
 } from "./gradebookIntent";
+import { createPaperPdf } from "./paperExport";
+import {
+  compactPageRanges,
+  composeAnswerKey,
+  composeQuestionPaper,
+  sourceSummary,
+  splitPaperResponse,
+} from "./paperLogic";
+import {
+  deleteQuestionPaper,
+  listSavedQuestionPapers,
+  saveQuestionPaper,
+  type PaperSourceCitation,
+  type SavedQuestionPaper,
+} from "./paperLibrary";
 
 const UniverGradebook = lazy(() =>
   import("./UniverGradebook").then((module) => ({ default: module.UniverGradebook })),
@@ -411,7 +426,12 @@ export function App() {
         />
       ) : null}
       {tab === "assistant" ? (
-        <AssistantView api={api} classrooms={classrooms} />
+        <AssistantView
+          api={api}
+          classrooms={classrooms}
+          students={students}
+          assignments={assignments}
+        />
       ) : null}
       {tab === "settings" ? (
         <SettingsView
@@ -3262,20 +3282,28 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
-function paperHtml(title: string, text: string) {
+function paperHtml(title: string, text: string, documentLabel: string) {
   const body = text
     .split(/\r?\n/)
     .map((line, index) => {
-      const value = escapeHtml(line.trim()) || "&nbsp;";
-      return index === 0
-        ? `<h1>${value}</h1>`
-        : `<p>${value}</p>`;
+      const value = escapeHtml(line.trim());
+      if (!value) return '<div class="working-line">&nbsp;</div>';
+      if (index === 0) return `<h1>${value}</h1>`;
+      if (/^(?:sources?:|instructions|section\b|answer key|teacher copy)/i.test(line)) {
+        return `<h2>${value}</h2>`;
+      }
+      return `<p>${value}</p>`;
     })
     .join("\n");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>@page{size:A4;margin:20mm}body{font-family:"Liberation Serif",Georgia,serif;max-width:170mm;margin:0 auto;color:#181512;font-size:12pt;line-height:1.5}h1{font:700 22pt "Liberation Sans",Arial,sans-serif;margin:0 0 20pt}p{margin:0 0 8pt;white-space:pre-wrap}</style></head><body>${body}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>@page{size:A4;margin:20mm}body{font-family:"Liberation Serif",Georgia,serif;max-width:170mm;margin:0 auto;color:#181512;font-size:12pt;line-height:1.55}h1{font:700 22pt "Liberation Sans",Arial,sans-serif;margin:0 0 14pt}h2{font:700 10pt "Liberation Sans",Arial,sans-serif;color:#6e3216;margin:14pt 0 7pt}p{margin:0 0 8pt;white-space:pre-wrap}.working-line{height:13pt}footer{position:fixed;bottom:-10mm;font:8pt "Liberation Sans",Arial,sans-serif;color:#76685d}</style></head><body>${body}<footer>Cinder Teacher · ${escapeHtml(documentLabel)}</footer></body></html>`;
 }
 
-async function extractPdfText(blob: Blob, name: string) {
+type ExtractedPdf = {
+  text: string;
+  pages: number[];
+};
+
+async function extractPdfText(blob: Blob, name: string): Promise<ExtractedPdf> {
   if (blob.size > 25 * 1024 * 1024) {
     throw new Error(`${name} is larger than the 25 MB reference limit.`);
   }
@@ -3289,6 +3317,7 @@ async function extractPdfText(blob: Blob, name: string) {
   });
   const pdf = await task.promise;
   const pages: string[] = [];
+  const includedPages: number[] = [];
   try {
     const pageLimit = Math.min(pdf.numPages, 40);
     for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
@@ -3299,7 +3328,10 @@ async function extractPdfText(blob: Blob, name: string) {
         .join(" ")
         .replace(/\s+/g, " ")
         .trim();
-      if (text) pages.push(`[Page ${pageNumber}] ${text}`);
+      if (text) {
+        pages.push(`[Page ${pageNumber}] ${text}`);
+        includedPages.push(pageNumber);
+      }
       if (pages.join("\n").length >= 24_000) break;
     }
   } finally {
@@ -3311,17 +3343,74 @@ async function extractPdfText(blob: Blob, name: string) {
       `${name} has no selectable text. Scanned PDFs need OCR before the AI can use them.`,
     );
   }
-  return text;
+  return { text, pages: includedPages };
+}
+
+const ACTIVE_PAPER_KEY = "cinder.teacher.active-question-paper";
+
+function createPaperId() {
+  const values = new Uint32Array(2);
+  crypto.getRandomValues(values);
+  return `paper-${Date.now().toString(36)}-${Array.from(values, (value) => value.toString(36)).join("")}`;
+}
+
+async function savePdfExport(defaultName: string, contents: Uint8Array) {
+  const filename = `${safeFilename(defaultName)}.pdf`;
+  if (isTauri()) {
+    const path = await showSaveDialog({
+      defaultPath: filename,
+      filters: [{ name: "PDF document", extensions: ["pdf"] }],
+    });
+    if (!path) return false;
+    await invoke("write_binary_export", {
+      path,
+      contents: Array.from(contents),
+    });
+    return true;
+  }
+  const blob = new Blob([contents as BlobPart], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  return true;
+}
+
+function PrintablePaper({
+  text,
+  kind,
+}: {
+  text: string;
+  kind: "question" | "answer";
+}) {
+  return (
+    <article className={`paper-print-copy paper-print-${kind}`}>
+      {text.split(/\r?\n/).map((line, index) => {
+        if (!line.trim()) return <div className="paper-print-space" key={index}>&nbsp;</div>;
+        if (index === 0) return <h1 key={index}>{line}</h1>;
+        if (/^(?:sources?:|instructions|section\b|answer key|teacher copy)/i.test(line)) {
+          return <h2 key={index}>{line}</h2>;
+        }
+        return <p key={index}>{line}</p>;
+      })}
+    </article>
+  );
 }
 
 function AssistantView({
   api,
   classrooms,
+  students,
+  assignments,
 }: {
   api: CinderApi;
   classrooms: Classroom[];
+  students: User[];
+  assignments: Assignment[];
 }) {
-  const [mode, setMode] = useState<"chat" | "paper">("chat");
+  const [mode, setMode] = useState<"chat" | "paper" | "saved">("chat");
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -3332,16 +3421,163 @@ function AssistantView({
   ]);
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
+  const [contextClassroomId, setContextClassroomId] = useState(
+    classrooms[0]?.id ?? "",
+  );
+  const [includeNames, setIncludeNames] = useState(false);
+  const [includeScores, setIncludeScores] = useState(true);
+  const [materials, setMaterials] = useState<StudyNode[]>([]);
+  const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
+  const [contextStatus, setContextStatus] = useState(
+    "Scores use aliases until student names are enabled.",
+  );
+  const [savedPapers, setSavedPapers] = useState<SavedQuestionPaper[]>([]);
+  const [papersLoading, setPapersLoading] = useState(true);
+  const [activePaperId, setActivePaperId] = useState(() =>
+    localStorage.getItem(ACTIVE_PAPER_KEY),
+  );
+  const [newPaperVersion, setNewPaperVersion] = useState(0);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const assistantMountedRef = useRef(true);
+  useEffect(() => {
+    assistantMountedRef.current = true;
+    return () => {
+      assistantMountedRef.current = false;
+    };
+  }, []);
   useEffect(() => {
     void api.aiSettings().then(setSettings);
   }, [api]);
+  useEffect(() => {
+    if (!contextClassroomId && classrooms[0]) {
+      setContextClassroomId(classrooms[0].id);
+    }
+  }, [classrooms, contextClassroomId]);
+  useEffect(() => {
+    void api
+      .tree()
+      .then((result) => setMaterials(result.nodes.filter((node) => node.kind === "pdf")))
+      .catch(() => setMaterials([]));
+  }, [api]);
+  useEffect(() => {
+    let cancelled = false;
+    void listSavedQuestionPapers()
+      .then((papers) => {
+        if (!cancelled) setSavedPapers(papers);
+      })
+      .finally(() => {
+        if (!cancelled) setPapersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   useEffect(() => {
     messagesRef.current?.scrollTo({
       top: messagesRef.current.scrollHeight,
       behavior: "smooth",
     });
   }, [messages, busy]);
+
+  const availableMaterials = materials.filter(
+    (material) =>
+      !contextClassroomId || material.classroom_id === contextClassroomId,
+  );
+
+  const buildCopilotContext = async () => {
+    const classroom = classrooms.find((item) => item.id === contextClassroomId);
+    if (!classroom) return undefined;
+    setContextStatus("Refreshing classroom context…");
+    const roomAssignments = assignments.filter(
+      (assignment) =>
+        assignment.classroom_id === classroom.id && assignment.status !== "draft",
+    );
+    const rosterResult = await api.classroomRoster(classroom.id);
+    const submissions = includeScores
+      ? await Promise.all(
+          roomAssignments.map(async (assignment) => ({
+            assignment,
+            submissions: await api.submissions(assignment.id),
+          })),
+        )
+      : [];
+    const submissionsByStudent = new Map<string, Map<string, Submission>>();
+    submissions.forEach(({ assignment, submissions: entries }) => {
+      entries.forEach((submission) => {
+        const current = submissionsByStudent.get(submission.student_id) ?? new Map();
+        current.set(assignment.id, submission);
+        submissionsByStudent.set(submission.student_id, current);
+      });
+    });
+
+    const lines = [
+      `Classroom: ${classroom.name}`,
+      `Subject code: ${classroom.subject_code || "Not set"}`,
+      `Student accounts in school: ${students.length}`,
+      "Assignments:",
+      ...roomAssignments.map(
+        (assignment, index) =>
+          `A${index + 1}: ${assignment.title} (${assignment.max_points} points, ${assignment.status})`,
+      ),
+    ];
+    if (includeScores) {
+      lines.push("Student scores:");
+      for (const [index, student] of rosterResult.students.entries()) {
+        const name = includeNames ? student.display_name : `Student ${index + 1}`;
+        const scores = roomAssignments.map((assignment, assignmentIndex) => {
+          const submission = submissionsByStudent.get(student.id)?.get(assignment.id);
+          if (!submission) return `A${assignmentIndex + 1}=not submitted`;
+          const points = submission.grade?.points;
+          return `A${assignmentIndex + 1}=${points ?? "ungraded"}/${assignment.max_points}`;
+        });
+        lines.push(`${name}: ${scores.join(", ") || "No assignments"}`);
+        if (lines.join("\n").length > 8_500) {
+          lines.push("Additional score rows were omitted to stay within the AI context limit.");
+          break;
+        }
+      }
+    } else {
+      lines.push(`Roster: ${rosterResult.students.length} students; scores were not included.`);
+      if (includeNames) {
+        lines.push(
+          `Student names: ${rosterResult.students.map((student) => student.display_name).join(", ")}`,
+        );
+      }
+    }
+
+    const selectedNodes = selectedMaterials
+      .map((id) => materials.find((material) => material.id === id))
+      .filter((material): material is StudyNode => Boolean(material));
+    if (selectedNodes.length) lines.push("Selected material extracts:");
+    const perMaterialLimit = Math.max(
+      2_000,
+      Math.floor(10_000 / Math.max(1, selectedNodes.length)),
+    );
+    const materialWarnings: string[] = [];
+    for (const material of selectedNodes) {
+      try {
+        const extracted = await extractPdfText(
+          await api.materialBlob(material.id),
+          material.name,
+        );
+        lines.push(
+          `MATERIAL: ${material.name} (${compactPageRanges(extracted.pages)})\n${extracted.text.slice(0, perMaterialLimit)}`,
+        );
+      } catch (failure) {
+        materialWarnings.push(
+          failure instanceof Error
+            ? failure.message
+            : `${material.name} could not be read.`,
+        );
+      }
+    }
+    const context = lines.join("\n").slice(0, 19_500);
+    setContextStatus(
+      `Using ${rosterResult.students.length} students, ${roomAssignments.length} assignments${includeNames ? ", names" : ", aliases"}${includeScores ? ", scores" : ""}, and ${selectedNodes.length - materialWarnings.length} material(s).${materialWarnings.length ? ` ${materialWarnings.join(" ")}` : ""}`,
+    );
+    return context;
+  };
+
   const send = async () => {
     if (!prompt.trim()) return;
     const outgoing: ChatMessage[] = [
@@ -3352,8 +3588,10 @@ function AssistantView({
     setPrompt("");
     setBusy(true);
     try {
+      const context = await buildCopilotContext();
       const result = await api.chat(
         outgoing.filter((item) => item.role !== "system"),
+        context,
       );
       setMessages([
         ...outgoing,
@@ -3374,6 +3612,44 @@ function AssistantView({
       setBusy(false);
     }
   };
+
+  const savePaperRecord = useCallback(async (paper: SavedQuestionPaper) => {
+    await saveQuestionPaper(paper);
+    localStorage.setItem(ACTIVE_PAPER_KEY, paper.id);
+    if (!assistantMountedRef.current) return;
+    setSavedPapers((current) =>
+      [paper, ...current.filter((item) => item.id !== paper.id)].sort((left, right) =>
+        right.updatedAt.localeCompare(left.updatedAt),
+      ),
+    );
+    setActivePaperId(paper.id);
+  }, []);
+
+  const startNewPaper = useCallback(() => {
+    setActivePaperId(null);
+    localStorage.removeItem(ACTIVE_PAPER_KEY);
+    setNewPaperVersion((version) => version + 1);
+    setMode("paper");
+  }, []);
+
+  const openPaper = useCallback((id: string) => {
+    setActivePaperId(id);
+    localStorage.setItem(ACTIVE_PAPER_KEY, id);
+    setMode("paper");
+  }, []);
+
+  const removePaper = useCallback(async (id: string) => {
+    await deleteQuestionPaper(id);
+    setSavedPapers((current) => current.filter((paper) => paper.id !== id));
+    if (activePaperId === id) {
+      setActivePaperId(null);
+      localStorage.removeItem(ACTIVE_PAPER_KEY);
+    }
+  }, [activePaperId]);
+
+  const activePaper =
+    savedPapers.find((paper) => paper.id === activePaperId) ?? null;
+
   return (
     <div className="assistant-page">
       <div className="assistant-mode-switch" role="tablist" aria-label="AI tools">
@@ -3388,6 +3664,12 @@ function AssistantView({
           onClick={() => setMode("paper")}
         >
           Create question paper
+        </Button>
+        <Button
+          variant={mode === "saved" ? "primary" : "secondary"}
+          onClick={() => setMode("saved")}
+        >
+          Saved papers{savedPapers.length ? ` (${savedPapers.length})` : ""}
         </Button>
       </div>
       {mode === "chat" ? (
@@ -3427,37 +3709,203 @@ function AssistantView({
               </Button>
             </div>
           </Panel>
-          <AiSettingsPanel api={api} settings={settings} onSettings={setSettings} />
+          <div className="assistant-side-stack">
+            <Panel title="Copilot context" eyebrow="Teacher controlled">
+              <div className="form-stack copilot-context">
+                <Field label="Classroom">
+                  <select
+                    value={contextClassroomId}
+                    onChange={(event) => {
+                      setContextClassroomId(event.target.value);
+                      setSelectedMaterials([]);
+                    }}
+                  >
+                    {classrooms.map((classroom) => (
+                      <option value={classroom.id} key={classroom.id}>
+                        {classroom.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <label className="check-field">
+                  <input
+                    type="checkbox"
+                    checked={includeScores}
+                    onChange={(event) => setIncludeScores(event.target.checked)}
+                  />
+                  <span>Include assignment scores</span>
+                </label>
+                <label className="check-field">
+                  <input
+                    type="checkbox"
+                    checked={includeNames}
+                    onChange={(event) => setIncludeNames(event.target.checked)}
+                  />
+                  <span>Include student names</span>
+                </label>
+                <div className="copilot-materials">
+                  <strong>Material text</strong>
+                  {availableMaterials.length ? (
+                    availableMaterials.map((material) => (
+                      <label className="check-field" key={material.id}>
+                        <input
+                          type="checkbox"
+                          checked={selectedMaterials.includes(material.id)}
+                          onChange={(event) =>
+                            setSelectedMaterials((current) =>
+                              event.target.checked
+                                ? [...current, material.id].slice(0, 4)
+                                : current.filter((id) => id !== material.id),
+                            )
+                          }
+                        />
+                        <span>{material.name}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <small>No PDF materials in this classroom.</small>
+                  )}
+                </div>
+                <small>{contextStatus}</small>
+                <p className="ai-warning">
+                  Enabled names, scores and PDF text leave the school network when a cloud AI provider is used.
+                </p>
+              </div>
+            </Panel>
+            <AiSettingsPanel api={api} settings={settings} onSettings={setSettings} />
+          </div>
         </div>
+      ) : mode === "paper" ? (
+        <QuestionPaperStudio
+          key={activePaperId ?? `new-${newPaperVersion}`}
+          api={api}
+          classrooms={classrooms}
+          activePaper={activePaper}
+          onSave={savePaperRecord}
+          onCreateNew={startNewPaper}
+        />
       ) : (
-        <QuestionPaperStudio api={api} classrooms={classrooms} />
+        <SavedPapersView
+          papers={savedPapers}
+          loading={papersLoading}
+          onOpen={openPaper}
+          onDelete={removePaper}
+          onCreate={startNewPaper}
+        />
       )}
     </div>
+  );
+}
+
+function SavedPapersView({
+  papers,
+  loading,
+  onOpen,
+  onDelete,
+  onCreate,
+}: {
+  papers: SavedQuestionPaper[];
+  loading: boolean;
+  onOpen: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
+  onCreate: () => void;
+}) {
+  return (
+    <Panel
+      className="saved-papers-panel panel-flush"
+      title="Saved question papers"
+      eyebrow="Teacher library"
+      action={<Button variant="primary" icon="plus" onClick={onCreate}>New paper</Button>}
+    >
+      {loading ? (
+        <div className="editor-loading">Opening saved papers…</div>
+      ) : papers.length ? (
+        <div className="saved-paper-list">
+          {papers.map((paper) => (
+            <article className="saved-paper-row" key={paper.id}>
+              <button type="button" onClick={() => onOpen(paper.id)}>
+                <Icon name="document" />
+                <span>
+                  <strong>{paper.title}</strong>
+                  <small>
+                    {paper.subject || "General"} · Updated {formatDate(paper.updatedAt)}
+                  </small>
+                  <small>{sourceSummary(paper.sources)}</small>
+                </span>
+              </button>
+              <Button
+                variant="ghost"
+                icon="trash"
+                onClick={() => {
+                  if (window.confirm(`Delete “${paper.title}” from this computer?`)) {
+                    void onDelete(paper.id);
+                  }
+                }}
+              >
+                Delete
+              </Button>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon="document"
+          title="No saved papers"
+          description="Created papers and their separate answer keys will be stored here on this teacher computer."
+          action={<Button variant="primary" onClick={onCreate}>Create a paper</Button>}
+        />
+      )}
+    </Panel>
   );
 }
 
 function QuestionPaperStudio({
   api,
   classrooms,
+  activePaper,
+  onSave,
+  onCreateNew,
 }: {
   api: CinderApi;
   classrooms: Classroom[];
+  activePaper: SavedQuestionPaper | null;
+  onSave: (paper: SavedQuestionPaper) => Promise<void>;
+  onCreateNew: () => void;
 }) {
   const [materials, setMaterials] = useState<StudyNode[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [localFiles, setLocalFiles] = useState<File[]>([]);
-  const [title, setTitle] = useState("Practice question paper");
-  const [subject, setSubject] = useState("");
+  const [paperId, setPaperId] = useState(activePaper?.id ?? "");
+  const [createdAt, setCreatedAt] = useState(
+    activePaper?.createdAt ?? new Date().toISOString(),
+  );
+  const [title, setTitle] = useState(
+    activePaper?.title ?? "Practice question paper",
+  );
+  const [subject, setSubject] = useState(activePaper?.subject ?? "");
   const [difficulty, setDifficulty] = useState("Mixed");
   const [questionCount, setQuestionCount] = useState(10);
   const [totalMarks, setTotalMarks] = useState(20);
   const [instructions, setInstructions] = useState("");
   const [document, setDocument] = useState<Record<string, unknown>>(
-    EMPTY_PAPER_DOCUMENT,
+    activePaper?.questionDocument ?? EMPTY_PAPER_DOCUMENT,
   );
-  const [paperText, setPaperText] = useState("");
-  const [status, setStatus] = useState("");
+  const [paperText, setPaperText] = useState(activePaper?.questionText ?? "");
+  const [answerDocument, setAnswerDocument] = useState<Record<string, unknown>>(
+    activePaper?.answerKeyDocument ?? EMPTY_PAPER_DOCUMENT,
+  );
+  const [answerKeyText, setAnswerKeyText] = useState(
+    activePaper?.answerKeyText ?? "",
+  );
+  const [sources, setSources] = useState<PaperSourceCitation[]>(
+    activePaper?.sources ?? [],
+  );
+  const [editorView, setEditorView] = useState<"question" | "answer">("question");
+  const [status, setStatus] = useState(
+    activePaper ? "Saved paper opened." : "",
+  );
   const [busy, setBusy] = useState(false);
+  const latestPaperRef = useRef<SavedQuestionPaper | null>(activePaper);
 
   useEffect(() => {
     void api
@@ -3468,19 +3916,65 @@ function QuestionPaperStudio({
       .catch(() => setMaterials([]));
   }, [api]);
 
+  latestPaperRef.current = paperId && paperText
+    ? {
+        id: paperId,
+        title,
+        subject,
+        questionText: paperText,
+        questionDocument: document,
+        answerKeyText,
+        answerKeyDocument: answerDocument,
+        sources,
+        createdAt,
+        updatedAt: new Date().toISOString(),
+      }
+    : null;
+
+  useEffect(() => {
+    const paper = latestPaperRef.current;
+    if (!paper) return;
+    const timer = window.setTimeout(() => {
+      void onSave(paper).then(() => setStatus("Saved to this teacher computer."));
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [
+    answerDocument,
+    answerKeyText,
+    createdAt,
+    document,
+    onSave,
+    paperId,
+    paperText,
+    sources,
+    subject,
+    title,
+  ]);
+
+  useEffect(
+    () => () => {
+      if (latestPaperRef.current) void onSave(latestPaperRef.current);
+    },
+    [onSave],
+  );
+
   const generate = async () => {
     setBusy(true);
     setStatus("Reading references…");
     try {
       const references: string[] = [];
+      const nextSources: PaperSourceCitation[] = [];
       const warnings: string[] = [];
       for (const id of selected) {
         const material = materials.find((item) => item.id === id);
         if (!material) continue;
         try {
-          references.push(
-            `REFERENCE: ${material.name}\n${await extractPdfText(await api.materialBlob(id), material.name)}`,
+          const extracted = await extractPdfText(
+            await api.materialBlob(id),
+            material.name,
           );
+          references.push(`REFERENCE: ${material.name}\n${extracted.text}`);
+          nextSources.push({ name: material.name, pages: extracted.pages });
         } catch (failure) {
           warnings.push(
             failure instanceof Error ? failure.message : `${material.name} could not be read.`,
@@ -3489,9 +3983,9 @@ function QuestionPaperStudio({
       }
       for (const file of localFiles) {
         try {
-          references.push(
-            `REFERENCE: ${file.name}\n${await extractPdfText(file, file.name)}`,
-          );
+          const extracted = await extractPdfText(file, file.name);
+          references.push(`REFERENCE: ${file.name}\n${extracted.text}`);
+          nextSources.push({ name: file.name, pages: extracted.pages });
         } catch (failure) {
           warnings.push(
             failure instanceof Error ? failure.message : `${file.name} could not be read.`,
@@ -3503,19 +3997,72 @@ function QuestionPaperStudio({
         throw new Error(warnings.join(" ") || "None of the references could be read.");
       }
       setStatus("Creating question paper…");
-      const request = `Create a classroom-ready question paper titled "${title.trim()}". Subject: ${subject.trim() || "General"}. Difficulty: ${difficulty}. Number of questions: ${questionCount}. Total marks: ${totalMarks}. ${instructions.trim() ? `Teacher instructions: ${instructions.trim()}` : ""} Use the supplied references when present. Return only the printable question paper, with clear instructions, numbered questions, marks beside each question, and an answer key on a clearly separated final section. Do not include commentary, JSON, Markdown tables, or invented citations. Use complete, grammatically correct sentences and neutral pronouns when a person's pronouns are unknown.`;
+      const request = `Create a classroom-ready assessment. Subject: ${subject.trim() || "General"}. Difficulty: ${difficulty}. Number of questions: ${questionCount}. Total marks: ${totalMarks}. ${instructions.trim() ? `Teacher instructions: ${instructions.trim()}` : ""} Use only the supplied references when references are present. Return exactly two plain-text sections. Begin the student section with [CINDER_QUESTIONS]. Begin the teacher-only answer section with [CINDER_ANSWER_KEY]. Do not repeat the title, include sources, use JSON, use Markdown tables, or add commentary. Number every question, show its marks, and put [WORKING_SPACE] on a separate line after each complete question (after any answer options) so Cinder can leave room for written work. The answer key must be concise, numbered to match, and must not appear inside the student section. Never invent a source or page number. Use complete, grammatically correct sentences and neutral pronouns when a person's pronouns are unknown.`;
+      const perReferenceLimit = Math.max(
+        2_500,
+        Math.floor(19_000 / Math.max(1, references.length)),
+      );
+      const referenceContext = references
+        .map((reference) => reference.slice(0, perReferenceLimit))
+        .join("\n\n")
+        .slice(0, 19_500);
       const result = await api.chat(
         [{ role: "user", content: request }],
-        references.join("\n\n").slice(0, 60_000) || undefined,
+        referenceContext || undefined,
       );
       const text = result.content.trim();
       if (!text) throw new Error("The AI returned an empty paper.");
-      setPaperText(text);
-      setDocument(textToDocument(text));
+      let parsed = splitPaperResponse(text);
+      if (!parsed.questionText) throw new Error("The AI did not return any questions.");
+      if (!parsed.answerKeyText) {
+        const fallback = await api.chat(
+          [
+            {
+              role: "user",
+              content:
+                "Create only a numbered teacher answer key for the supplied question paper. Do not repeat the questions or add commentary.",
+            },
+          ],
+          `QUESTION PAPER\n${parsed.questionText}`.slice(0, 19_500),
+        );
+        parsed = { ...parsed, answerKeyText: fallback.content.trim() };
+      }
+      const nextQuestionText = composeQuestionPaper(
+        title,
+        subject,
+        nextSources,
+        parsed.questionText,
+      );
+      const nextAnswerText = composeAnswerKey(title, parsed.answerKeyText);
+      const nextQuestionDocument = textToDocument(nextQuestionText);
+      const nextAnswerDocument = textToDocument(nextAnswerText);
+      const id = createPaperId();
+      const now = new Date().toISOString();
+      const savedPaper: SavedQuestionPaper = {
+        id,
+        title: title.trim(),
+        subject: subject.trim(),
+        questionText: nextQuestionText,
+        questionDocument: nextQuestionDocument,
+        answerKeyText: nextAnswerText,
+        answerKeyDocument: nextAnswerDocument,
+        sources: nextSources,
+        createdAt: now,
+        updatedAt: now,
+      };
+      setPaperId(id);
+      setCreatedAt(now);
+      setSources(nextSources);
+      setPaperText(nextQuestionText);
+      setDocument(nextQuestionDocument);
+      setAnswerKeyText(nextAnswerText);
+      setAnswerDocument(nextAnswerDocument);
+      setEditorView("question");
+      await onSave(savedPaper);
       setStatus(
         warnings.length
-          ? `Paper created. ${warnings.join(" ")}`
-          : "Paper created. Review it before printing.",
+          ? `Paper and answer key saved. ${warnings.join(" ")}`
+          : "Paper and separate answer key saved. Review both before printing.",
       );
     } catch (failure) {
       setStatus(
@@ -3528,12 +4075,19 @@ function QuestionPaperStudio({
     }
   };
 
+  const activeText = editorView === "question" ? paperText : answerKeyText;
+  const activeDocument = editorView === "question" ? document : answerDocument;
+  const activeLabel = editorView === "question" ? "Question paper" : "Answer key";
+  const activeFilename = `${title}${editorView === "answer" ? " answer key" : ""}`;
+
   const exportPaper = async (extension: "doc" | "html" | "txt") => {
     try {
       const contents =
-        extension === "txt" ? paperText : paperHtml(title, paperText);
+        extension === "txt"
+          ? activeText
+          : paperHtml(activeFilename, activeText, activeLabel);
       const saved = await saveTextExport(
-        title,
+        activeFilename,
         contents,
         extension,
         extension === "txt"
@@ -3550,6 +4104,63 @@ function QuestionPaperStudio({
           : "The question paper could not be exported.",
       );
     }
+  };
+
+  const downloadPdf = async () => {
+    try {
+      setStatus(`Creating ${activeLabel.toLowerCase()} PDF…`);
+      const contents = await createPaperPdf({
+        title: activeFilename,
+        text: activeText,
+        documentLabel: activeLabel,
+      });
+      if (await savePdfExport(activeFilename, contents)) {
+        setStatus(`${activeLabel} PDF saved.`);
+      }
+    } catch (failure) {
+      setStatus(
+        failure instanceof Error
+          ? failure.message
+          : "The PDF could not be created.",
+      );
+    }
+  };
+
+  const printPaper = () => {
+    const target = editorView === "question" ? "question" : "answer";
+    window.document.body.dataset.cinderPaperPrint = target;
+    const cleanup = () => {
+      delete window.document.body.dataset.cinderPaperPrint;
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup, { once: true });
+    window.requestAnimationFrame(() => window.print());
+    window.setTimeout(cleanup, 60_000);
+  };
+
+  const saveCurrentPaper = async () => {
+    if (!paperText.trim()) {
+      setStatus("Create or write a question paper before saving it.");
+      return;
+    }
+    const id = paperId || createPaperId();
+    const now = new Date().toISOString();
+    const paper: SavedQuestionPaper = {
+      id,
+      title: title.trim() || "Untitled question paper",
+      subject: subject.trim(),
+      questionText: paperText,
+      questionDocument: document,
+      answerKeyText,
+      answerKeyDocument: answerDocument,
+      sources,
+      createdAt: paperId ? createdAt : now,
+      updatedAt: now,
+    };
+    setPaperId(id);
+    if (!paperId) setCreatedAt(now);
+    await onSave(paper);
+    setStatus("Saved to this teacher computer.");
   };
 
   return (
@@ -3634,12 +4245,16 @@ function QuestionPaperStudio({
             ) : null}
             <small>
               Selected PDF text is sent to the AI provider configured on this
-              Teacher computer. Image-only scans require OCR first.
+              Teacher computer. Cinder samples each selected reference to fit
+              the request limit. Image-only scans require OCR first.
             </small>
           </div>
-          <Button variant="primary" icon="assistant" onClick={() => void generate()} disabled={busy || !title.trim()}>
+          <div className="list-actions">
+            <Button variant="primary" icon="assistant" onClick={() => void generate()} disabled={busy || !title.trim()}>
             {busy ? "Creating…" : "Create editable paper"}
-          </Button>
+            </Button>
+            <Button onClick={onCreateNew}>Clear for new paper</Button>
+          </div>
           {status ? <p className={status.includes("could not") ? "form-error" : "form-hint"}>{status}</p> : null}
         </div>
       </Panel>
@@ -3647,21 +4262,46 @@ function QuestionPaperStudio({
         {paperText ? (
           <>
             <div className="paper-export-bar">
+              <div className="paper-document-switch" role="tablist" aria-label="Paper document">
+                <Button
+                  variant={editorView === "question" ? "primary" : "secondary"}
+                  onClick={() => setEditorView("question")}
+                >
+                  Question paper
+                </Button>
+                <Button
+                  variant={editorView === "answer" ? "primary" : "secondary"}
+                  onClick={() => setEditorView("answer")}
+                >
+                  Answer key
+                </Button>
+              </div>
+              <Button onClick={() => void saveCurrentPaper()}>Save paper</Button>
+              <Button variant="primary" icon="download" onClick={() => void downloadPdf()}>
+                Download PDF
+              </Button>
+              <Button onClick={printPaper}>Print</Button>
               <Button icon="download" onClick={() => void exportPaper("doc")}>Export .doc</Button>
-              <Button icon="download" onClick={() => void exportPaper("html")}>Export HTML</Button>
               <Button icon="download" onClick={() => void exportPaper("txt")}>Export text</Button>
-              <Button variant="primary" onClick={() => window.print()}>Print / Save PDF</Button>
             </div>
             <div className="question-paper-print">
               <DocumentEditor
-                value={document}
-                status="Edit freely, then export or print"
+                key={editorView}
+                value={activeDocument}
+                status={`${activeLabel} · edits save automatically`}
                 onChange={(next, plaintext) => {
-                  setDocument(next);
-                  setPaperText(plaintext);
+                  if (editorView === "question") {
+                    setDocument(next);
+                    setPaperText(plaintext);
+                  } else {
+                    setAnswerDocument(next);
+                    setAnswerKeyText(plaintext);
+                  }
                 }}
               />
             </div>
+            <PrintablePaper text={paperText} kind="question" />
+            <PrintablePaper text={answerKeyText} kind="answer" />
           </>
         ) : (
           <EmptyState icon="document" title="No paper yet" description="Choose the setup and optional references, then create an editable question paper." />

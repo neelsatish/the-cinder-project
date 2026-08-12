@@ -15,6 +15,7 @@ import {
   BrandMark,
   Button,
   cacheGet,
+  cacheRemove,
   cacheSet,
   clearSessionValue,
   clearStudentCache,
@@ -972,6 +973,7 @@ function AssignmentsView({
   const [text, setText] = useState("");
   const [status, setStatus] = useState("Draft saved on this computer");
   const [busy, setBusy] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
   const activeAssignments = assignments.filter(
     (assignment) => assignment.status !== "closed",
   );
@@ -981,12 +983,25 @@ function AssignmentsView({
 
   useEffect(() => {
     if (!selected) return;
+    const assignmentId = selected.id;
+    let cancelled = false;
+    setDraftReady(false);
+    setDocument({ type: "doc", content: [{ type: "paragraph" }] });
+    setText("");
+    setStatus("Preparing a clean draft…");
     void (async () => {
-      const existing = submissions[selected.id];
+      const existing = submissions[assignmentId];
       const cached = await cacheGet<{ doc: DocumentValue; text: string }>(
-        `assignment-draft:${selected.id}`,
+        `assignment-draft:${assignmentId}`,
       );
-      setDocument(cached?.doc ?? existing?.version?.doc_json ?? EMPTY_DOCUMENT);
+      if (cancelled) return;
+      setDocument(
+        cached?.doc ??
+          existing?.version?.doc_json ?? {
+            type: "doc",
+            content: [{ type: "paragraph" }],
+          },
+      );
       setText(cached?.text ?? existing?.version?.plaintext ?? "");
       setStatus(
         cached
@@ -995,8 +1010,12 @@ function AssignmentsView({
             ? `Submission v${existing.version?.version_number ?? 1}`
             : "New draft",
       );
+      setDraftReady(true);
     })();
-  }, [selected, submissions]);
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id, selected ? submissions[selected.id]?.version?.id : null]);
 
   const submit = async () => {
     if (!selected || !text.trim()) return;
@@ -1020,6 +1039,9 @@ function AssignmentsView({
           document,
           text,
           submissions[selected.id] ? "Updated work" : undefined,
+        );
+        await cacheRemove(`assignment-draft:${selected.id}`).catch(
+          () => undefined,
         );
         setStatus("Submitted successfully");
         await onUpdated();
@@ -1078,7 +1100,7 @@ function AssignmentsView({
           <Button
             variant="primary"
             onClick={() => void submit()}
-            disabled={completed || busy || !text.trim()}
+            disabled={completed || busy || !draftReady || !text.trim()}
           >
             {completed
               ? "Completed"
@@ -1097,26 +1119,30 @@ function AssignmentsView({
           </p>
         </div>
         <div className="assignment-editor">
-          <DocumentEditor
-            key={selected.id}
-            value={document}
-            status={status}
-            onChange={(next, plaintext) => {
-              setDocument(next);
-              setText(plaintext);
-              setStatus("Saving draft…");
-              void cacheSet(`assignment-draft:${selected.id}`, {
-                doc: next,
-                text: plaintext,
-              }).then(() => setStatus("Draft saved on this computer"));
-            }}
-            onSaveRequest={() =>
-              void cacheSet(`assignment-draft:${selected.id}`, {
-                doc: document,
-                text,
-              }).then(() => setStatus("Draft saved on this computer"))
-            }
-          />
+          {draftReady ? (
+            <DocumentEditor
+              key={selected.id}
+              value={document}
+              status={status}
+              onChange={(next, plaintext) => {
+                setDocument(next);
+                setText(plaintext);
+                setStatus("Saving draft…");
+                void cacheSet(`assignment-draft:${selected.id}`, {
+                  doc: next,
+                  text: plaintext,
+                }).then(() => setStatus("Draft saved on this computer"));
+              }}
+              onSaveRequest={() =>
+                void cacheSet(`assignment-draft:${selected.id}`, {
+                  doc: document,
+                  text,
+                }).then(() => setStatus("Draft saved on this computer"))
+              }
+            />
+          ) : (
+            <div className="editor-loading">Preparing a clean draft…</div>
+          )}
         </div>
       </div>
     );

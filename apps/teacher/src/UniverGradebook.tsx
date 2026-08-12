@@ -15,7 +15,7 @@ import { FUniver } from "@univerjs/core/facade";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import sheetsEnUS from "@univerjs/preset-sheets-core/locales/en-US";
 import "@univerjs/preset-sheets-core/lib/index.css";
-import type { Assignment, User } from "@cinder/ui";
+import { useTheme, type Assignment, type User } from "@cinder/ui";
 import {
   assignmentForHeader,
   findGradebookAssignmentColumn,
@@ -91,11 +91,12 @@ const EMPTY_AI_CONTEXT: GradebookAiContext = {
   sheets: [],
 };
 
-function createSheetUniver(container: HTMLDivElement) {
+function createSheetUniver(container: HTMLDivElement, darkMode: boolean) {
   const univer = new Univer({
     logLevel: LogLevel.WARN,
     locale: LocaleType.EN_US,
     locales: { [LocaleType.EN_US]: mergeLocales(sheetsEnUS) },
+    darkMode,
   });
   const preset = UniverSheetsCorePreset({
     container,
@@ -241,6 +242,7 @@ function cellValueMatches(
 
 export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
   function UniverGradebook(props, ref) {
+    const { theme } = useTheme();
     const containerRef = useRef<HTMLDivElement>(null);
     const propsRef = useRef(props);
     const getContextRef = useRef<() => GradebookAiContext>(
@@ -258,6 +260,7 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
     const clearPreviewRef = useRef<() => void>(() => undefined);
     const resetWorkbookRef = useRef<() => void>(() => undefined);
     const syncAuthoritativeRef = useRef<() => void>(() => undefined);
+    const setDarkModeRef = useRef<(darkMode: boolean) => void>(() => undefined);
     propsRef.current = props;
 
     useImperativeHandle(
@@ -274,7 +277,11 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
 
     useEffect(() => {
       if (!containerRef.current) return;
-      const { univer, univerAPI } = createSheetUniver(containerRef.current);
+      const { univer, univerAPI } = createSheetUniver(
+        containerRef.current,
+        theme === "dark",
+      );
+      setDarkModeRef.current = (darkMode) => univerAPI.toggleDarkMode(darkMode);
       const workbook = univerAPI.createWorkbook(workbookData(propsRef.current));
       const sheet = workbook.getSheetByName("Gradebook");
       sheet?.setColumnWidth(0, 190);
@@ -763,6 +770,7 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         clearPreviewRef.current = () => undefined;
         resetWorkbookRef.current = () => undefined;
         syncAuthoritativeRef.current = () => undefined;
+        setDarkModeRef.current = () => undefined;
         applyActionsRef.current = () => ({
           applied: 0,
           rejected: ["The spreadsheet is still opening."],
@@ -770,6 +778,10 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         univer.dispose();
       };
     }, [props.classroomId]);
+
+    useEffect(() => {
+      setDarkModeRef.current(theme === "dark");
+    }, [theme]);
 
     useEffect(() => {
       syncAuthoritativeRef.current();

@@ -1,7 +1,7 @@
 {
   "name": "cinder",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "license": "Apache-2.0",
   "workspaces": [
     "apps/student",
@@ -19,6 +19,7 @@
     "build:student": "npm run build --workspace @cinder/student",
     "build:teacher": "npm run build --workspace @cinder/teacher",
     "test:gradebook-intent": "node --experimental-strip-types --test scripts/gradebook-intent.test.mjs",
+    "test:paper-logic": "node --experimental-strip-types --test scripts/paper-logic.test.mjs",
     "bundle:student": "npm run app:build --workspace @cinder/student",
     "bundle:teacher": "npm run app:build --workspace @cinder/teacher",
     "bundle:windows:student": "npm run app:build --workspace @cinder/student -- --bundles nsis",

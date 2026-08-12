@@ -1,6 +1,6 @@
 # Security review
 
-This review describes Cinder Matchbox 0.7.0 as of 11 August 2026. It is an
+This review describes Cinder Matchbox 0.8.0 as of 12 August 2026. It is an
 engineering security review, not an independent penetration test or a promise
 that the application has no vulnerabilities.
 
@@ -53,6 +53,10 @@ access or physical access to an unlocked computer.
 - Selected classroom context is placed in a quoted, explicitly untrusted prompt
   section. The model is told not to follow instructions contained in student or
   classroom data.
+- The Teacher copilot sends scores with anonymous aliases by default. Student
+  names and uploaded material text require visible teacher choices, and the UI
+  states when that selected data will leave the school network for a cloud AI
+  provider.
 
 ### Files and updates
 
@@ -62,6 +66,8 @@ access or physical access to an unlocked computer.
   a local classroom host. Downloads are streamed with a hard size limit and are
   opened with Tauri's native opener instead of a command shell.
 - Application Content Security Policies restrict scripts to packaged code.
+- PDF exports are generated locally, size-limited and checked for a PDF header;
+  the native writer accepts only a teacher-selected path ending in `.pdf`.
 - In-app updater payloads are signed. Teacher and Student use separate feeds so
   one role cannot replace the other.
 - Published releases include SHA-256 checksums.
@@ -99,9 +105,10 @@ large public rollout.
 ### School records are not a fully encrypted database
 
 API credentials and app sessions are protected, but names, submissions and
-grades in the SQLite database are not independently encrypted. Enable BitLocker
-on Windows or full-disk encryption on Linux where hardware and school policy
-permit it. Lock the Teacher OS account whenever the machine is unattended.
+grades in the SQLite database and saved question papers in the Teacher WebView
+profile are not independently encrypted. Enable BitLocker on Windows or
+full-disk encryption on Linux where hardware and school policy permit it. Lock
+the Teacher OS account whenever the machine is unattended.
 
 ### Backups are not implemented
 

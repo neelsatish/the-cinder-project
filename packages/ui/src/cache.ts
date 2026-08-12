@@ -41,6 +41,13 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
   });
 }
 
+export async function cacheRemove(key: string): Promise<void> {
+  const database = await openDatabase();
+  await transactionDone(database, "cache", "readwrite", (store) =>
+    store.delete(key),
+  );
+}
+
 export async function queueOffline(
   entry: Omit<OutboxEntry, "queuedAt">,
 ): Promise<void> {

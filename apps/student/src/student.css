@@ -232,7 +232,7 @@
   color: var(--muted);
 }
 .note-row.is-selected {
-  background: rgba(217, 99, 31, 0.11);
+  background: var(--accent-wash);
   box-shadow: inset 2px 0 var(--primary);
 }
 .note-titlebar {
@@ -283,7 +283,7 @@
   border-color: var(--warm);
   background: linear-gradient(
     145deg,
-    rgba(178, 78, 23, 0.13),
+    var(--accent-wash),
     var(--surface-lowest)
   );
 }

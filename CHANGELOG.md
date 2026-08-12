@@ -6,6 +6,35 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.8.0
+
+- Adopted the reduced Ember logo throughout Cinder Teacher and Cinder Student,
+  including the in-app mark and regenerated Windows, Linux and portable icon
+  sets from the supplied 1024 px source artwork.
+- Added a shared light and dark appearance system for both apps on Windows and
+  Linux, with light mode remaining the default and each device remembering its
+  choice.
+- Added a clearly labelled theme control to signed-out and signed-in screens
+  and matched the native Tauri window theme to the selected appearance.
+- Applied the documented Cinder Ground, Tallow, Char, Warm, Ember and Spark
+  palette to dark surfaces while retaining the calm Paper/Ash light scheme.
+- Integrated Univer's native dark mode so the Teacher Gradebook follows the app
+  theme without losing cell edits, AI previews or spreadsheet controls.
+- Kept printable note and question-paper pages light in both modes so on-screen
+  layout remains consistent with exported and printed documents.
+- Isolated every Student assignment draft so opening one assignment can no
+  longer display or save text from another assignment, while still restoring
+  that assignment's own local draft or submitted version.
+- Added a persistent Teacher question-paper library that survives navigation
+  and app restarts, records the selected source PDFs and page ranges at the top
+  of each paper, and keeps answer keys in a separate teacher-only document.
+- Added deliberate working space between generated questions, separate Print
+  and real Download PDF actions, and independent PDF, DOC and text exports for
+  the question paper and answer key.
+- Expanded the Teacher copilot with teacher-controlled classroom context:
+  current assignments and scores, optional student names, and up to four
+  selected uploaded materials, with a clear cloud-data warning.
+
 ## 0.7.0
 
 - Added matching 64-bit Cinder Teacher and Cinder Student installers for

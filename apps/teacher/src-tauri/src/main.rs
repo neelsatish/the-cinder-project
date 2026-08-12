@@ -31,6 +31,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             host_info,
             write_text_export,
+            write_binary_export,
             load_secure_session,
             save_secure_session,
             clear_secure_session,
@@ -93,6 +94,27 @@ fn write_text_export(path: String, contents: String) -> Result<(), String> {
         return Err("Cinder can only write CSV, HTML, DOC, or TXT exports.".into());
     }
     std::fs::write(&path, contents).map_err(|error| format!("Could not save the export: {error}"))
+}
+
+#[tauri::command]
+fn write_binary_export(path: String, contents: Vec<u8>) -> Result<(), String> {
+    const MAX_EXPORT_BYTES: usize = 20 * 1024 * 1024;
+    if contents.len() > MAX_EXPORT_BYTES {
+        return Err("The PDF export is larger than 20 MB.".into());
+    }
+    if contents.len() < 5 || !contents.starts_with(b"%PDF-") {
+        return Err("Cinder refused to write an invalid PDF export.".into());
+    }
+    let path = std::path::PathBuf::from(path);
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .ok_or_else(|| "Choose a filename ending in .pdf.".to_owned())?;
+    if extension != "pdf" {
+        return Err("Cinder can only write PDF files through this export.".into());
+    }
+    std::fs::write(&path, contents).map_err(|error| format!("Could not save the PDF: {error}"))
 }
 
 const SESSION_SECRET: &str = "teacher-session";

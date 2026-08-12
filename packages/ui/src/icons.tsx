@@ -1,4 +1,4 @@
-import type { ReactNode, SVGProps } from "react";
+import { useId, type ReactNode, type SVGProps } from "react";
 
 export type IconName =
   | "dashboard"
@@ -27,7 +27,9 @@ export type IconName =
   | "edit"
   | "trash"
   | "spreadsheet"
-  | "download";
+  | "download"
+  | "moon"
+  | "sun";
 
 const paths: Record<IconName, ReactNode> = {
   dashboard: (
@@ -173,6 +175,13 @@ const paths: Record<IconName, ReactNode> = {
       <path d="M5 21h14" />
     </>
   ),
+  moon: <path d="M20.2 15.2A8.5 8.5 0 0 1 8.8 3.8 8.5 8.5 0 1 0 20.2 15.2Z" />,
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" />
+    </>
+  ),
 };
 
 export function Icon({
@@ -196,36 +205,54 @@ export function Icon({
 }
 
 export function BrandMark({ size = 34 }: { size?: number }) {
-  const blade = "M0 0 C52.8-62 217.8-31 330 0 C204.6 11.56 52.8 10.2 0 0Z";
-  const sideBlade = "M0 0 C48-58 198-29 300 0 C186 10.88 48 9.6 0 0Z";
-  const wing = "M0 0 C30.4-50 125.4-25 190 0 C117.8 13.6 30.4 12 0 0Z";
-  const middle = "M0 0 C37.12-44 153.12-22 232 0 C143.84 8.16 37.12 7.2 0 0Z";
-  const middleSide =
-    "M0 0 C32.64-40 134.64-20 204 0 C126.48 7.48 32.64 6.6 0 0Z";
-  const core = "M0 0 C20.48-26 84.48-13 128 0 C79.36 5.1 20.48 4.5 0 0Z";
-  const coreSide = "M0 0 C16.64-22 68.64-11 104 0 C64.48 4.42 16.64 3.9 0 0Z";
+  const gradientId = useId();
+  const outerGradient = `${gradientId}-outer`;
+  const midGradient = `${gradientId}-mid`;
+  const coreGradient = `${gradientId}-core`;
+  const dotGradient = `${gradientId}-dot`;
+
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" aria-label="Cinder">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      role="img"
+      aria-label="Cinder"
+    >
+      <defs>
+        <linearGradient id={outerGradient} x1="0" y1="0" x2="20" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#A5602E" />
+          <stop offset="1" stopColor="#6E3216" />
+        </linearGradient>
+        <linearGradient id={midGradient} x1="0" y1="0" x2="26" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#F0A15C" />
+          <stop offset="1" stopColor="#DD8B36" />
+        </linearGradient>
+        <linearGradient id={coreGradient} x1="0" y1="0" x2="33" y2="0" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#FFC78A" />
+          <stop offset="1" stopColor="#D9631F" />
+        </linearGradient>
+        <radialGradient id={dotGradient} cx="0" cy="-2" r="5" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#FFB566" />
+          <stop offset="1" stopColor="#6E3216" />
+        </radialGradient>
+      </defs>
       <rect width="64" height="64" rx="14" fill="#221309" />
-      <g transform="translate(32 39) scale(.078)">
-        <g fill="#6E3216">
-          <path d={blade} transform="rotate(-90)" />
-          <path d={sideBlade} transform="rotate(-122)" />
-          <path d={sideBlade} transform="rotate(-58)" />
-          <path d={wing} transform="rotate(-158)" />
-          <path d={wing} transform="rotate(-22)" />
+      <g transform="translate(32 49)">
+        <g fill={`url(#${outerGradient})`}>
+          <path d="M0 0 Q6.4 -6.9 20 0 Q10 3 0 0 Z" transform="rotate(-161)" />
+          <path d="M0 0 Q6.4 -6.9 20 0 Q10 3 0 0 Z" transform="rotate(-19)" />
         </g>
-        <g fill="#DD8B36">
-          <path d={middle} transform="rotate(-90)" />
-          <path d={middleSide} transform="rotate(-117)" />
-          <path d={middleSide} transform="rotate(-63)" />
+        <g fill={`url(#${midGradient})`}>
+          <path d="M0 0 Q8.3 -8.8 26 0 Q13 3.9 0 0 Z" transform="rotate(-126)" />
+          <path d="M0 0 Q8.3 -8.8 26 0 Q13 3.9 0 0 Z" transform="rotate(-54)" />
         </g>
-        <g fill="#D9631F">
-          <path d={core} transform="rotate(-90)" />
-          <path d={coreSide} transform="rotate(-110)" />
-          <path d={coreSide} transform="rotate(-70)" />
-        </g>
-        <circle r="17" fill="#6E3216" />
+        <path
+          d="M0 0 Q10.6 -10.6 33 0 Q16.5 4.7 0 0 Z"
+          transform="rotate(-90)"
+          fill={`url(#${coreGradient})`}
+        />
+        <circle r="4" fill={`url(#${dotGradient})`} />
       </g>
     </svg>
   );

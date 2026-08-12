@@ -5,6 +5,8 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:app:allow-set-app-theme",
+    "core:webview:allow-print",
     "dialog:allow-open",
     "dialog:allow-save",
     "dialog:allow-message",

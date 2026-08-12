@@ -54,6 +54,7 @@ jobs:
         run: |
           npm run typecheck
           npm run test:gradebook-intent
+          npm run test:paper-logic
           npm run audit:dependencies
           cargo fmt --all -- --check
           cargo test --workspace --locked
@@ -120,6 +121,7 @@ jobs:
         run: |
           npm run typecheck
           npm run test:gradebook-intent
+          npm run test:paper-logic
           cargo fmt --all -- --check
           cargo test --workspace --locked
 
