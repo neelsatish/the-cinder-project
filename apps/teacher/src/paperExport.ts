@@ -1,11 +1,15 @@
+import type { GeneratedPaper, PaperMetadata, PaperQuestion } from "./paperLogic.ts";
+import { boardName, sourceSummary } from "./paperLogic.ts";
+
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
-const PAGE_MARGIN = 56.7;
+const PAGE_MARGIN = 52;
+const CONTENT_BOTTOM = 48;
 
 type PdfOptions = {
-  title: string;
-  text: string;
-  documentLabel: string;
+  metadata: PaperMetadata;
+  paper: GeneratedPaper;
+  kind: "question" | "answer";
 };
 
 const CHARACTER_REPLACEMENTS: Record<string, string> = {
@@ -24,6 +28,7 @@ const CHARACTER_REPLACEMENTS: Record<string, string> = {
   "\u2260": "!=",
   "\u00b1": "+/-",
   "\u20b9": "Rs.",
+  "\u03a9": "ohm",
   "\u03b1": "alpha",
   "\u03b2": "beta",
   "\u03b3": "gamma",
@@ -35,6 +40,8 @@ const CHARACTER_REPLACEMENTS: Record<string, string> = {
   "\u03c3": "sigma",
   "\u03c6": "phi",
   "\u03c9": "omega",
+  "\u00b2": "^2",
+  "\u00b3": "^3",
 };
 
 function pdfSafeText(value: string) {
@@ -44,15 +51,7 @@ function pdfSafeText(value: string) {
   return replaced
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\x20-\x7e]/g, "?");
-}
-
-function cleanLine(value: string) {
-  return pdfSafeText(value)
-    .replace(/^#{1,4}\s+/, "")
-    .replace(/\*\*/g, "")
-    .replace(/__/g, "")
-    .trimEnd();
+    .replace(/[^\x20-\x7e\u00b0]/g, "?");
 }
 
 function wrapLine(
@@ -61,8 +60,8 @@ function wrapLine(
   font: { widthOfTextAtSize: (text: string, size: number) => number },
   size: number,
 ) {
-  if (!value.trim()) return [""];
-  const words = value.trim().split(/\s+/);
+  const words = pdfSafeText(value).trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [""];
   const lines: string[] = [];
   let line = "";
   for (const word of words) {
@@ -92,71 +91,264 @@ function wrapLine(
   return lines;
 }
 
-export async function createPaperPdf({
-  title,
-  text,
-  documentLabel,
-}: PdfOptions) {
+async function svgToPng(svg: string) {
+  if (typeof document === "undefined") return null;
+  const source = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(source);
+  try {
+    const image = new Image();
+    image.decoding = "sync";
+    const loaded = new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("The generated diagram could not be rendered."));
+    });
+    image.src = url;
+    await loaded;
+    const canvas = document.createElement("canvas");
+    canvas.width = 1440;
+    canvas.height = 720;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/png"),
+    );
+    return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
   const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  pdf.setTitle(pdfSafeText(title));
-  pdf.setSubject(pdfSafeText(documentLabel));
-  pdf.setCreator("Cinder Teacher");
-  pdf.setProducer("Cinder Teacher");
+  pdf.setTitle(pdfSafeText(kind === "answer" ? `${metadata.title} - Answer key` : metadata.title));
+  pdf.setSubject(pdfSafeText(kind === "answer" ? "Answer key" : "Question paper"));
+  pdf.setCreator("Teacher worksheet");
 
   let page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
   let y = A4_HEIGHT - PAGE_MARGIN;
-  const maxWidth = A4_WIDTH - PAGE_MARGIN * 2;
+  const contentWidth = A4_WIDTH - PAGE_MARGIN * 2;
 
   const newPage = () => {
     page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
     y = A4_HEIGHT - PAGE_MARGIN;
   };
 
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  lines.forEach((rawLine, index) => {
-    const line = cleanLine(rawLine);
-    if (!line.trim()) {
-      y -= 13;
-      if (y < PAGE_MARGIN + 30) newPage();
-      return;
-    }
+  const ensureSpace = (height: number) => {
+    if (y - height < CONTENT_BOTTOM) newPage();
+  };
 
-    const isTitle = index === 0;
-    const isHeading = /^(?:answer key|instructions|section\b|sources?:|teacher copy)/i.test(
-      line,
-    );
-    const font = isTitle || isHeading ? bold : regular;
-    const size = isTitle ? 18 : isHeading ? 11 : 10.5;
-    const lineHeight = isTitle ? 23 : 15;
-    const wrapped = wrapLine(line, maxWidth, font, size);
-    const requiredHeight = wrapped.length * lineHeight + (isTitle ? 10 : 0);
-    if (y - requiredHeight < PAGE_MARGIN + 22) newPage();
-
-    wrapped.forEach((wrappedLine) => {
-      page.drawText(wrappedLine, {
-        x: PAGE_MARGIN,
+  const drawWrapped = (
+    value: string,
+    options: {
+      x?: number;
+      width?: number;
+      size?: number;
+      lineHeight?: number;
+      strong?: boolean;
+      color?: ReturnType<typeof rgb>;
+      gapAfter?: number;
+    } = {},
+  ) => {
+    const x = options.x ?? PAGE_MARGIN;
+    const width = options.width ?? contentWidth;
+    const size = options.size ?? 10.5;
+    const lineHeight = options.lineHeight ?? size * 1.42;
+    const font = options.strong ? bold : regular;
+    const lines = wrapLine(value, width, font, size);
+    ensureSpace(lines.length * lineHeight + (options.gapAfter ?? 0));
+    lines.forEach((line) => {
+      page.drawText(line, {
+        x,
         y,
         size,
         font,
-        color: isHeading && !isTitle ? rgb(0.35, 0.17, 0.07) : rgb(0.09, 0.08, 0.07),
+        color: options.color ?? rgb(0.08, 0.08, 0.08),
       });
       y -= lineHeight;
     });
-    if (isTitle) y -= 10;
+    y -= options.gapAfter ?? 0;
+  };
+
+  const title = kind === "answer" ? `${metadata.title} - Answer key` : metadata.title;
+  drawWrapped(title || "Question paper", { size: 19, lineHeight: 23, strong: true, gapAfter: 5 });
+  drawWrapped(metadata.subject, { size: 11, strong: true, gapAfter: 2 });
+  const boardDetails = [
+    boardName(metadata.board),
+    metadata.syllabusCode ? `Syllabus ${metadata.syllabusCode}` : "",
+    metadata.year,
+    metadata.session,
+    metadata.paperVariant ? `Paper ${metadata.paperVariant}` : "",
+  ].filter(Boolean);
+  drawWrapped(boardDetails.join(" | "), { size: 8.8, color: rgb(0.28, 0.28, 0.28) });
+  if (kind === "question" && metadata.durationMinutes > 0) {
+    drawWrapped(`Time allowed: ${metadata.durationMinutes} minutes`, { size: 8.8 });
+  }
+  if (metadata.sources.length) {
+    drawWrapped(`Sources: ${sourceSummary(metadata.sources)}`, {
+      size: 8,
+      lineHeight: 11,
+      color: rgb(0.3, 0.3, 0.3),
+      gapAfter: 6,
+    });
+  } else {
+    y -= 7;
+  }
+  page.drawLine({
+    start: { x: PAGE_MARGIN, y },
+    end: { x: A4_WIDTH - PAGE_MARGIN, y },
+    thickness: 0.75,
+    color: rgb(0.7, 0.7, 0.7),
   });
+  y -= 15;
+
+  if (kind === "question" && paper.instructions.length) {
+    drawWrapped("Instructions", { size: 10, strong: true, gapAfter: 2 });
+    paper.instructions.forEach((instruction) =>
+      drawWrapped(`- ${instruction}`, { x: PAGE_MARGIN + 8, width: contentWidth - 8, size: 9.3 }),
+    );
+    y -= 8;
+  }
+
+  const drawMark = (marks: number, baseline: number) => {
+    const label = `[${marks}]`;
+    const size = 9.5;
+    page.drawText(label, {
+      x: A4_WIDTH - PAGE_MARGIN - bold.widthOfTextAtSize(label, size),
+      y: baseline,
+      size,
+      font: bold,
+      color: rgb(0.08, 0.08, 0.08),
+    });
+  };
+
+  const drawQuestion = async (question: PaperQuestion, index: number) => {
+    ensureSpace(120);
+    const startY = y;
+    const label = `${index + 1}.`;
+    page.drawText(label, { x: PAGE_MARGIN, y, size: 11, font: bold });
+    drawMark(question.marks, y);
+    drawWrapped(question.prompt, {
+      x: PAGE_MARGIN + 24,
+      width: contentWidth - 70,
+      size: 10.5,
+      lineHeight: 15,
+      gapAfter: 5,
+    });
+    if (question.diagram) {
+      try {
+        const png = await svgToPng(question.diagram.svg);
+        if (png) {
+          const image = await pdf.embedPng(png);
+          const dimensions = image.scaleToFit(Math.min(370, contentWidth - 40), 185);
+          ensureSpace(dimensions.height + 26);
+          const x = PAGE_MARGIN + (contentWidth - dimensions.width) / 2;
+          page.drawImage(image, {
+            x,
+            y: y - dimensions.height,
+            width: dimensions.width,
+            height: dimensions.height,
+          });
+          y -= dimensions.height + 5;
+          if (question.diagram.caption) {
+            drawWrapped(question.diagram.caption, {
+              x: PAGE_MARGIN + 30,
+              width: contentWidth - 60,
+              size: 8,
+              lineHeight: 10,
+              color: rgb(0.3, 0.3, 0.3),
+              gapAfter: 4,
+            });
+          }
+        }
+      } catch {
+        drawWrapped(`Diagram: ${question.diagram.alt}`, { size: 8.5, gapAfter: 4 });
+      }
+    }
+
+    if (kind === "answer" && !question.subparts.length) {
+      drawWrapped(question.answer || "No answer supplied.", {
+        x: PAGE_MARGIN + 24,
+        width: contentWidth - 24,
+        size: 9.8,
+        gapAfter: 4,
+      });
+    }
+
+    for (const part of question.subparts) {
+      ensureSpace(55);
+      const partY = y;
+      page.drawText(`(${pdfSafeText(part.label)})`, {
+        x: PAGE_MARGIN + 24,
+        y,
+        size: 10,
+        font: regular,
+      });
+      drawMark(part.marks, partY);
+      drawWrapped(kind === "answer" ? part.answer || "No answer supplied." : part.prompt, {
+        x: PAGE_MARGIN + 50,
+        width: contentWidth - 96,
+        size: 10,
+        lineHeight: 14.2,
+        gapAfter: 4,
+      });
+      if (kind === "question") {
+        for (let line = 0; line < part.workingLines; line += 1) {
+          ensureSpace(18);
+          y -= 12;
+          page.drawLine({
+            start: { x: PAGE_MARGIN + 50, y },
+            end: { x: A4_WIDTH - PAGE_MARGIN, y },
+            thickness: 0.35,
+            color: rgb(0.78, 0.78, 0.78),
+          });
+          y -= 6;
+        }
+      }
+    }
+
+    if (!question.subparts.length && kind === "question") {
+      for (let line = 0; line < question.workingLines; line += 1) {
+        ensureSpace(18);
+        y -= 12;
+        page.drawLine({
+          start: { x: PAGE_MARGIN + 24, y },
+          end: { x: A4_WIDTH - PAGE_MARGIN, y },
+          thickness: 0.35,
+          color: rgb(0.78, 0.78, 0.78),
+        });
+        y -= 6;
+      }
+    }
+    if (kind === "answer" && question.source) {
+      drawWrapped(`Source note: ${question.source}`, {
+        x: PAGE_MARGIN + 24,
+        width: contentWidth - 24,
+        size: 8,
+        color: rgb(0.35, 0.35, 0.35),
+      });
+    }
+    y -= startY === y ? 14 : 9;
+  };
+
+  for (const [index, question] of paper.questions.entries()) {
+    await drawQuestion(question, index);
+  }
 
   const pages = pdf.getPages();
   pages.forEach((pdfPage, index) => {
-    const footer = `Cinder Teacher  |  ${documentLabel}  |  ${index + 1} of ${pages.length}`;
+    const footer = `${index + 1} of ${pages.length}`;
     pdfPage.drawText(footer, {
-      x: PAGE_MARGIN,
-      y: 28,
+      x: A4_WIDTH - PAGE_MARGIN - regular.widthOfTextAtSize(footer, 8),
+      y: 24,
       size: 8,
       font: regular,
-      color: rgb(0.43, 0.36, 0.3),
+      color: rgb(0.42, 0.42, 0.42),
     });
   });
 

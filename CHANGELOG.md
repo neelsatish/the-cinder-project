@@ -6,6 +6,30 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.0
+
+- Rebuilt the Teacher question-paper tool around validated questions, answers,
+  marks, working space, source notes and diagrams instead of raw AI text.
+- Fixed malformed saved-paper previews, leaked generation markers, printed
+  Markdown tables and answer keys appearing inside student papers.
+- Added CIE, IGCSE, CBSE and ICSE board choices, five genuinely different
+  difficulty levels, syllabus codes and classroom-derived subjects.
+- Added expandable advanced controls for paper year, session, variant,
+  duration, topics and diagram generation without crowding the main setup.
+- Added official board-library shortcuts and page-level citations for selected
+  reference PDFs; generated questions adapt source material instead of copying
+  long passages.
+- Added safe black-and-white SVG diagrams for questions that need a figure,
+  including Physics prompts, with active content and external links rejected.
+- Added an explicit generation progress overlay and validation of exact question
+  and mark totals before a paper can replace the teacher's current work.
+- Replaced the free-form paper editor with a calm A4 worksheet preview, editable
+  prompts, answers, marks and working space, plus compact export controls.
+- Removed Cinder branding and watermarks from worksheets, kept answer keys in a
+  separate export, and repaired standalone PDF, print, DOC and text actions.
+- Added Cinder Original and Plain Dark themes alongside the default Light theme
+  in both Teacher and Student apps on Windows and Linux.
+
 ## 0.8.0
 
 - Adopted the reduced Ember logo throughout Cinder Teacher and Cinder Student,

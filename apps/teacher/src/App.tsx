@@ -31,6 +31,7 @@ import {
   PageHeader,
   Panel,
   saveSessionValue,
+  openExternalUrl,
   type AiSettings,
   type Assignment,
   type AttendanceDay,
@@ -60,16 +61,29 @@ import {
 } from "./gradebookIntent";
 import { createPaperPdf } from "./paperExport";
 import {
+  answerKeyText,
+  boardName,
   compactPageRanges,
-  composeAnswerKey,
-  composeQuestionPaper,
+  difficultyName,
+  difficultyPrompt,
+  legacyPaperToSpec,
+  normalizeGeneratedPaper,
+  officialSourceUrl,
+  paperTotalMarks,
+  parseGeneratedPaperResponse,
+  questionPaperText,
   sourceSummary,
-  splitPaperResponse,
+  type DifficultyLevel,
+  type ExamBoard,
+  type GeneratedPaper,
+  type PaperMetadata,
+  type PaperQuestion,
 } from "./paperLogic";
 import {
   deleteQuestionPaper,
   listSavedQuestionPapers,
   saveQuestionPaper,
+  type PaperAdvancedOptions,
   type PaperSourceCitation,
   type SavedQuestionPaper,
 } from "./paperLibrary";
@@ -3251,28 +3265,15 @@ function describeGradebookAction(
   return `Set ${action.sheet}!${action.cell} to ${String(action.value ?? "blank")}.`;
 }
 
-const EMPTY_PAPER_DOCUMENT: Record<string, unknown> = {
+const EMPTY_DOCUMENT: Record<string, unknown> = {
   type: "doc",
   content: [{ type: "paragraph" }],
 };
 
-function textToDocument(value: string): Record<string, unknown> {
-  const content = value.split(/\r?\n/).map((line, index) => {
-    const trimmed = line.trim();
-    if (!trimmed) return { type: "paragraph" };
-    const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
-    const text = heading?.[2] ?? trimmed;
-    const type = heading || index === 0 ? "heading" : "paragraph";
-    return {
-      type,
-      ...(type === "heading"
-        ? { attrs: { level: heading ? heading[1].length : 1 } }
-        : {}),
-      content: [{ type: "text", text }],
-    };
-  });
-  return { type: "doc", content: content.length ? content : [{ type: "paragraph" }] };
-}
+const EMPTY_GENERATED_PAPER: GeneratedPaper = {
+  instructions: [],
+  questions: [],
+};
 
 function escapeHtml(value: string) {
   return value
@@ -3282,20 +3283,48 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
-function paperHtml(title: string, text: string, documentLabel: string) {
-  const body = text
-    .split(/\r?\n/)
-    .map((line, index) => {
-      const value = escapeHtml(line.trim());
-      if (!value) return '<div class="working-line">&nbsp;</div>';
-      if (index === 0) return `<h1>${value}</h1>`;
-      if (/^(?:sources?:|instructions|section\b|answer key|teacher copy)/i.test(line)) {
-        return `<h2>${value}</h2>`;
-      }
-      return `<p>${value}</p>`;
+function svgDataUrl(svg: string) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function paperHtml(metadata: PaperMetadata, paper: GeneratedPaper, kind: "question" | "answer") {
+  const title = kind === "answer" ? `${metadata.title} - Answer key` : metadata.title;
+  const details = [
+    boardName(metadata.board),
+    metadata.syllabusCode ? `Syllabus ${metadata.syllabusCode}` : "",
+    metadata.year,
+    metadata.session,
+    metadata.paperVariant ? `Paper ${metadata.paperVariant}` : "",
+  ].filter(Boolean);
+  const questions = paper.questions
+    .map((question, index) => {
+      const diagram = question.diagram
+        ? `<figure><img src="${svgDataUrl(question.diagram.svg)}" alt="${escapeHtml(question.diagram.alt)}"><figcaption>${escapeHtml(question.diagram.caption)}</figcaption></figure>`
+        : "";
+      const subparts = question.subparts
+        .map(
+          (part) => `<div class="subpart"><span>(${escapeHtml(part.label)})</span><div><p>${escapeHtml(part.prompt)}</p>${kind === "answer" ? `<p class="answer">${escapeHtml(part.answer || "No answer supplied.")}</p>` : ""}</div><b>[${part.marks}]</b></div>${
+            kind === "question"
+              ? `<div class="working">${'<i></i>'.repeat(part.workingLines)}</div>`
+              : ""
+          }`,
+        )
+        .join("");
+      return `<section class="question"><div class="question-row"><strong>${index + 1}.</strong><p>${escapeHtml(question.prompt)}</p><b>[${question.marks}]</b></div>${diagram}${kind === "answer" && !question.subparts.length ? `<p class="answer">${escapeHtml(question.answer || "No answer supplied.")}</p>` : ""}${subparts}${
+        kind === "question" && !question.subparts.length
+          ? `<div class="working">${'<i></i>'.repeat(question.workingLines)}</div>`
+          : ""
+      }${kind === "answer" && question.source ? `<small>Source note: ${escapeHtml(question.source)}</small>` : ""}</section>`;
     })
-    .join("\n");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>@page{size:A4;margin:20mm}body{font-family:"Liberation Serif",Georgia,serif;max-width:170mm;margin:0 auto;color:#181512;font-size:12pt;line-height:1.55}h1{font:700 22pt "Liberation Sans",Arial,sans-serif;margin:0 0 14pt}h2{font:700 10pt "Liberation Sans",Arial,sans-serif;color:#6e3216;margin:14pt 0 7pt}p{margin:0 0 8pt;white-space:pre-wrap}.working-line{height:13pt}footer{position:fixed;bottom:-10mm;font:8pt "Liberation Sans",Arial,sans-serif;color:#76685d}</style></head><body>${body}<footer>Cinder Teacher · ${escapeHtml(documentLabel)}</footer></body></html>`;
+    .join("");
+  const instructions =
+    kind === "question" && paper.instructions.length
+      ? `<section class="instructions"><h2>Instructions</h2><ul>${paper.instructions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>`
+      : "";
+  const sources = metadata.sources.length
+    ? `<p class="sources"><strong>Sources:</strong> ${escapeHtml(sourceSummary(metadata.sources))}</p>`
+    : "";
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>@page{size:A4;margin:16mm 18mm}*{box-sizing:border-box}body{max-width:174mm;margin:0 auto;color:#171717;font:11pt/1.48 Arial,"Liberation Sans",sans-serif}header{padding-bottom:12pt;border-bottom:1px solid #999}h1{margin:0 0 5pt;font-size:20pt}header p{margin:2pt 0}.meta,.sources{font-size:8.5pt;color:#444}.instructions{margin:12pt 0}.instructions h2{font-size:10pt;margin:0 0 4pt}.instructions ul{margin:0;padding-left:18pt}.question{margin:14pt 0;break-inside:avoid}.question-row,.subpart{display:grid;grid-template-columns:24pt 1fr 32pt;gap:5pt;align-items:start}.question-row p,.subpart p{margin:0;white-space:pre-wrap}.question-row>b,.subpart>b{text-align:right}.answer{margin:6pt 0 0 24pt!important;color:#26382b}.subpart .answer{margin-left:0!important}.subpart{margin:8pt 0 0 24pt}.working{margin:7pt 0 0 24pt}.working i{display:block;height:18pt;border-bottom:1px solid #bbb}figure{max-width:130mm;margin:10pt auto;text-align:center}figure img{display:block;max-width:100%;max-height:62mm;margin:auto}figcaption{margin-top:4pt;color:#555;font-size:8.5pt}.question small{display:block;margin:6pt 0 0 24pt;color:#555}</style></head><body><header><h1>${escapeHtml(title)}</h1><p><strong>${escapeHtml(metadata.subject)}</strong></p><p class="meta">${escapeHtml(details.join(" | "))}${metadata.durationMinutes > 0 && kind === "question" ? ` | Time: ${metadata.durationMinutes} minutes` : ""}</p>${sources}</header>${instructions}${questions}</body></html>`;
 }
 
 type ExtractedPdf = {
@@ -3378,24 +3407,264 @@ async function savePdfExport(defaultName: string, contents: Uint8Array) {
   return true;
 }
 
+function PaperDocumentView({
+  metadata,
+  paper,
+  kind,
+  editable = false,
+  onChange,
+}: {
+  metadata: PaperMetadata;
+  paper: GeneratedPaper;
+  kind: "question" | "answer";
+  editable?: boolean;
+  onChange?: (paper: GeneratedPaper) => void;
+}) {
+  const details = [
+    boardName(metadata.board),
+    metadata.syllabusCode ? `Syllabus ${metadata.syllabusCode}` : "",
+    metadata.year,
+    metadata.session,
+    metadata.paperVariant ? `Paper ${metadata.paperVariant}` : "",
+  ].filter(Boolean);
+  const replaceQuestion = (index: number, question: PaperQuestion) => {
+    onChange?.({
+      ...paper,
+      questions: paper.questions.map((current, questionIndex) =>
+        questionIndex === index ? question : current,
+      ),
+    });
+  };
+
+  return (
+    <article className={`worksheet-page worksheet-${kind}`}>
+      <header className="worksheet-header">
+        <h1>{kind === "answer" ? `${metadata.title} - Answer key` : metadata.title}</h1>
+        <strong>{metadata.subject}</strong>
+        <p>{details.join(" | ")}</p>
+        {kind === "question" && metadata.durationMinutes > 0 ? (
+          <p>Time allowed: {metadata.durationMinutes} minutes</p>
+        ) : null}
+        {metadata.sources.length ? (
+          <p className="worksheet-sources">
+            <b>Sources:</b> {sourceSummary(metadata.sources)}
+          </p>
+        ) : null}
+      </header>
+
+      {kind === "question" && paper.instructions.length ? (
+        <section className="worksheet-instructions">
+          <h2>Instructions</h2>
+          <ul>
+            {paper.instructions.map((instruction, index) => (
+              <li key={`${instruction}-${index}`}>{instruction}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <div className="worksheet-questions">
+        {paper.questions.map((question, questionIndex) => (
+          <section className="worksheet-question" key={question.id}>
+            <div className="worksheet-question-row">
+              <b className="worksheet-number">{questionIndex + 1}.</b>
+              {editable && kind === "question" ? (
+                <textarea
+                  aria-label={`Question ${questionIndex + 1}`}
+                  maxLength={8000}
+                  value={question.prompt}
+                  onChange={(event) =>
+                    replaceQuestion(questionIndex, {
+                      ...question,
+                      prompt: event.target.value,
+                    })
+                  }
+                />
+              ) : (
+                <p>{question.prompt}</p>
+              )}
+              <span className="worksheet-marks">[{question.marks}]</span>
+            </div>
+
+            {question.diagram ? (
+              <figure className="worksheet-diagram">
+                <img src={svgDataUrl(question.diagram.svg)} alt={question.diagram.alt} />
+                {question.diagram.caption ? <figcaption>{question.diagram.caption}</figcaption> : null}
+              </figure>
+            ) : null}
+
+            {editable && kind === "answer" && !question.subparts.length ? (
+              <textarea
+                className="worksheet-answer-edit"
+                aria-label={`Answer ${questionIndex + 1}`}
+                maxLength={12000}
+                value={question.answer}
+                onChange={(event) =>
+                  replaceQuestion(questionIndex, {
+                    ...question,
+                    answer: event.target.value,
+                  })
+                }
+              />
+            ) : kind === "answer" && !question.subparts.length ? (
+              <p className="worksheet-answer">{question.answer || "No answer supplied."}</p>
+            ) : null}
+
+            {question.subparts.map((part, partIndex) => (
+              <div className="worksheet-subpart" key={`${question.id}-${part.label}-${partIndex}`}>
+                <span>({part.label})</span>
+                {kind === "answer" ? (
+                  <div className="worksheet-subpart-answer">
+                    <p>{part.prompt}</p>
+                    {editable ? (
+                      <textarea
+                        aria-label={`Answer ${questionIndex + 1}(${part.label})`}
+                        maxLength={8000}
+                        value={part.answer}
+                        onChange={(event) => {
+                          const subparts = question.subparts.map((current, index) =>
+                            index === partIndex ? { ...current, answer: event.target.value } : current,
+                          );
+                          replaceQuestion(questionIndex, { ...question, subparts });
+                        }}
+                      />
+                    ) : (
+                      <p className="worksheet-answer">{part.answer || "No answer supplied."}</p>
+                    )}
+                  </div>
+                ) : editable ? (
+                  <textarea
+                    aria-label={`Question ${questionIndex + 1}(${part.label})`}
+                    maxLength={4000}
+                    value={part.prompt}
+                    onChange={(event) => {
+                      const subparts = question.subparts.map((current, index) =>
+                        index === partIndex ? { ...current, prompt: event.target.value } : current,
+                      );
+                      replaceQuestion(questionIndex, { ...question, subparts });
+                    }}
+                  />
+                ) : (
+                  <p>{part.prompt}</p>
+                )}
+                {editable && kind === "question" ? (
+                  <input
+                    className="worksheet-inline-number"
+                    type="number"
+                    min={1}
+                    max={50}
+                    aria-label={`Marks for question ${questionIndex + 1}(${part.label})`}
+                    value={part.marks}
+                    onChange={(event) => {
+                      const subparts = question.subparts.map((current, index) =>
+                        index === partIndex
+                          ? { ...current, marks: Math.max(1, Math.min(50, Number(event.target.value) || 1)) }
+                          : current,
+                      );
+                      replaceQuestion(questionIndex, {
+                        ...question,
+                        subparts,
+                        marks: subparts.reduce((total, current) => total + current.marks, 0),
+                      });
+                    }}
+                  />
+                ) : (
+                  <span className="worksheet-marks">[{part.marks}]</span>
+                )}
+                {kind === "question" ? (
+                  <div className="worksheet-working-lines">
+                    {Array.from({ length: part.workingLines }, (_, index) => (
+                      <i key={index} />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+
+            {kind === "question" && !question.subparts.length ? (
+              <div className="worksheet-working-lines">
+                {Array.from({ length: question.workingLines }, (_, index) => (
+                  <i key={index} />
+                ))}
+              </div>
+            ) : null}
+
+            {kind === "answer" && question.source ? (
+              <small className="worksheet-source-note">Source note: {question.source}</small>
+            ) : null}
+
+            {editable ? (
+              <div className="worksheet-edit-meta">
+                {kind === "question" ? (
+                  <>
+                    <label>
+                      Marks
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        disabled={question.subparts.length > 0}
+                        value={question.marks}
+                        onChange={(event) =>
+                          replaceQuestion(questionIndex, {
+                            ...question,
+                            marks: Math.max(1, Math.min(100, Number(event.target.value) || 1)),
+                          })
+                        }
+                      />
+                    </label>
+                    {!question.subparts.length ? (
+                      <label>
+                        Working lines
+                        <input
+                          type="number"
+                          min={0}
+                          max={14}
+                          value={question.workingLines}
+                          onChange={(event) =>
+                            replaceQuestion(questionIndex, {
+                              ...question,
+                              workingLines: Math.max(0, Math.min(14, Number(event.target.value) || 0)),
+                            })
+                          }
+                        />
+                      </label>
+                    ) : null}
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChange?.({
+                      ...paper,
+                      questions: paper.questions.filter((_, index) => index !== questionIndex),
+                    })
+                  }
+                >
+                  Remove question
+                </button>
+              </div>
+            ) : null}
+          </section>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 function PrintablePaper({
-  text,
+  metadata,
+  paper,
   kind,
 }: {
-  text: string;
+  metadata: PaperMetadata;
+  paper: GeneratedPaper;
   kind: "question" | "answer";
 }) {
   return (
-    <article className={`paper-print-copy paper-print-${kind}`}>
-      {text.split(/\r?\n/).map((line, index) => {
-        if (!line.trim()) return <div className="paper-print-space" key={index}>&nbsp;</div>;
-        if (index === 0) return <h1 key={index}>{line}</h1>;
-        if (/^(?:sources?:|instructions|section\b|answer key|teacher copy)/i.test(line)) {
-          return <h2 key={index}>{line}</h2>;
-        }
-        return <p key={index}>{line}</p>;
-      })}
-    </article>
+    <div className={`paper-print-copy paper-print-${kind}`}>
+      <PaperDocumentView metadata={metadata} paper={paper} kind={kind} />
+    </div>
   );
 }
 
@@ -3433,6 +3702,7 @@ function AssistantView({
   );
   const [savedPapers, setSavedPapers] = useState<SavedQuestionPaper[]>([]);
   const [papersLoading, setPapersLoading] = useState(true);
+  const [papersError, setPapersError] = useState("");
   const [activePaperId, setActivePaperId] = useState(() =>
     localStorage.getItem(ACTIVE_PAPER_KEY),
   );
@@ -3463,7 +3733,25 @@ function AssistantView({
     let cancelled = false;
     void listSavedQuestionPapers()
       .then((papers) => {
-        if (!cancelled) setSavedPapers(papers);
+        if (!cancelled) {
+          setSavedPapers(papers);
+          setPapersError("");
+          const remembered = localStorage.getItem(ACTIVE_PAPER_KEY);
+          if (remembered && !papers.some((paper) => paper.id === remembered)) {
+            localStorage.removeItem(ACTIVE_PAPER_KEY);
+            setActivePaperId(null);
+          }
+        }
+      })
+      .catch((failure) => {
+        if (!cancelled) {
+          setSavedPapers([]);
+          setPapersError(
+            failure instanceof Error
+              ? `Saved papers could not be opened: ${failure.message}`
+              : "Saved papers could not be opened on this computer.",
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setPapersLoading(false);
@@ -3788,6 +4076,7 @@ function AssistantView({
         <SavedPapersView
           papers={savedPapers}
           loading={papersLoading}
+          error={papersError}
           onOpen={openPaper}
           onDelete={removePaper}
           onCreate={startNewPaper}
@@ -3800,12 +4089,14 @@ function AssistantView({
 function SavedPapersView({
   papers,
   loading,
+  error,
   onOpen,
   onDelete,
   onCreate,
 }: {
   papers: SavedQuestionPaper[];
   loading: boolean;
+  error: string;
   onOpen: (id: string) => void;
   onDelete: (id: string) => Promise<void>;
   onCreate: () => void;
@@ -3819,6 +4110,13 @@ function SavedPapersView({
     >
       {loading ? (
         <div className="editor-loading">Opening saved papers…</div>
+      ) : error ? (
+        <EmptyState
+          icon="document"
+          title="Saved papers are unavailable"
+          description={error}
+          action={<Button variant="primary" onClick={onCreate}>Create a new paper</Button>}
+        />
       ) : papers.length ? (
         <div className="saved-paper-list">
           {papers.map((paper) => (
@@ -3830,7 +4128,7 @@ function SavedPapersView({
                   <small>
                     {paper.subject || "General"} · Updated {formatDate(paper.updatedAt)}
                   </small>
-                  <small>{sourceSummary(paper.sources)}</small>
+                  {paper.sources.length ? <small>{sourceSummary(paper.sources)}</small> : null}
                 </span>
               </button>
               <Button
@@ -3859,6 +4157,27 @@ function SavedPapersView({
   );
 }
 
+
+function initialPaperSpec(paper: SavedQuestionPaper | null): GeneratedPaper {
+  if (!paper) return EMPTY_GENERATED_PAPER;
+  try {
+    return paper.paperSpec
+      ? normalizeGeneratedPaper(paper.paperSpec)
+      : legacyPaperToSpec(paper.questionText, paper.answerKeyText);
+  } catch {
+    return EMPTY_GENERATED_PAPER;
+  }
+}
+
+const DEFAULT_PAPER_ADVANCED: PaperAdvancedOptions = {
+  year: String(new Date().getFullYear()),
+  session: "",
+  paperVariant: "",
+  durationMinutes: 60,
+  topics: "",
+  includeDiagrams: true,
+};
+
 function QuestionPaperStudio({
   api,
   classrooms,
@@ -3879,77 +4198,123 @@ function QuestionPaperStudio({
   const [createdAt, setCreatedAt] = useState(
     activePaper?.createdAt ?? new Date().toISOString(),
   );
-  const [title, setTitle] = useState(
-    activePaper?.title ?? "Practice question paper",
+  const [title, setTitle] = useState(activePaper?.title ?? "Practice question paper");
+  const [classroomId, setClassroomId] = useState(
+    activePaper?.classroomId ??
+      classrooms.find((classroom) => classroom.name === activePaper?.subject)?.id ??
+      classrooms[0]?.id ??
+      "",
   );
-  const [subject, setSubject] = useState(activePaper?.subject ?? "");
-  const [difficulty, setDifficulty] = useState("Mixed");
-  const [questionCount, setQuestionCount] = useState(10);
-  const [totalMarks, setTotalMarks] = useState(20);
-  const [instructions, setInstructions] = useState("");
-  const [document, setDocument] = useState<Record<string, unknown>>(
-    activePaper?.questionDocument ?? EMPTY_PAPER_DOCUMENT,
+  const [board, setBoard] = useState<ExamBoard>(activePaper?.board ?? "CIE");
+  const [syllabusCode, setSyllabusCode] = useState(
+    activePaper?.syllabusCode ??
+      classrooms.find((classroom) => classroom.id === activePaper?.classroomId)?.subject_code ??
+      classrooms[0]?.subject_code ??
+      "",
   );
-  const [paperText, setPaperText] = useState(activePaper?.questionText ?? "");
-  const [answerDocument, setAnswerDocument] = useState<Record<string, unknown>>(
-    activePaper?.answerKeyDocument ?? EMPTY_PAPER_DOCUMENT,
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>(
+    activePaper?.difficulty ?? 3,
   );
-  const [answerKeyText, setAnswerKeyText] = useState(
-    activePaper?.answerKeyText ?? "",
+  const [questionCount, setQuestionCount] = useState(
+    activePaper?.paperSpec?.questions.length ?? 10,
   );
-  const [sources, setSources] = useState<PaperSourceCitation[]>(
-    activePaper?.sources ?? [],
+  const [totalMarks, setTotalMarks] = useState(
+    activePaper?.paperSpec ? paperTotalMarks(activePaper.paperSpec) : 50,
   );
+  const [teacherBrief, setTeacherBrief] = useState("");
+  const [advanced, setAdvanced] = useState<PaperAdvancedOptions>(() => ({
+    ...DEFAULT_PAPER_ADVANCED,
+    ...activePaper?.advanced,
+    durationMinutes: Math.max(
+      10,
+      Math.min(360, activePaper?.advanced?.durationMinutes ?? DEFAULT_PAPER_ADVANCED.durationMinutes),
+    ),
+  }));
+  const [paper, setPaper] = useState<GeneratedPaper>(() => initialPaperSpec(activePaper));
+  const [sources, setSources] = useState<PaperSourceCitation[]>(activePaper?.sources ?? []);
   const [editorView, setEditorView] = useState<"question" | "answer">("question");
-  const [status, setStatus] = useState(
-    activePaper ? "Saved paper opened." : "",
-  );
+  const [status, setStatus] = useState(activePaper ? "Saved paper opened." : "");
   const [busy, setBusy] = useState(false);
+  const [generationStage, setGenerationStage] = useState("");
   const latestPaperRef = useRef<SavedQuestionPaper | null>(activePaper);
+
+  const classroom = classrooms.find((item) => item.id === classroomId) ?? null;
+  const subject = classroom?.name ?? activePaper?.subject ?? "General";
+  const classroomMaterials = materials.filter(
+    (material) => !classroomId || material.classroom_id === classroomId,
+  );
+  const metadata = useMemo<PaperMetadata>(
+    () => ({
+      title: title.trim().slice(0, 120) || "Untitled question paper",
+      subject,
+      board,
+      syllabusCode: syllabusCode.trim().slice(0, 40),
+      year: advanced.year.trim().slice(0, 20),
+      session: advanced.session.trim().slice(0, 40),
+      paperVariant: advanced.paperVariant.trim().slice(0, 40),
+      durationMinutes: advanced.durationMinutes,
+      sources,
+    }),
+    [advanced, board, sources, subject, syllabusCode, title],
+  );
 
   useEffect(() => {
     void api
       .tree()
-      .then((result) =>
-        setMaterials(result.nodes.filter((node) => node.kind === "pdf")),
-      )
+      .then((result) => setMaterials(result.nodes.filter((node) => node.kind === "pdf")))
       .catch(() => setMaterials([]));
   }, [api]);
 
-  latestPaperRef.current = paperId && paperText
-    ? {
-        id: paperId,
-        title,
+  useEffect(() => {
+    if (!classroomId && classrooms[0]) setClassroomId(classrooms[0].id);
+  }, [classroomId, classrooms]);
+
+  const buildSavedPaper = useCallback(
+    (id: string, created: string): SavedQuestionPaper => {
+      const questionText = questionPaperText(metadata, paper);
+      const keyText = answerKeyText(metadata, paper);
+      return {
+        id,
+        title: metadata.title,
         subject,
-        questionText: paperText,
-        questionDocument: document,
-        answerKeyText,
-        answerKeyDocument: answerDocument,
+        questionText,
+        questionDocument: EMPTY_DOCUMENT,
+        answerKeyText: keyText,
+        answerKeyDocument: EMPTY_DOCUMENT,
         sources,
-        createdAt,
+        classroomId,
+        board,
+        syllabusCode: metadata.syllabusCode,
+        difficulty,
+        advanced,
+        paperSpec: paper,
+        createdAt: created,
         updatedAt: new Date().toISOString(),
-      }
+      };
+    },
+    [advanced, board, classroomId, difficulty, metadata, paper, sources, subject],
+  );
+
+  latestPaperRef.current = paperId && paper.questions.length
+    ? buildSavedPaper(paperId, createdAt)
     : null;
 
   useEffect(() => {
-    const paper = latestPaperRef.current;
-    if (!paper) return;
+    const current = latestPaperRef.current;
+    if (!current) return;
     const timer = window.setTimeout(() => {
-      void onSave(paper).then(() => setStatus("Saved to this teacher computer."));
+      void onSave(current)
+        .then(() => setStatus("Saved on this teacher computer."))
+        .catch((failure) =>
+          setStatus(
+            failure instanceof Error
+              ? `The paper could not be saved: ${failure.message}`
+              : "The paper could not be saved.",
+          ),
+        );
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [
-    answerDocument,
-    answerKeyText,
-    createdAt,
-    document,
-    onSave,
-    paperId,
-    paperText,
-    sources,
-    subject,
-    title,
-  ]);
+  }, [buildSavedPaper, createdAt, onSave, paperId]);
 
   useEffect(
     () => () => {
@@ -3958,177 +4323,192 @@ function QuestionPaperStudio({
     [onSave],
   );
 
+  const collectReferences = async () => {
+    if (selected.length + localFiles.length > 8) {
+      throw new Error("Select no more than eight PDF references for one paper.");
+    }
+    if (localFiles.reduce((total, file) => total + file.size, 0) > 100 * 1024 * 1024) {
+      throw new Error("Local PDF references must be 100 MB or less in total.");
+    }
+    const references: string[] = [];
+    const nextSources: PaperSourceCitation[] = [];
+    const warnings: string[] = [];
+    for (const id of selected) {
+      const material = materials.find((item) => item.id === id);
+      if (!material) continue;
+      try {
+        const extracted = await extractPdfText(await api.materialBlob(id), material.name);
+        references.push(`REFERENCE: ${material.name}\n${extracted.text}`);
+        nextSources.push({ name: material.name, pages: extracted.pages });
+      } catch (failure) {
+        warnings.push(failure instanceof Error ? failure.message : `${material.name} could not be read.`);
+      }
+    }
+    for (const file of localFiles) {
+      try {
+        const extracted = await extractPdfText(file, file.name);
+        references.push(`REFERENCE: ${file.name}\n${extracted.text}`);
+        nextSources.push({ name: file.name, pages: extracted.pages });
+      } catch (failure) {
+        warnings.push(failure instanceof Error ? failure.message : `${file.name} could not be read.`);
+      }
+    }
+    if ((selected.length || localFiles.length) && !references.length) {
+      throw new Error(warnings.join(" ") || "None of the selected references could be read.");
+    }
+    const perReferenceLimit = Math.max(2_400, Math.floor(19_000 / Math.max(1, references.length)));
+    return {
+      context: references.map((reference) => reference.slice(0, perReferenceLimit)).join("\n\n").slice(0, 19_500),
+      sources: nextSources,
+      warnings,
+    };
+  };
+
+  const makeGenerationPrompt = (repair = false) => `
+${repair ? "Repair the supplied draft and return a complete replacement." : "Create a new classroom-ready examination paper."}
+Return ONLY valid JSON. Do not use Markdown fences or explanatory text.
+Schema: {"instructions":["string"],"questions":[{"id":"q1","prompt":"string","marks":4,"answer":"string","working_lines":4,"source":"filename, p. 2, Q3 (adapted)","subparts":[{"label":"a","prompt":"string","marks":2,"answer":"string","working_lines":2}],"diagram":null}]}
+A diagram, when essential, must be {"svg":"<svg viewBox=\\"0 0 720 360\\">...</svg>","caption":"string","alt":"string"}. SVG may use only svg, g, line, rect, circle, ellipse, polyline, polygon, path and text with inline attributes. No scripts, styles, external images or links.
+
+Paper specification:
+- Board: ${boardName(board)}.
+- Subject: ${subject}.
+- Syllabus code: ${syllabusCode.trim() || "not provided"}.
+- Difficulty: ${difficultyName(difficulty)}. ${difficultyPrompt(difficulty)}
+- Exactly ${questionCount} top-level questions and exactly ${totalMarks} marks in total. A parent question's marks must equal the sum of its subpart marks.
+- Year: ${advanced.year.trim() || "current syllabus"}; session: ${advanced.session.trim() || "not specified"}; paper or variant: ${advanced.paperVariant.trim() || "not specified"}.
+- Topics: ${advanced.topics.trim() || "balanced coverage of the selected subject"}.
+- Teacher brief: ${teacherBrief.trim().slice(0, 2_000) || "No additional brief"}.
+- ${advanced.includeDiagrams ? "Include clean black-and-white labelled diagrams where the question needs one, especially in Physics." : "Do not include diagrams."}
+- Use board-appropriate command words, mathematical notation and mark allocation. Do not create elementary recall questions at an advanced setting.
+- References are evidence, not a licence to copy. Adapt rather than reproduce long passages. Never invent a filename, page or question number.
+- Put answers only in answer fields. Never put an answer key in a prompt.
+- Give enough working_lines for a student to solve each question.
+- Use neutral, grammatical language when a person's pronouns are unknown.
+`.trim();
+
   const generate = async () => {
+    if (!classroom) {
+      setStatus("Choose a classroom before creating a paper.");
+      return;
+    }
+    if (totalMarks < questionCount) {
+      setStatus("Total marks must be at least the number of questions.");
+      return;
+    }
     setBusy(true);
-    setStatus("Reading references…");
+    setGenerationStage("Reading reference PDFs");
+    setStatus("");
     try {
-      const references: string[] = [];
-      const nextSources: PaperSourceCitation[] = [];
-      const warnings: string[] = [];
-      for (const id of selected) {
-        const material = materials.find((item) => item.id === id);
-        if (!material) continue;
-        try {
-          const extracted = await extractPdfText(
-            await api.materialBlob(id),
-            material.name,
-          );
-          references.push(`REFERENCE: ${material.name}\n${extracted.text}`);
-          nextSources.push({ name: material.name, pages: extracted.pages });
-        } catch (failure) {
-          warnings.push(
-            failure instanceof Error ? failure.message : `${material.name} could not be read.`,
-          );
-        }
-      }
-      for (const file of localFiles) {
-        try {
-          const extracted = await extractPdfText(file, file.name);
-          references.push(`REFERENCE: ${file.name}\n${extracted.text}`);
-          nextSources.push({ name: file.name, pages: extracted.pages });
-        } catch (failure) {
-          warnings.push(
-            failure instanceof Error ? failure.message : `${file.name} could not be read.`,
-          );
-        }
-      }
-      const askedForReferences = selected.length + localFiles.length > 0;
-      if (askedForReferences && !references.length) {
-        throw new Error(warnings.join(" ") || "None of the references could be read.");
-      }
-      setStatus("Creating question paper…");
-      const request = `Create a classroom-ready assessment. Subject: ${subject.trim() || "General"}. Difficulty: ${difficulty}. Number of questions: ${questionCount}. Total marks: ${totalMarks}. ${instructions.trim() ? `Teacher instructions: ${instructions.trim()}` : ""} Use only the supplied references when references are present. Return exactly two plain-text sections. Begin the student section with [CINDER_QUESTIONS]. Begin the teacher-only answer section with [CINDER_ANSWER_KEY]. Do not repeat the title, include sources, use JSON, use Markdown tables, or add commentary. Number every question, show its marks, and put [WORKING_SPACE] on a separate line after each complete question (after any answer options) so Cinder can leave room for written work. The answer key must be concise, numbered to match, and must not appear inside the student section. Never invent a source or page number. Use complete, grammatically correct sentences and neutral pronouns when a person's pronouns are unknown.`;
-      const perReferenceLimit = Math.max(
-        2_500,
-        Math.floor(19_000 / Math.max(1, references.length)),
-      );
-      const referenceContext = references
-        .map((reference) => reference.slice(0, perReferenceLimit))
-        .join("\n\n")
-        .slice(0, 19_500);
+      const references = await collectReferences();
+      setGenerationStage("Building the paper");
       const result = await api.chat(
-        [{ role: "user", content: request }],
-        referenceContext || undefined,
+        [{ role: "user", content: makeGenerationPrompt() }],
+        references.context || undefined,
       );
-      const text = result.content.trim();
-      if (!text) throw new Error("The AI returned an empty paper.");
-      let parsed = splitPaperResponse(text);
-      if (!parsed.questionText) throw new Error("The AI did not return any questions.");
-      if (!parsed.answerKeyText) {
-        const fallback = await api.chat(
+      if (!result.content.trim()) throw new Error("The AI returned an empty paper.");
+      setGenerationStage("Checking questions and marks");
+      let nextPaper: GeneratedPaper;
+      try {
+        nextPaper = parseGeneratedPaperResponse(result.content);
+      } catch {
+        const repair = await api.chat(
+          [{ role: "user", content: makeGenerationPrompt(true) }],
+          `DRAFT TO REPAIR:\n${result.content}`.slice(0, 19_500),
+        );
+        nextPaper = parseGeneratedPaperResponse(repair.content);
+      }
+      if (nextPaper.questions.length !== questionCount || paperTotalMarks(nextPaper) !== totalMarks) {
+        const repair = await api.chat(
           [
             {
               role: "user",
-              content:
-                "Create only a numbered teacher answer key for the supplied question paper. Do not repeat the questions or add commentary.",
+              content: `${makeGenerationPrompt(true)}\nThe draft has ${nextPaper.questions.length} questions and ${paperTotalMarks(nextPaper)} marks. Correct both counts exactly.`,
             },
           ],
-          `QUESTION PAPER\n${parsed.questionText}`.slice(0, 19_500),
+          JSON.stringify(nextPaper).slice(0, 19_500),
         );
-        parsed = { ...parsed, answerKeyText: fallback.content.trim() };
+        nextPaper = parseGeneratedPaperResponse(repair.content);
       }
-      const nextQuestionText = composeQuestionPaper(
-        title,
-        subject,
-        nextSources,
-        parsed.questionText,
-      );
-      const nextAnswerText = composeAnswerKey(title, parsed.answerKeyText);
-      const nextQuestionDocument = textToDocument(nextQuestionText);
-      const nextAnswerDocument = textToDocument(nextAnswerText);
-      const id = createPaperId();
+      if (nextPaper.questions.length !== questionCount || paperTotalMarks(nextPaper) !== totalMarks) {
+        throw new Error(
+          `The AI could not meet the requested structure (${questionCount} questions, ${totalMarks} marks). No incomplete paper was saved.`,
+        );
+      }
+      const id = paperId || createPaperId();
       const now = new Date().toISOString();
-      const savedPaper: SavedQuestionPaper = {
+      const nextMetadata = { ...metadata, sources: references.sources };
+      const saved: SavedQuestionPaper = {
         id,
-        title: title.trim(),
-        subject: subject.trim(),
-        questionText: nextQuestionText,
-        questionDocument: nextQuestionDocument,
-        answerKeyText: nextAnswerText,
-        answerKeyDocument: nextAnswerDocument,
-        sources: nextSources,
-        createdAt: now,
+        title: nextMetadata.title,
+        subject,
+        questionText: questionPaperText(nextMetadata, nextPaper),
+        questionDocument: EMPTY_DOCUMENT,
+        answerKeyText: answerKeyText(nextMetadata, nextPaper),
+        answerKeyDocument: EMPTY_DOCUMENT,
+        sources: references.sources,
+        classroomId,
+        board,
+        syllabusCode: nextMetadata.syllabusCode,
+        difficulty,
+        advanced,
+        paperSpec: nextPaper,
+        createdAt: paperId ? createdAt : now,
         updatedAt: now,
       };
       setPaperId(id);
-      setCreatedAt(now);
-      setSources(nextSources);
-      setPaperText(nextQuestionText);
-      setDocument(nextQuestionDocument);
-      setAnswerKeyText(nextAnswerText);
-      setAnswerDocument(nextAnswerDocument);
+      if (!paperId) setCreatedAt(now);
+      setSources(references.sources);
+      setPaper(nextPaper);
       setEditorView("question");
-      await onSave(savedPaper);
+      await onSave(saved);
       setStatus(
-        warnings.length
-          ? `Paper and answer key saved. ${warnings.join(" ")}`
-          : "Paper and separate answer key saved. Review both before printing.",
+        references.warnings.length
+          ? `Paper saved. Some references were skipped: ${references.warnings.join(" ")}`
+          : "Paper and separate answer key saved. Review before printing.",
       );
     } catch (failure) {
-      setStatus(
-        failure instanceof Error
-          ? failure.message
-          : "The question paper could not be created.",
-      );
+      setStatus(failure instanceof Error ? failure.message : "The question paper could not be created.");
     } finally {
       setBusy(false);
+      setGenerationStage("");
     }
   };
 
-  const activeText = editorView === "question" ? paperText : answerKeyText;
-  const activeDocument = editorView === "question" ? document : answerDocument;
   const activeLabel = editorView === "question" ? "Question paper" : "Answer key";
-  const activeFilename = `${title}${editorView === "answer" ? " answer key" : ""}`;
+  const activeFilename = `${metadata.title}${editorView === "answer" ? " answer key" : ""}`;
 
   const exportPaper = async (extension: "doc" | "html" | "txt") => {
     try {
-      const contents =
-        extension === "txt"
-          ? activeText
-          : paperHtml(activeFilename, activeText, activeLabel);
+      const contents = extension === "txt"
+        ? editorView === "question"
+          ? questionPaperText(metadata, paper)
+          : answerKeyText(metadata, paper)
+        : paperHtml(metadata, paper, editorView);
       const saved = await saveTextExport(
         activeFilename,
         contents,
         extension,
-        extension === "txt"
-          ? "Plain text"
-          : extension === "doc"
-            ? "LibreOffice / Word document"
-            : "HTML document",
+        extension === "txt" ? "Plain text" : extension === "doc" ? "LibreOffice / Word document" : "HTML document",
       );
-      if (saved) setStatus("Question paper exported.");
+      if (saved) setStatus(`${activeLabel} exported.`);
     } catch (failure) {
-      setStatus(
-        failure instanceof Error
-          ? failure.message
-          : "The question paper could not be exported.",
-      );
+      setStatus(failure instanceof Error ? failure.message : "The paper could not be exported.");
     }
   };
 
   const downloadPdf = async () => {
     try {
-      setStatus(`Creating ${activeLabel.toLowerCase()} PDF…`);
-      const contents = await createPaperPdf({
-        title: activeFilename,
-        text: activeText,
-        documentLabel: activeLabel,
-      });
-      if (await savePdfExport(activeFilename, contents)) {
-        setStatus(`${activeLabel} PDF saved.`);
-      }
+      setStatus(`Creating ${activeLabel.toLowerCase()} PDF...`);
+      const contents = await createPaperPdf({ metadata, paper, kind: editorView });
+      if (await savePdfExport(activeFilename, contents)) setStatus(`${activeLabel} PDF saved.`);
     } catch (failure) {
-      setStatus(
-        failure instanceof Error
-          ? failure.message
-          : "The PDF could not be created.",
-      );
+      setStatus(failure instanceof Error ? failure.message : "The PDF could not be created.");
     }
   };
 
   const printPaper = () => {
-    const target = editorView === "question" ? "question" : "answer";
-    window.document.body.dataset.cinderPaperPrint = target;
+    window.document.body.dataset.cinderPaperPrint = editorView;
     const cleanup = () => {
       delete window.document.body.dataset.cinderPaperPrint;
       window.removeEventListener("afterprint", cleanup);
@@ -4138,174 +4518,180 @@ function QuestionPaperStudio({
     window.setTimeout(cleanup, 60_000);
   };
 
-  const saveCurrentPaper = async () => {
-    if (!paperText.trim()) {
-      setStatus("Create or write a question paper before saving it.");
-      return;
-    }
-    const id = paperId || createPaperId();
-    const now = new Date().toISOString();
-    const paper: SavedQuestionPaper = {
-      id,
-      title: title.trim() || "Untitled question paper",
-      subject: subject.trim(),
-      questionText: paperText,
-      questionDocument: document,
-      answerKeyText,
-      answerKeyDocument: answerDocument,
-      sources,
-      createdAt: paperId ? createdAt : now,
-      updatedAt: now,
+  const addBlankQuestion = () => {
+    const next: PaperQuestion = {
+      id: createPaperId(),
+      prompt: "New question",
+      marks: 1,
+      answer: "",
+      workingLines: 3,
+      subparts: [],
+      diagram: null,
+      source: "",
     };
-    setPaperId(id);
-    if (!paperId) setCreatedAt(now);
-    await onSave(paper);
-    setStatus("Saved to this teacher computer.");
+    setPaper((current) => ({ ...current, questions: [...current.questions, next] }));
   };
 
   return (
     <div className="paper-studio">
-      <Panel title="Question paper setup" eyebrow="AI document">
+      <Panel title="Paper setup" eyebrow="Assessment builder">
         <div className="paper-controls form-stack">
           <Field label="Paper title">
-            <input value={title} onChange={(event) => setTitle(event.target.value)} />
+            <input maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} />
           </Field>
-          <Field label="Subject">
-            <input
-              value={subject}
-              onChange={(event) => setSubject(event.target.value)}
-              placeholder="For example, Grade 8 Science"
-            />
+          <Field label="Classroom and subject">
+            <select
+              value={classroomId}
+              onChange={(event) => {
+                const id = event.target.value;
+                setClassroomId(id);
+                setSelected([]);
+                setSyllabusCode(classrooms.find((item) => item.id === id)?.subject_code ?? "");
+              }}
+            >
+              <option value="">Choose a classroom</option>
+              {classrooms.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+            </select>
           </Field>
-          <div className="form-row">
-            <Field label="Difficulty">
-              <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>
-                <option>Foundational</option>
-                <option>Mixed</option>
-                <option>Challenging</option>
+          <div className="paper-brief-strip">
+            <Field label="Board">
+              <select value={board} onChange={(event) => setBoard(event.target.value as ExamBoard)}>
+                <option value="CIE">CIE</option>
+                <option value="IGCSE">IGCSE</option>
+                <option value="CBSE">CBSE</option>
+                <option value="ICSE">ICSE</option>
               </select>
             </Field>
+            <Field label="Difficulty">
+              <select value={difficulty} onChange={(event) => setDifficulty(Number(event.target.value) as DifficultyLevel)}>
+                {[1, 2, 3, 4, 5].map((level) => (
+                  <option value={level} key={level}>{level} - {difficultyName(level as DifficultyLevel)}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="paper-brief-strip">
             <Field label="Questions">
-              <input type="number" min={1} max={50} value={questionCount} onChange={(event) => setQuestionCount(Math.max(1, Math.min(50, Number(event.target.value))))} />
+              <input type="number" min={1} max={30} value={questionCount} onChange={(event) => setQuestionCount(Math.max(1, Math.min(30, Number(event.target.value) || 1)))} />
             </Field>
             <Field label="Total marks">
-              <input type="number" min={1} max={500} value={totalMarks} onChange={(event) => setTotalMarks(Math.max(1, Math.min(500, Number(event.target.value))))} />
+              <input type="number" min={1} max={300} value={totalMarks} onChange={(event) => setTotalMarks(Math.max(1, Math.min(300, Number(event.target.value) || 1)))} />
             </Field>
           </div>
-          <Field label="Extra instructions">
-            <textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder="Question types, chapters, learning goals, or accommodations…" />
+          <Field label="Teacher brief">
+            <textarea maxLength={2000} value={teacherBrief} onChange={(event) => setTeacherBrief(event.target.value)} placeholder="Chapters, question types, learning goals or accommodations..." />
           </Field>
-          <div className="reference-picker">
-            <strong>Reference PDFs</strong>
-            <small>Select classroom material or add PDFs from this computer.</small>
-            <div className="reference-list">
-              {materials.length ? materials.map((material) => (
-                <label className="check-field" key={material.id}>
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(material.id)}
-                    onChange={(event) =>
-                      setSelected((current) =>
-                        event.target.checked
-                          ? [...current, material.id].slice(0, 8)
-                          : current.filter((id) => id !== material.id),
-                      )
-                    }
-                  />
-                  <span>
-                    {material.name}
-                    {material.classroom_id
-                      ? ` · ${classrooms.find((room) => room.id === material.classroom_id)?.name ?? "Classroom"}`
-                      : ""}
-                  </span>
-                </label>
-              )) : <small>No classroom materials have been uploaded yet.</small>}
-            </div>
-            <label className="button button-secondary upload-button">
-              Add local PDFs
-              <input
-                type="file"
-                accept="application/pdf,.pdf"
-                multiple
-                onChange={(event) => {
-                  const next = Array.from(event.target.files ?? []);
-                  setLocalFiles((current) => [...current, ...next].slice(0, 8));
-                  event.target.value = "";
-                }}
-              />
-            </label>
-            {localFiles.length ? (
-              <div className="reference-chips">
-                {localFiles.map((file, index) => (
-                  <button key={`${file.name}-${index}`} type="button" onClick={() => setLocalFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
-                    {file.name} ×
-                  </button>
-                ))}
+
+          <details className="paper-advanced">
+            <summary>Advanced options</summary>
+            <div className="form-stack">
+              <Field label="Syllabus code">
+                <input maxLength={40} value={syllabusCode} onChange={(event) => setSyllabusCode(event.target.value)} placeholder="For example, 9702" />
+              </Field>
+              <div className="paper-brief-strip">
+                <Field label="Past-paper year">
+                  <input maxLength={20} value={advanced.year} onChange={(event) => setAdvanced((current) => ({ ...current, year: event.target.value }))} />
+                </Field>
+                <Field label="Session">
+                  <input maxLength={40} value={advanced.session} onChange={(event) => setAdvanced((current) => ({ ...current, session: event.target.value }))} placeholder="May/June" />
+                </Field>
               </div>
-            ) : null}
-            <small>
-              Selected PDF text is sent to the AI provider configured on this
-              Teacher computer. Cinder samples each selected reference to fit
-              the request limit. Image-only scans require OCR first.
-            </small>
-          </div>
-          <div className="list-actions">
-            <Button variant="primary" icon="assistant" onClick={() => void generate()} disabled={busy || !title.trim()}>
-            {busy ? "Creating…" : "Create editable paper"}
+              <div className="paper-brief-strip">
+                <Field label="Paper / variant">
+                  <input maxLength={40} value={advanced.paperVariant} onChange={(event) => setAdvanced((current) => ({ ...current, paperVariant: event.target.value }))} placeholder="22" />
+                </Field>
+                <Field label="Duration (minutes)">
+                  <input type="number" min={10} max={360} value={advanced.durationMinutes} onChange={(event) => setAdvanced((current) => ({ ...current, durationMinutes: Math.max(10, Math.min(360, Number(event.target.value) || 60)) }))} />
+                </Field>
+              </div>
+              <Field label="Topics">
+                <input maxLength={400} value={advanced.topics} onChange={(event) => setAdvanced((current) => ({ ...current, topics: event.target.value }))} placeholder="Mechanics, electricity..." />
+              </Field>
+              <label className="check-field">
+                <input type="checkbox" checked={advanced.includeDiagrams} onChange={(event) => setAdvanced((current) => ({ ...current, includeDiagrams: event.target.checked }))} />
+                <span>Generate diagrams when the question needs them</span>
+              </label>
+
+              <div className="reference-picker">
+                <div className="reference-heading">
+                  <span><strong>Past-paper references</strong><small>Official sources and uploaded PDFs</small></span>
+                  <Button variant="secondary" onClick={() => void openExternalUrl(officialSourceUrl(board, syllabusCode, subject, advanced.year))}>Open official library</Button>
+                </div>
+                <small>Download an official paper, then add it below. Selected PDF text is sent to your configured AI provider and cited by filename and page.</small>
+                <div className="reference-list">
+                  {classroomMaterials.length ? classroomMaterials.map((material) => (
+                    <label className="check-field" key={material.id}>
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(material.id)}
+                        onChange={(event) => setSelected((current) => event.target.checked ? [...new Set([...current, material.id])].slice(0, 8) : current.filter((id) => id !== material.id))}
+                      />
+                      <span>{material.name}</span>
+                    </label>
+                  )) : <small>No PDF materials in this classroom.</small>}
+                </div>
+                <label className="button button-secondary upload-button">
+                  Add PDF references
+                  <input type="file" accept="application/pdf,.pdf" multiple onChange={(event) => {
+                    setLocalFiles((current) => [...current, ...Array.from(event.target.files ?? [])].slice(0, 8));
+                    event.target.value = "";
+                  }} />
+                </label>
+                {localFiles.length ? (
+                  <div className="reference-chips">
+                    {localFiles.map((file, index) => (
+                      <button type="button" key={`${file.name}-${index}`} onClick={() => setLocalFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}>{file.name} x</button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </details>
+
+          <div className="paper-create-actions">
+            <Button variant="primary" icon="assistant" onClick={() => void generate()} disabled={busy || !title.trim() || !classroomId}>
+              {busy ? "Creating paper..." : "Create paper"}
             </Button>
-            <Button onClick={onCreateNew}>Clear for new paper</Button>
+            <Button onClick={onCreateNew}>New blank setup</Button>
           </div>
-          {status ? <p className={status.includes("could not") ? "form-error" : "form-hint"}>{status}</p> : null}
+          {status ? <p className={/could not|must|unavailable|incomplete/i.test(status) ? "form-error" : "form-hint"}>{status}</p> : null}
         </div>
       </Panel>
-      <Panel className="paper-editor-panel panel-flush" title="Editable paper" eyebrow="Print preview">
-        {paperText ? (
+
+      <Panel className="paper-editor-panel panel-flush" title="Paper preview" eyebrow={`${board} / ${difficultyName(difficulty)}`}>
+        {paper.questions.length ? (
           <>
             <div className="paper-export-bar">
               <div className="paper-document-switch" role="tablist" aria-label="Paper document">
-                <Button
-                  variant={editorView === "question" ? "primary" : "secondary"}
-                  onClick={() => setEditorView("question")}
-                >
-                  Question paper
-                </Button>
-                <Button
-                  variant={editorView === "answer" ? "primary" : "secondary"}
-                  onClick={() => setEditorView("answer")}
-                >
-                  Answer key
-                </Button>
+                <Button variant={editorView === "question" ? "primary" : "secondary"} onClick={() => setEditorView("question")}>Question paper</Button>
+                <Button variant={editorView === "answer" ? "primary" : "secondary"} onClick={() => setEditorView("answer")}>Answer key</Button>
               </div>
-              <Button onClick={() => void saveCurrentPaper()}>Save paper</Button>
-              <Button variant="primary" icon="download" onClick={() => void downloadPdf()}>
-                Download PDF
-              </Button>
+              <span className="paper-save-status">{paper.questions.length} questions / {paperTotalMarks(paper)} marks</span>
+              <Button variant="primary" icon="download" onClick={() => void downloadPdf()}>Download PDF</Button>
               <Button onClick={printPaper}>Print</Button>
-              <Button icon="download" onClick={() => void exportPaper("doc")}>Export .doc</Button>
-              <Button icon="download" onClick={() => void exportPaper("txt")}>Export text</Button>
+              <details className="paper-more-actions">
+                <summary>More</summary>
+                <button type="button" onClick={() => void exportPaper("doc")}>Export .doc</button>
+                <button type="button" onClick={() => void exportPaper("txt")}>Export text</button>
+              </details>
             </div>
-            <div className="question-paper-print">
-              <DocumentEditor
-                key={editorView}
-                value={activeDocument}
-                status={`${activeLabel} · edits save automatically`}
-                onChange={(next, plaintext) => {
-                  if (editorView === "question") {
-                    setDocument(next);
-                    setPaperText(plaintext);
-                  } else {
-                    setAnswerDocument(next);
-                    setAnswerKeyText(plaintext);
-                  }
-                }}
-              />
+            <div className="worksheet-canvas">
+              <PaperDocumentView metadata={metadata} paper={paper} kind={editorView} editable onChange={setPaper} />
+              <Button variant="secondary" icon="plus" onClick={addBlankQuestion}>Add question</Button>
             </div>
-            <PrintablePaper text={paperText} kind="question" />
-            <PrintablePaper text={answerKeyText} kind="answer" />
+            <PrintablePaper metadata={metadata} paper={paper} kind="question" />
+            <PrintablePaper metadata={metadata} paper={paper} kind="answer" />
           </>
         ) : (
-          <EmptyState icon="document" title="No paper yet" description="Choose the setup and optional references, then create an editable question paper." />
+          <EmptyState icon="document" title="No paper yet" description="Choose a classroom and paper settings, then create a structured paper." />
         )}
+        {busy ? (
+          <div className="paper-generation-overlay" role="status" aria-live="polite">
+            <span className="paper-loading-spinner" />
+            <strong>{generationStage || "Creating paper"}</strong>
+            <small>This may take a minute. The paper is checked before it is saved.</small>
+          </div>
+        ) : null}
       </Panel>
     </div>
   );

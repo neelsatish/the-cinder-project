@@ -4,17 +4,19 @@ import { setTheme as setNativeTheme } from "@tauri-apps/api/app";
 
 import { Icon } from "./icons";
 
-export type CinderTheme = "light" | "dark";
+export type CinderTheme = "light" | "cinder" | "dark";
 
 const THEME_STORAGE_KEY = "cinder.appearance.theme";
 const THEME_COLORS: Record<CinderTheme, string> = {
   light: "#F7F1E7",
-  dark: "#221309",
+  cinder: "#221309",
+  dark: "#15171A",
 };
 
 function storedTheme(): CinderTheme {
   try {
-    return localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    return stored === "cinder" || stored === "dark" ? stored : "light";
   } catch {
     return "light";
   }
@@ -23,7 +25,7 @@ function storedTheme(): CinderTheme {
 function applyDocumentTheme(theme: CinderTheme) {
   if (typeof document === "undefined") return;
   document.documentElement.dataset.theme = theme;
-  document.documentElement.style.colorScheme = theme;
+  document.documentElement.style.colorScheme = theme === "light" ? "light" : "dark";
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute("content", THEME_COLORS[theme]);
@@ -52,7 +54,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
 
     if ("__TAURI_INTERNALS__" in window) {
-      void setNativeTheme(theme).catch(() => undefined);
+      void setNativeTheme(theme === "light" ? "light" : "dark").catch(() => undefined);
     }
   }, [theme]);
 
@@ -60,7 +62,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     () => ({
       theme,
       setTheme,
-      toggleTheme: () => setTheme((current) => (current === "light" ? "dark" : "light")),
+      toggleTheme: () =>
+        setTheme((current) =>
+          current === "light" ? "cinder" : current === "cinder" ? "dark" : "light",
+        ),
     }),
     [theme],
   );
@@ -75,20 +80,23 @@ export function useTheme() {
 }
 
 export function ThemeToggle({ className = "" }: { className?: string }) {
-  const { theme, toggleTheme } = useTheme();
-  const nextTheme = theme === "light" ? "dark" : "light";
-  const label = `${nextTheme === "dark" ? "Dark" : "Light"} mode`;
+  const { theme, setTheme } = useTheme();
 
   return (
-    <button
+    <label
       className={`theme-toggle ${className}`.trim()}
-      type="button"
-      onClick={toggleTheme}
-      aria-label={`Switch to ${label.toLowerCase()}`}
-      title={`Switch to ${label.toLowerCase()}`}
+      title="Appearance"
     >
-      <Icon name={nextTheme === "dark" ? "moon" : "sun"} />
-      <span className="theme-toggle-label">{label}</span>
-    </button>
+      <Icon name={theme === "light" ? "sun" : "moon"} />
+      <select
+        value={theme}
+        onChange={(event) => setTheme(event.target.value as CinderTheme)}
+        aria-label="Appearance"
+      >
+        <option value="light">Light</option>
+        <option value="cinder">Cinder original</option>
+        <option value="dark">Plain dark</option>
+      </select>
+    </label>
   );
 }

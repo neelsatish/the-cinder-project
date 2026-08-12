@@ -2,6 +2,7 @@ export * from "./api";
 export * from "./cache";
 export * from "./components";
 export * from "./editor";
+export * from "./external";
 export * from "./icons";
 export * from "./types";
 export * from "./updater";

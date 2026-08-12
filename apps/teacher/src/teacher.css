@@ -526,23 +526,24 @@
 }
 .saved-paper-list {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 16px;
 }
 .saved-paper-row {
   min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.saved-paper-row:last-child {
-  border-bottom: 0;
+  display: grid;
+  gap: 10px;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-lowest);
 }
 .saved-paper-row > button:first-child {
   min-width: 0;
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 0;
   border: 0;
@@ -552,6 +553,8 @@
   cursor: pointer;
 }
 .saved-paper-row > button:first-child > svg {
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
   color: var(--primary);
 }
@@ -569,12 +572,15 @@
 .saved-paper-row small {
   color: var(--muted);
 }
+.saved-paper-row > .button {
+  justify-self: end;
+}
 .paper-studio {
   min-height: 0;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(320px, 380px) minmax(600px, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(300px, 340px) minmax(600px, 1fr);
+  gap: 14px;
   overflow: hidden;
 }
 .paper-studio > .panel {
@@ -597,8 +603,25 @@
   overflow: hidden;
 }
 .paper-controls textarea {
-  min-height: 88px;
+  min-height: 72px;
 }
+.paper-brief-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.paper-advanced {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.paper-advanced > summary {
+  padding: 13px 2px;
+  color: var(--text-soft);
+  font-weight: 700;
+  cursor: pointer;
+}
+.paper-advanced[open] > summary { margin-bottom: 12px; }
+.paper-advanced > .form-stack { padding-bottom: 14px; }
 .reference-picker {
   display: grid;
   gap: 9px;
@@ -607,6 +630,18 @@
   border-radius: var(--radius);
   background: var(--surface-lowest);
 }
+.reference-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.reference-heading > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.reference-heading small { color: var(--muted); }
 .reference-picker > small,
 .reference-list > small {
   color: var(--muted);
@@ -644,7 +679,7 @@
 .paper-export-bar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
@@ -654,14 +689,200 @@
   gap: 6px;
   margin-right: auto;
 }
-.question-paper-print {
+.paper-save-status {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.paper-more-actions { position: relative; }
+.paper-more-actions > summary {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.paper-more-actions[open] { z-index: 5; }
+.paper-more-actions > button {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 5px);
+  width: 140px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.paper-more-actions > button + button { top: calc(100% + 42px); }
+.paper-create-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.worksheet-canvas {
   min-height: 0;
   flex: 1;
-  overflow: hidden;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 14px;
+  padding: 26px 22px 54px;
+  overflow: auto;
+  background: var(--surface-low);
+  scrollbar-gutter: stable;
 }
-.question-paper-print .document-editor {
-  height: 100%;
+.worksheet-page {
+  color-scheme: light;
+  width: min(100%, 794px);
+  min-height: 1123px;
+  padding: 64px 70px 80px;
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 44px rgba(54, 32, 20, 0.12);
+  background: #fff;
+  color: #171717;
+  font: 15px/1.5 Arial, "Liberation Sans", sans-serif;
 }
+.worksheet-header {
+  padding-bottom: 18px;
+  border-bottom: 1px solid #a9a9a9;
+}
+.worksheet-header h1 {
+  margin: 0 0 6px;
+  font-size: 28px;
+  line-height: 1.2;
+}
+.worksheet-header p {
+  margin: 3px 0 0;
+  color: #494949;
+  font-size: 12px;
+}
+.worksheet-sources { overflow-wrap: anywhere; }
+.worksheet-instructions { margin: 20px 0; }
+.worksheet-instructions h2 { margin: 0 0 7px; font-size: 14px; }
+.worksheet-instructions ul { margin: 0; padding-left: 22px; }
+.worksheet-questions {
+  display: grid;
+  gap: 24px;
+  margin-top: 24px;
+}
+.worksheet-question { break-inside: avoid; }
+.worksheet-question-row,
+.worksheet-subpart {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 40px;
+  gap: 8px;
+  align-items: start;
+}
+.worksheet-question-row p,
+.worksheet-subpart p { margin: 0; white-space: pre-wrap; }
+.worksheet-question-row textarea,
+.worksheet-subpart textarea,
+.worksheet-answer-edit {
+  width: 100%;
+  min-height: 58px;
+  padding: 7px 8px;
+  resize: vertical;
+  border: 1px solid #d8d8d8;
+  border-radius: 4px;
+  background: #fff;
+  color: #171717;
+  font: inherit;
+}
+.worksheet-marks { text-align: right; font-weight: 700; }
+.worksheet-inline-number {
+  width: 40px;
+  min-height: 30px;
+  padding: 3px;
+  border: 1px solid #cfcfcf;
+  background: #fff;
+  color: #171717;
+  text-align: center;
+}
+.worksheet-subpart { margin: 14px 0 0 28px; }
+.worksheet-subpart-answer { display: grid; gap: 8px; }
+.worksheet-answer,
+.worksheet-answer-edit { margin: 10px 0 0 36px; color: #26382b; }
+.worksheet-working-lines {
+  grid-column: 2 / 4;
+  display: grid;
+  margin-top: 7px;
+}
+.worksheet-working-lines i {
+  height: 27px;
+  border-bottom: 1px solid #c7c7c7;
+}
+.worksheet-diagram {
+  max-width: 570px;
+  margin: 18px auto;
+  text-align: center;
+}
+.worksheet-diagram img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  margin: auto;
+}
+.worksheet-diagram figcaption,
+.worksheet-source-note { color: #565656; font-size: 12px; }
+.worksheet-edit-meta {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  margin: 10px 0 0 36px;
+  padding-top: 9px;
+  border-top: 1px dashed #dedede;
+  color: #666;
+  font-size: 11px;
+}
+.worksheet-edit-meta label { display: grid; gap: 3px; }
+.worksheet-edit-meta input {
+  width: 76px;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 1px solid #cfcfcf;
+  background: #fff;
+  color: #171717;
+}
+.worksheet-edit-meta button {
+  margin-left: auto;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: #9d331f;
+  cursor: pointer;
+}
+.paper-generation-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 30px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  text-align: center;
+  backdrop-filter: blur(4px);
+}
+.paper-generation-overlay small { max-width: 360px; color: var(--muted); }
+.paper-loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: paper-spin 0.8s linear infinite;
+}
+@keyframes paper-spin { to { transform: rotate(360deg); } }
+.paper-editor-panel { position: relative; }
 .paper-print-copy {
   display: none;
 }
@@ -703,7 +924,7 @@
 @media print {
   @page {
     size: A4;
-    margin: 20mm;
+    margin: 16mm 18mm;
   }
   body[data-cinder-paper-print] {
     overflow: visible !important;
@@ -740,7 +961,15 @@
     padding: 0;
     background: #fff;
     color: #181512;
-    font: 12pt/1.55 "Liberation Serif", Georgia, serif;
+    font: 11pt/1.5 Arial, "Liberation Sans", sans-serif;
+  }
+  .paper-print-copy .worksheet-page {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    font: inherit;
   }
   .paper-print-copy h1 {
     margin: 0 0 14pt;
@@ -748,7 +977,7 @@
   }
   .paper-print-copy h2 {
     margin: 14pt 0 7pt;
-    color: #6e3216;
+    color: #181512;
     font: 700 10pt/1.35 "Liberation Sans", Arial, sans-serif;
   }
   .paper-print-copy p {

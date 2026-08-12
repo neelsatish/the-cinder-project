@@ -1,6 +1,21 @@
+import type {
+  DifficultyLevel,
+  ExamBoard,
+  GeneratedPaper,
+} from "./paperLogic";
+
 export type PaperSourceCitation = {
   name: string;
   pages: number[];
+};
+
+export type PaperAdvancedOptions = {
+  year: string;
+  session: string;
+  paperVariant: string;
+  durationMinutes: number;
+  topics: string;
+  includeDiagrams: boolean;
 };
 
 export type SavedQuestionPaper = {
@@ -12,6 +27,12 @@ export type SavedQuestionPaper = {
   answerKeyText: string;
   answerKeyDocument: Record<string, unknown>;
   sources: PaperSourceCitation[];
+  classroomId?: string;
+  board?: ExamBoard;
+  syllabusCode?: string;
+  difficulty?: DifficultyLevel;
+  advanced?: PaperAdvancedOptions;
+  paperSpec?: GeneratedPaper;
   createdAt: string;
   updatedAt: string;
 };
@@ -55,6 +76,22 @@ function isSavedQuestionPaper(value: unknown): value is SavedQuestionPaper {
     Boolean(paper.questionDocument && typeof paper.questionDocument === "object") &&
     typeof paper.answerKeyText === "string" &&
     Boolean(paper.answerKeyDocument && typeof paper.answerKeyDocument === "object") &&
+    (paper.classroomId === undefined || typeof paper.classroomId === "string") &&
+    (paper.board === undefined || ["CIE", "IGCSE", "CBSE", "ICSE"].includes(paper.board)) &&
+    (paper.syllabusCode === undefined || typeof paper.syllabusCode === "string") &&
+    (paper.difficulty === undefined || [1, 2, 3, 4, 5].includes(paper.difficulty)) &&
+    (paper.advanced === undefined ||
+      Boolean(
+        paper.advanced &&
+          typeof paper.advanced === "object" &&
+          typeof paper.advanced.year === "string" &&
+          typeof paper.advanced.session === "string" &&
+          typeof paper.advanced.paperVariant === "string" &&
+          Number.isFinite(paper.advanced.durationMinutes) &&
+          typeof paper.advanced.topics === "string" &&
+          typeof paper.advanced.includeDiagrams === "boolean",
+      )) &&
+    (paper.paperSpec === undefined || Boolean(paper.paperSpec && typeof paper.paperSpec === "object")) &&
     Array.isArray(paper.sources) &&
     paper.sources.every(
       (source) =>

@@ -41,7 +41,7 @@
   text-rendering: optimizeLegibility;
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="cinder"] {
   color-scheme: dark;
   --background: #180d07;
   --surface-lowest: #1c0f08;
@@ -70,6 +70,37 @@
   --document-canvas: #100804;
   --scrollbar-track: #1b0e07;
   --scrollbar-thumb: #60351f;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #111315;
+  --surface-lowest: #15181b;
+  --surface: #1b1e22;
+  --surface-raised: #21252a;
+  --surface-high: #2a2f35;
+  --border: #30363d;
+  --border-strong: #4a525c;
+  --text: #f2f3f5;
+  --text-soft: #c8cdd3;
+  --muted: #929aa4;
+  --primary: #ef8b43;
+  --primary-strong: #ff9d58;
+  --primary-ink: #17191c;
+  --ember: #d76522;
+  --warm: #ef9c52;
+  --warning: #e7ad59;
+  --danger: #ff8177;
+  --success: #8fbd78;
+  --panel-background: rgba(27, 30, 34, 0.98);
+  --topbar-background: rgba(21, 24, 27, 0.96);
+  --accent-wash: rgba(239, 139, 67, 0.13);
+  --accent-wash-soft: rgba(239, 139, 67, 0.065);
+  --workspace-dot: rgba(239, 139, 67, 0.08);
+  --document-chrome: #171a1e;
+  --document-canvas: #0d0f11;
+  --scrollbar-track: #15181b;
+  --scrollbar-thumb: #454c54;
 }
 
 * {
@@ -256,6 +287,19 @@ select:focus-visible {
   background: var(--surface-lowest);
   color: var(--text-soft);
   cursor: pointer;
+}
+.theme-toggle select {
+  width: auto;
+  min-height: 0;
+  padding: 0 18px 0 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-weight: 650;
+}
+.theme-toggle select:focus-visible {
+  outline: 0;
 }
 .theme-toggle:hover {
   border-color: var(--border-strong);
