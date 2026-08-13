@@ -168,7 +168,9 @@ let it substitute for server-side authorisation checks.
 - **Claude Code** has done the licensing, documentation, brand system and repo
   hygiene. The `openai/codex-plugin-cc` plugin is installed, so Claude Code can
   delegate to Codex or ask it to review a diff (`/codex:review`, `/codex:transfer`).
-  Run `/codex:setup` first — the Codex CLI was not on `PATH` when last checked.
+  Verified 13 August: the plugin is installed and enabled, and the Codex CLI is on
+  `PATH` at `~/AppData/Roaming/npm/codex`. The earlier note that it was missing is
+  no longer true, so `/codex:setup` is not needed.
 - **Careful with two agents on one repo.** Both commit to `main`. This has already
   gone wrong once in a way worth recording: design work left uncommitted in
   `design/brand/` was swept into Codex's `Release Cinder Matchbox 0.8.0` commit by a
