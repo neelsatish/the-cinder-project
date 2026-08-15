@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PDFDocument } from "pdf-lib";
 import {
   compactPageRanges,
   difficultyPrompt,
@@ -57,6 +58,24 @@ test("rejects malformed free-form model output", () => {
   );
 });
 
+test("repairs common model JSON mistakes without losing the paper", () => {
+  const parsed = parseGeneratedPaperResponse(`{
+    "instructions": ["Use the relation \\q = mc delta T",],
+    "questions": [{
+      "id": "q1",
+      "prompt": "State the result.\nInclude units.",
+      "marks": 2,
+      "answer": "42 J",
+      "working_lines": 2,
+      "subparts": [],
+      "diagram": null,
+    }],
+  }`);
+  assert.equal(parsed.questions.length, 1);
+  assert.match(parsed.questions[0].prompt, /Include units/);
+  assert.match(parsed.instructions[0], /\\q/);
+});
+
 test("difficulty instructions scale materially", () => {
   assert.match(difficultyPrompt(1), /direct recall/i);
   assert.match(difficultyPrompt(3), /board-exam demand/i);
@@ -103,4 +122,21 @@ test("creates separate, unbranded PDF documents", async () => {
   assert.equal(new TextDecoder().decode(answerBytes.slice(0, 5)), "%PDF-");
   assert.doesNotMatch(new TextDecoder().decode(questionBytes), /Cinder/i);
   assert.doesNotMatch(new TextDecoder().decode(answerBytes), /Cinder/i);
+});
+
+test("paginates a long paper across A4 sheets", async () => {
+  const longPaper = {
+    ...paper,
+    questions: Array.from({ length: 12 }, (_, index) => ({
+      ...paper.questions[0],
+      id: `q${index + 1}`,
+      prompt: index % 3 === 0
+        ? "Explain the measurements, calculation and one precaution needed for a reliable motion experiment."
+        : "Calculate the result and include its unit.",
+      workingLines: index % 3 === 0 ? 8 : 4,
+    })),
+  };
+  const bytes = await createPaperPdf({ metadata, paper: longPaper, kind: "question" });
+  const document = await PDFDocument.load(bytes);
+  assert.ok(document.getPageCount() >= 3);
 });

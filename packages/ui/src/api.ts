@@ -597,12 +597,16 @@ export class CinderApi {
     });
   }
 
-  chat(messages: ChatMessage[], context?: string) {
+  chat(messages: ChatMessage[], context?: string, maxOutputTokens?: number) {
     return this.request<{ content: string }>(
       "/api/ai/chat",
       {
         method: "POST",
-        body: JSON.stringify({ messages, context }),
+        body: JSON.stringify({
+          messages,
+          context,
+          max_output_tokens: maxOutputTokens,
+        }),
       },
       190_000,
     );

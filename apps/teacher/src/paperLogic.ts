@@ -246,14 +246,61 @@ function extractJsonObject(value: string) {
   return cleaned.slice(start, end + 1);
 }
 
+function repairCommonJsonIssues(value: string) {
+  let repaired = "";
+  let inString = false;
+  let escaped = false;
+  for (const character of value) {
+    if (!inString) {
+      if (character === '"') inString = true;
+      repaired += character;
+      continue;
+    }
+    if (escaped) {
+      if ('"\\/bfnrtu'.includes(character)) {
+        repaired += `\\${character}`;
+      } else {
+        repaired += `\\\\${character}`;
+      }
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (character === '"') {
+      inString = false;
+      repaired += character;
+      continue;
+    }
+    if (character === "\n") repaired += "\\n";
+    else if (character === "\r") repaired += "\\r";
+    else if (character === "\t") repaired += "\\t";
+    else repaired += character;
+  }
+  if (escaped) repaired += "\\\\";
+  return repaired.replace(/,\s*([}\]])/g, "$1");
+}
+
 export function parseGeneratedPaperResponse(value: string) {
+  let json: string;
   try {
-    return normalizeGeneratedPaper(JSON.parse(extractJsonObject(value)));
+    json = extractJsonObject(value);
+  } catch {
+    throw new Error("The AI returned malformed paper data. Try creating the paper again.");
+  }
+  try {
+    return normalizeGeneratedPaper(JSON.parse(json));
   } catch (failure) {
     if (failure instanceof Error && /AI response|questions|paper specification/.test(failure.message)) {
       throw failure;
     }
-    throw new Error("The AI returned malformed paper data. Try creating the paper again.");
+    try {
+      return normalizeGeneratedPaper(JSON.parse(repairCommonJsonIssues(json)));
+    } catch {
+      throw new Error("The AI returned malformed paper data. Try creating the paper again.");
+    }
   }
 }
 

@@ -179,8 +179,12 @@ impl ChatClient {
         matches!(request.send().await, Ok(r) if r.status().is_success())
     }
 
-    pub async fn complete(&self, messages: &[(String, String)]) -> Result<String> {
-        let payload = serde_json::json!({
+    pub async fn complete(
+        &self,
+        messages: &[(String, String)],
+        max_output_tokens: Option<u32>,
+    ) -> Result<String> {
+        let mut payload = serde_json::json!({
             "model": self.model,
             "messages": messages
                 .iter()
@@ -189,6 +193,9 @@ impl ChatClient {
             "temperature": 0.4,
             "stream": false,
         });
+        if let Some(max_output_tokens) = max_output_tokens {
+            payload["max_tokens"] = serde_json::json!(max_output_tokens);
+        }
 
         let mut request = self
             .client

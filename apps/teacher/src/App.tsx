@@ -4236,6 +4236,7 @@ function QuestionPaperStudio({
   const [status, setStatus] = useState(activePaper ? "Saved paper opened." : "");
   const [busy, setBusy] = useState(false);
   const [generationStage, setGenerationStage] = useState("");
+  const [previewRevision, setPreviewRevision] = useState(0);
   const latestPaperRef = useRef<SavedQuestionPaper | null>(activePaper);
 
   const classroom = classrooms.find((item) => item.id === classroomId) ?? null;
@@ -4405,6 +4406,7 @@ Paper specification:
       const result = await api.chat(
         [{ role: "user", content: makeGenerationPrompt() }],
         references.context || undefined,
+        4_096,
       );
       if (!result.content.trim()) throw new Error("The AI returned an empty paper.");
       setGenerationStage("Checking questions and marks");
@@ -4415,6 +4417,7 @@ Paper specification:
         const repair = await api.chat(
           [{ role: "user", content: makeGenerationPrompt(true) }],
           `DRAFT TO REPAIR:\n${result.content}`.slice(0, 19_500),
+          4_096,
         );
         nextPaper = parseGeneratedPaperResponse(repair.content);
       }
@@ -4427,6 +4430,7 @@ Paper specification:
             },
           ],
           JSON.stringify(nextPaper).slice(0, 19_500),
+          4_096,
         );
         nextPaper = parseGeneratedPaperResponse(repair.content);
       }
@@ -4460,6 +4464,7 @@ Paper specification:
       if (!paperId) setCreatedAt(now);
       setSources(references.sources);
       setPaper(nextPaper);
+      setPreviewRevision((revision) => revision + 1);
       setEditorView("question");
       await onSave(saved);
       setStatus(
@@ -4468,7 +4473,14 @@ Paper specification:
           : "Paper and separate answer key saved. Review before printing.",
       );
     } catch (failure) {
-      setStatus(failure instanceof Error ? failure.message : "The question paper could not be created.");
+      const message = failure instanceof Error
+        ? failure.message
+        : "The question paper could not be created.";
+      setStatus(
+        paper.questions.length
+          ? `${message} The current preview was left unchanged.`
+          : message,
+      );
     } finally {
       setBusy(false);
       setGenerationStage("");
@@ -4676,7 +4688,14 @@ Paper specification:
               </details>
             </div>
             <div className="worksheet-canvas">
-              <PaperDocumentView metadata={metadata} paper={paper} kind={editorView} editable onChange={setPaper} />
+              <PaperDocumentView
+                key={`paper-preview-${previewRevision}`}
+                metadata={metadata}
+                paper={paper}
+                kind={editorView}
+                editable
+                onChange={setPaper}
+              />
               <Button variant="secondary" icon="plus" onClick={addBlankQuestion}>Add question</Button>
             </div>
             <PrintablePaper metadata={metadata} paper={paper} kind="question" />

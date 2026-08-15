@@ -743,6 +743,7 @@
   color-scheme: light;
   width: min(100%, 794px);
   min-height: 1123px;
+  height: fit-content;
   padding: 64px 70px 80px;
   border: 1px solid var(--border);
   box-shadow: 0 16px 44px rgba(54, 32, 20, 0.12);
@@ -769,10 +770,9 @@
 .worksheet-instructions h2 { margin: 0 0 7px; font-size: 14px; }
 .worksheet-instructions ul { margin: 0; padding-left: 22px; }
 .worksheet-questions {
-  display: grid;
-  gap: 24px;
   margin-top: 24px;
 }
+.worksheet-question + .worksheet-question { margin-top: 24px; }
 .worksheet-question { break-inside: avoid; }
 .worksheet-question-row,
 .worksheet-subpart {

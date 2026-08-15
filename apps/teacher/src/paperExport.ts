@@ -175,6 +175,25 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
     y -= options.gapAfter ?? 0;
   };
 
+  const wrappedHeight = (
+    value: string,
+    options: {
+      width?: number;
+      size?: number;
+      lineHeight?: number;
+      strong?: boolean;
+      gapAfter?: number;
+    } = {},
+  ) => {
+    const size = options.size ?? 10.5;
+    const lineHeight = options.lineHeight ?? size * 1.42;
+    const font = options.strong ? bold : regular;
+    return (
+      wrapLine(value, options.width ?? contentWidth, font, size).length * lineHeight
+      + (options.gapAfter ?? 0)
+    );
+  };
+
   const title = kind === "answer" ? `${metadata.title} - Answer key` : metadata.title;
   drawWrapped(title || "Question paper", { size: 19, lineHeight: 23, strong: true, gapAfter: 5 });
   drawWrapped(metadata.subject, { size: 11, strong: true, gapAfter: 2 });
@@ -228,7 +247,58 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
   };
 
   const drawQuestion = async (question: PaperQuestion, index: number) => {
-    ensureSpace(120);
+    const promptHeight = wrappedHeight(question.prompt, {
+      width: contentWidth - 70,
+      size: 10.5,
+      lineHeight: 15,
+      gapAfter: 5,
+    });
+    let estimatedHeight = promptHeight + 9;
+    if (question.diagram) {
+      estimatedHeight += 215;
+      if (question.diagram.caption) {
+        estimatedHeight += wrappedHeight(question.diagram.caption, {
+          width: contentWidth - 60,
+          size: 8,
+          lineHeight: 10,
+          gapAfter: 4,
+        });
+      }
+    }
+    if (kind === "answer" && !question.subparts.length) {
+      estimatedHeight += wrappedHeight(question.answer || "No answer supplied.", {
+        width: contentWidth - 24,
+        size: 9.8,
+        gapAfter: 4,
+      });
+    }
+    for (const part of question.subparts) {
+      estimatedHeight += wrappedHeight(
+        kind === "answer" ? part.answer || "No answer supplied." : part.prompt,
+        {
+          width: contentWidth - 96,
+          size: 10,
+          lineHeight: 14.2,
+          gapAfter: 4,
+        },
+      );
+      if (kind === "question") estimatedHeight += part.workingLines * 18;
+    }
+    if (!question.subparts.length && kind === "question") {
+      estimatedHeight += question.workingLines * 18;
+    }
+    if (kind === "answer" && question.source) {
+      estimatedHeight += wrappedHeight(`Source note: ${question.source}`, {
+        width: contentWidth - 24,
+        size: 8,
+      });
+    }
+    const pageCapacity = A4_HEIGHT - PAGE_MARGIN - CONTENT_BOTTOM;
+    ensureSpace(
+      estimatedHeight <= pageCapacity
+        ? estimatedHeight
+        : Math.max(80, promptHeight + 20),
+    );
     const startY = y;
     const label = `${index + 1}.`;
     page.drawText(label, { x: PAGE_MARGIN, y, size: 11, font: bold });
@@ -281,7 +351,15 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
     }
 
     for (const part of question.subparts) {
-      ensureSpace(55);
+      const partText = kind === "answer" ? part.answer || "No answer supplied." : part.prompt;
+      ensureSpace(
+        wrappedHeight(partText, {
+          width: contentWidth - 96,
+          size: 10,
+          lineHeight: 14.2,
+          gapAfter: 4,
+        }) + (kind === "question" && part.workingLines ? 18 : 0),
+      );
       const partY = y;
       page.drawText(`(${pdfSafeText(part.label)})`, {
         x: PAGE_MARGIN + 24,
@@ -290,7 +368,7 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
         font: regular,
       });
       drawMark(part.marks, partY);
-      drawWrapped(kind === "answer" ? part.answer || "No answer supplied." : part.prompt, {
+      drawWrapped(partText, {
         x: PAGE_MARGIN + 50,
         width: contentWidth - 96,
         size: 10,

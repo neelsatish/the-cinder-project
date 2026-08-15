@@ -36,6 +36,7 @@ const MAX_REQUEST_CHARS: usize = 80_000;
 const MAX_MESSAGES: usize = 40;
 const MAX_API_KEY_CHARS: usize = 16_384;
 const MAX_MODEL_CHARS: usize = 200;
+const MAX_OUTPUT_TOKENS: u32 = 8_192;
 
 fn normalize_base_url(value: Option<String>) -> HostResult<Option<String>> {
     let Some(raw) = value.map(|value| value.trim().to_owned()) else {
@@ -325,8 +326,11 @@ async fn chat(
     }
 
     let client = ChatClient::new(&base_url, api_key, model.as_deref().unwrap_or_default());
+    let max_output_tokens = req
+        .max_output_tokens
+        .map(|tokens| tokens.clamp(256, MAX_OUTPUT_TOKENS));
     let content = client
-        .complete(&messages)
+        .complete(&messages, max_output_tokens)
         .await
         // The upstream message is the useful part ("model not found", "no
         // credit"), so pass it through rather than flattening to "AI failed".

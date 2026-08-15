@@ -268,6 +268,11 @@ pub struct ChatRequest {
     /// Optional note text the student wants the assistant to work from.
     #[ts(optional)]
     pub context: Option<String>,
+    /// Optional response budget for structured, long-form tasks such as papers.
+    /// Ordinary chat leaves this unset so provider defaults remain unchanged.
+    #[serde(default)]
+    #[ts(optional)]
+    pub max_output_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
