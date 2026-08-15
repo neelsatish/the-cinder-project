@@ -634,7 +634,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-ai"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "cinder-core",
@@ -647,7 +647,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-core"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "aes-gcm",
  "chrono",
@@ -662,7 +662,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-host"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -693,7 +693,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-student"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "cinder-core",
@@ -716,7 +716,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-teacher"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "anyhow",
  "cinder-ai",

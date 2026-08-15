@@ -6,6 +6,22 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.1
+
+- Fixed generated papers so a successful regeneration immediately replaces the
+  current preview and its downloadable PDF.
+- Added a confirmed **Delete current paper** action that removes the saved paper
+  without autosave silently recreating it.
+- Increased the AI paper response budget, repaired common JSON mistakes and
+  accepted common wrapped responses to reduce malformed-paper failures.
+- Kept long questions, marks and working space together while paginating clean
+  A4 PDFs across as many pages as the paper needs.
+- Pointed both apps directly at their signed GitHub updater feeds and replaced
+  the generic unreachable-service message with the actual error and recovery
+  options.
+- Added a release gate that verifies both public updater feeds before an
+  installer release is considered complete.
+
 ## 0.9.0
 
 - Rebuilt the Teacher question-paper tool around validated questions, answers,

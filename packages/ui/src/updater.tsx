@@ -41,11 +41,12 @@ export function AppUpdater({ appName }: { appName: string }) {
           : "You have the latest version.",
       );
     } catch (failure) {
-      setStatus(
-        failure instanceof Error
-          ? failure.message
-          : "The update service could not be reached.",
-      );
+      const detail = failure instanceof Error
+        ? failure.message
+        : typeof failure === "string"
+          ? failure
+          : "GitHub Releases did not return a readable response.";
+      setStatus(`Update check failed: ${detail} Retry, or use Manual downloads below.`);
     } finally {
       setBusy(false);
     }

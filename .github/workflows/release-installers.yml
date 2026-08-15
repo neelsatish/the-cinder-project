@@ -256,3 +256,16 @@ jobs:
             fi
           done
           gh release upload matchbox-latest artifacts/* --clobber
+
+      - name: Verify public updater feeds
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          for feed in student-latest.json teacher-latest.json; do
+            url="https://github.com/${{ github.repository }}/releases/download/matchbox-latest/$feed"
+            curl --fail --location --retry 8 --retry-all-errors --retry-delay 3 --output "/tmp/$feed" "$url"
+            jq -e --arg version "$VERSION" '
+              .version == $version and
+              (.platforms["linux-x86_64"].signature | length > 0) and
+              (.platforms["windows-x86_64"].signature | length > 0)
+            ' "/tmp/$feed"
+          done
