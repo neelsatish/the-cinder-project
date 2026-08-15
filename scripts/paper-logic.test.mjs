@@ -76,6 +76,21 @@ test("repairs common model JSON mistakes without losing the paper", () => {
   assert.match(parsed.instructions[0], /\\q/);
 });
 
+test("accepts common paper wrappers returned by compatible AI providers", () => {
+  const wrapped = parseGeneratedPaperResponse(JSON.stringify({
+    paper: {
+      instructions: ["Answer every question."],
+      questions: [{
+        question: "Calculate the acceleration.",
+        marks: 2,
+        answer: "5 m/s^2",
+      }],
+    },
+  }));
+  assert.equal(wrapped.questions.length, 1);
+  assert.equal(wrapped.questions[0].prompt, "Calculate the acceleration.");
+});
+
 test("difficulty instructions scale materially", () => {
   assert.match(difficultyPrompt(1), /direct recall/i);
   assert.match(difficultyPrompt(3), /board-exam demand/i);

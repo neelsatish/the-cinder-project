@@ -191,10 +191,15 @@ function normalizeDiagram(value: unknown): PaperDiagram | null {
 }
 
 export function normalizeGeneratedPaper(value: unknown): GeneratedPaper {
+  if (Array.isArray(value)) value = { questions: value };
   if (!value || typeof value !== "object") {
     throw new Error("The AI response did not contain a paper specification.");
   }
-  const candidate = value as Record<string, unknown>;
+  const root = value as Record<string, unknown>;
+  const nested = root.paper ?? root.question_paper ?? root.questionPaper ?? root.data;
+  const candidate = nested && typeof nested === "object" && !Array.isArray(nested)
+    ? nested as Record<string, unknown>
+    : root;
   if (!Array.isArray(candidate.questions)) {
     throw new Error("The AI response did not contain a questions list.");
   }

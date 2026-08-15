@@ -4070,6 +4070,7 @@ function AssistantView({
           classrooms={classrooms}
           activePaper={activePaper}
           onSave={savePaperRecord}
+          onDelete={removePaper}
           onCreateNew={startNewPaper}
         />
       ) : (
@@ -4183,12 +4184,14 @@ function QuestionPaperStudio({
   classrooms,
   activePaper,
   onSave,
+  onDelete,
   onCreateNew,
 }: {
   api: CinderApi;
   classrooms: Classroom[];
   activePaper: SavedQuestionPaper | null;
   onSave: (paper: SavedQuestionPaper) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
   onCreateNew: () => void;
 }) {
   const [materials, setMaterials] = useState<StudyNode[]>([]);
@@ -4235,9 +4238,11 @@ function QuestionPaperStudio({
   const [editorView, setEditorView] = useState<"question" | "answer">("question");
   const [status, setStatus] = useState(activePaper ? "Saved paper opened." : "");
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [generationStage, setGenerationStage] = useState("");
   const [previewRevision, setPreviewRevision] = useState(0);
   const latestPaperRef = useRef<SavedQuestionPaper | null>(activePaper);
+  const discardingPaperRef = useRef(false);
 
   const classroom = classrooms.find((item) => item.id === classroomId) ?? null;
   const subject = classroom?.name ?? activePaper?.subject ?? "General";
@@ -4304,6 +4309,7 @@ function QuestionPaperStudio({
     const current = latestPaperRef.current;
     if (!current) return;
     const timer = window.setTimeout(() => {
+      if (discardingPaperRef.current) return;
       void onSave(current)
         .then(() => setStatus("Saved on this teacher computer."))
         .catch((failure) =>
@@ -4319,7 +4325,9 @@ function QuestionPaperStudio({
 
   useEffect(
     () => () => {
-      if (latestPaperRef.current) void onSave(latestPaperRef.current);
+      if (!discardingPaperRef.current && latestPaperRef.current) {
+        void onSave(latestPaperRef.current);
+      }
     },
     [onSave],
   );
@@ -4385,6 +4393,7 @@ Paper specification:
 - References are evidence, not a licence to copy. Adapt rather than reproduce long passages. Never invent a filename, page or question number.
 - Put answers only in answer fields. Never put an answer key in a prompt.
 - Give enough working_lines for a student to solve each question.
+- Keep prompts and answers concise enough for the complete JSON response to finish.
 - Use neutral, grammatical language when a person's pronouns are unknown.
 `.trim();
 
@@ -4406,7 +4415,7 @@ Paper specification:
       const result = await api.chat(
         [{ role: "user", content: makeGenerationPrompt() }],
         references.context || undefined,
-        4_096,
+        8_192,
       );
       if (!result.content.trim()) throw new Error("The AI returned an empty paper.");
       setGenerationStage("Checking questions and marks");
@@ -4417,7 +4426,7 @@ Paper specification:
         const repair = await api.chat(
           [{ role: "user", content: makeGenerationPrompt(true) }],
           `DRAFT TO REPAIR:\n${result.content}`.slice(0, 19_500),
-          4_096,
+          8_192,
         );
         nextPaper = parseGeneratedPaperResponse(repair.content);
       }
@@ -4430,7 +4439,7 @@ Paper specification:
             },
           ],
           JSON.stringify(nextPaper).slice(0, 19_500),
-          4_096,
+          8_192,
         );
         nextPaper = parseGeneratedPaperResponse(repair.content);
       }
@@ -4542,6 +4551,26 @@ Paper specification:
       source: "",
     };
     setPaper((current) => ({ ...current, questions: [...current.questions, next] }));
+  };
+
+  const deleteCurrentPaper = async () => {
+    if (!paperId || deleting) return;
+    if (!window.confirm(`Delete “${metadata.title}” from this computer? This cannot be undone.`)) {
+      return;
+    }
+    discardingPaperRef.current = true;
+    setDeleting(true);
+    try {
+      await onDelete(paperId);
+    } catch (failure) {
+      discardingPaperRef.current = false;
+      setDeleting(false);
+      setStatus(
+        failure instanceof Error
+          ? `The paper could not be deleted: ${failure.message}`
+          : "The paper could not be deleted.",
+      );
+    }
   };
 
   return (
@@ -4683,8 +4712,20 @@ Paper specification:
               <Button onClick={printPaper}>Print</Button>
               <details className="paper-more-actions">
                 <summary>More</summary>
-                <button type="button" onClick={() => void exportPaper("doc")}>Export .doc</button>
-                <button type="button" onClick={() => void exportPaper("txt")}>Export text</button>
+                <div className="paper-more-menu">
+                  <button type="button" onClick={() => void exportPaper("doc")}>Export .doc</button>
+                  <button type="button" onClick={() => void exportPaper("txt")}>Export text</button>
+                  {paperId ? (
+                    <button
+                      type="button"
+                      className="paper-delete-action"
+                      disabled={busy || deleting}
+                      onClick={() => void deleteCurrentPaper()}
+                    >
+                      {deleting ? "Deleting…" : "Delete current paper"}
+                    </button>
+                  ) : null}
+                </div>
               </details>
             </div>
             <div className="worksheet-canvas">
