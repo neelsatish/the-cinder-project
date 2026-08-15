@@ -175,7 +175,7 @@ jobs:
 
       - name: Create cross-platform updater feeds
         env:
-          RELEASE_BASE: https://github.com/Alfie3542/the-cinder-project/releases/download/matchbox-latest
+          RELEASE_BASE: https://github.com/${{ github.repository }}/releases/download/matchbox-latest
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           PUBLISHED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"

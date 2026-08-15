@@ -14,8 +14,8 @@ edition = "2021"
 rust-version = "1.77"
 license = "Apache-2.0"
 authors = ["The Cinder Project"]
-repository = "https://github.com/Alfie3542/the-cinder-project"
-homepage = "https://github.com/Alfie3542/the-cinder-project"
+repository = "https://github.com/neelsatish/the-cinder-project"
+homepage = "https://github.com/neelsatish/the-cinder-project"
 
 [workspace.dependencies]
 cinder-core = { path = "crates/core" }

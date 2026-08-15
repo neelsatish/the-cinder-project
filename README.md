@@ -22,10 +22,10 @@ systems in the same classroom.
 
 | Computer | Windows 11 | Linux Mint Cinnamon |
 | --- | --- | --- |
-| **Teacher** | [Download Teacher Setup `.exe`](https://github.com/Alfie3542/the-cinder-project/releases/latest/download/Cinder-Teacher-Windows-x86_64-Setup.exe) | [Teacher `.deb`](https://github.com/Alfie3542/the-cinder-project/releases/latest/download/Cinder-Teacher-Linux-x86_64.deb) / [Teacher AppImage](https://github.com/Alfie3542/the-cinder-project/releases/latest/download/Cinder-Teacher-Linux-x86_64.AppImage) |
-| **Student** | [Download Student Setup `.exe`](https://github.com/Alfie3542/the-cinder-project/releases/latest/download/Cinder-Student-Windows-x86_64-Setup.exe) | [Student `.deb`](https://github.com/Alfie3542/the-cinder-project/releases/latest/download/Cinder-Student-Linux-x86_64.deb) / [Student AppImage](https://github.com/Alfie3542/the-cinder-project/releases/latest/download/Cinder-Student-Linux-x86_64.AppImage) |
+| **Teacher** | [Download Teacher Setup `.exe`](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Teacher-Windows-x86_64-Setup.exe) | [Teacher `.deb`](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Teacher-Linux-x86_64.deb) / [Teacher AppImage](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Teacher-Linux-x86_64.AppImage) |
+| **Student** | [Download Student Setup `.exe`](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Student-Windows-x86_64-Setup.exe) | [Student `.deb`](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Student-Linux-x86_64.deb) / [Student AppImage](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Student-Linux-x86_64.AppImage) |
 
-[View all installers, checksums and release notes](https://github.com/Alfie3542/the-cinder-project/releases/latest)
+[View all installers, checksums and release notes](https://github.com/neelsatish/the-cinder-project/releases/latest)
 
 On Windows, run the downloaded Setup file. Windows 11 already includes the
 WebView2 runtime used by Cinder. On Linux Mint, the `.deb` is recommended; open

@@ -1,7 +1,7 @@
 # Changelog
 
 Release notes for Cinder Matchbox. Installers for each release are on the
-[Releases page](https://github.com/Alfie3542/the-cinder-project/releases).
+[Releases page](https://github.com/neelsatish/the-cinder-project/releases).
 
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.

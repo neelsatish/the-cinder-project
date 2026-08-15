@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Panel } from "./components";
 
 const RELEASE_URL =
-  "https://github.com/Alfie3542/the-cinder-project/releases/tag/matchbox-latest";
+  "https://github.com/neelsatish/the-cinder-project/releases/tag/matchbox-latest";
 
 function isTauri() {
   return (
