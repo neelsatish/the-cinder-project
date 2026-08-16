@@ -2339,6 +2339,7 @@ function GradebookView({
   const [pendingActions, setPendingActions] = useState<GradebookAction[]>([]);
   const [includeNames, setIncludeNames] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const gradebookRef = useRef<UniverGradebookHandle>(null);
   const roomAssignments = useMemo(
     () =>
@@ -2769,24 +2770,34 @@ function GradebookView({
     );
   return (
     <div className="gradebook-page">
-      <PageHeader
-        eyebrow="Gradebook"
-        title="Structured grading sheet"
-        description="Type into submitted-work cells. Every saved change uses the audited Cinder grade record."
-        action={
+      <div className="gradebook-header">
+        <div>
+          <p className="eyebrow">Gradebook</p>
+          <h1>Structured grading sheet</h1>
+        </div>
+        <div className="gradebook-classroom-field">
+          <Field label="Classroom">
+            <select
+              value={classroomId}
+              onChange={(event) => setClassroomId(event.target.value)}
+            >
+              {classrooms.map((room) => (
+                <option value={room.id} key={room.id}>
+                  {room.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <div className="page-action">
           <div className="list-actions">
-            <Field label="Classroom">
-              <select
-                value={classroomId}
-                onChange={(event) => setClassroomId(event.target.value)}
-              >
-                {classrooms.map((room) => (
-                  <option value={room.id} key={room.id}>
-                    {room.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <Button
+              icon="assistant"
+              variant={assistantOpen ? "primary" : "secondary"}
+              onClick={() => setAssistantOpen((current) => !current)}
+            >
+              AI assistant
+            </Button>
             <Button icon="refresh" onClick={() => void load()}>
               Refresh
             </Button>
@@ -2808,8 +2819,8 @@ function GradebookView({
               Export PDF
             </Button>
           </div>
-        }
-      />
+        </div>
+      </div>
       <div className="gradebook-layout">
         <Panel className="gradebook-sheet panel-flush univer-gradebook-panel">
           {roomAssignments.length ? (
@@ -2839,6 +2850,7 @@ function GradebookView({
           )}
           <div className="sheet-status">{savingCell ? "Saving audited grade…" : status}</div>
         </Panel>
+        <div className={`gradebook-assistant-overlay${assistantOpen ? " is-open" : ""}`}>
         <Panel title="AI gradebook assistant" eyebrow="Review required">
           <div className="gradebook-ai">
             <p>{aiMessage}</p>
@@ -2907,6 +2919,7 @@ function GradebookView({
             </p>
           </div>
         </Panel>
+        </div>
       </div>
       {resetOpen ? (
         <Modal

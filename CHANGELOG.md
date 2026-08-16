@@ -6,6 +6,16 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.7
+
+- Removed the redundant hint text under the gradebook title.
+- Moved the classroom selector out of the crowded action-button row and
+  centred it in the gradebook header, between the title and the buttons.
+- The gradebook's AI assistant is now a collapsible panel you open and
+  close with a header toggle. Closed by default, it overlaps the sheet as
+  a floating panel when open instead of squeezing the grid into a
+  narrower column, so the sheet keeps full width either way.
+
 ## 0.9.6
 
 - Reordered the Teacher sidebar into roster (Classrooms, Students, Attendance),
