@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Cinder Teacher",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "identifier": "org.cinder.teacher",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -46,6 +46,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkwNTMxQUYzMTkwM0VBNUEKUldSYTZnTVo4eHBUa0lia0tkaGxCcllYa0N5U3JQNnduSzlXQ1YyaEtLUkZzVC9paS9XZGhrV0QK",
       "endpoints": [
+        "https://raw.githubusercontent.com/neelsatish/the-cinder-project/updater-feed/teacher-latest.json?installed={{current_version}}",
         "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-latest/teacher-latest.json"
       ]
     }

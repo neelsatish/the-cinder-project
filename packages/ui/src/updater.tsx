@@ -6,13 +6,36 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Panel } from "./components";
 
 const RELEASE_URL =
-  "https://github.com/neelsatish/the-cinder-project/releases/tag/matchbox-latest";
+  "https://github.com/neelsatish/the-cinder-project/releases/latest";
 
 function isTauri() {
   return (
     typeof window !== "undefined" &&
     "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
   );
+}
+
+function delay(milliseconds: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function checkWithRetry() {
+  let lastFailure: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await check({
+        timeout: 20_000,
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+    } catch (failure) {
+      lastFailure = failure;
+      if (attempt === 0) await delay(1_000);
+    }
+  }
+  throw lastFailure;
 }
 
 export function AppUpdater({ appName }: { appName: string }) {
@@ -33,7 +56,7 @@ export function AppUpdater({ appName }: { appName: string }) {
     setStatus("Checking GitHub Releases…");
     try {
       setCurrentVersion(await getVersion());
-      const next = await check({ timeout: 15_000 });
+      const next = await checkWithRetry();
       setAvailable(next);
       setStatus(
         next

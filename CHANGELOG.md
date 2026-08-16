@@ -6,6 +6,15 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.3
+
+- Moved update manifests to a direct raw-GitHub feed with the release asset as a
+  fallback, avoiding stale mutable-release redirects.
+- Added a second automatic update-check attempt before showing a network error.
+- Changed releases to immutable version tags so signed manifests and installers
+  cannot be mixed between cached versions.
+- Pointed manual downloads at the latest immutable GitHub release.
+
 ## 0.9.2
 
 - Moved **Add question** into the paper's normal document flow so it appears only

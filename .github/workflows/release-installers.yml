@@ -174,10 +174,9 @@ jobs:
           merge-multiple: true
 
       - name: Create cross-platform updater feeds
-        env:
-          RELEASE_BASE: https://github.com/${{ github.repository }}/releases/download/matchbox-latest
         run: |
           VERSION="$(node -p "require('./package.json').version")"
+          RELEASE_BASE="https://github.com/${{ github.repository }}/releases/download/matchbox-v$VERSION"
           PUBLISHED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           jq -n \
             --arg version "$VERSION" \
@@ -234,38 +233,58 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # `gh release edit --target` does not move an already-existing Git
-          # tag. This release intentionally uses one mutable "latest" tag, so
-          # update the ref only after every platform build has passed.
-          git tag --force matchbox-latest "$GITHUB_SHA"
-          git push origin refs/tags/matchbox-latest --force
-
-          if gh release view matchbox-latest >/dev/null 2>&1; then
-            gh release edit matchbox-latest --target "$GITHUB_SHA" --title "Cinder Matchbox - Latest Windows and Linux Installers" --notes-file release-notes.md --latest
+          VERSION="$(node -p "require('./package.json').version")"
+          RELEASE_TAG="matchbox-v$VERSION"
+          REMOTE_TAG_SHA="$(git ls-remote origin "refs/tags/$RELEASE_TAG" | cut -f1)"
+          if [ -n "$REMOTE_TAG_SHA" ]; then
+            test "$REMOTE_TAG_SHA" = "$GITHUB_SHA"
           else
-            gh release create matchbox-latest --target "$GITHUB_SHA" --title "Cinder Matchbox - Latest Windows and Linux Installers" --notes-file release-notes.md --latest
+            git tag "$RELEASE_TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$RELEASE_TAG"
           fi
 
-          # Keep the download list tidy if an artifact is renamed in a future
-          # release. GitHub's generated source archives are not release assets
-          # and are therefore unaffected by this cleanup.
-          mapfile -t existing_assets < <(gh release view matchbox-latest --json assets --jq '.assets[].name')
-          for asset in "${existing_assets[@]}"; do
-            if [ ! -f "artifacts/$asset" ]; then
-              gh release delete-asset matchbox-latest "$asset" --yes
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --target "$GITHUB_SHA" --title "Cinder Matchbox $VERSION" --notes-file release-notes.md --latest
+          else
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "Cinder Matchbox $VERSION" --notes-file release-notes.md --latest
+          fi
+          gh release upload "$RELEASE_TAG" artifacts/* --clobber
+
+      - name: Publish redirect-free updater feeds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          publish_feed() {
+            feed="$1"
+            content="$(base64 -w 0 "artifacts/$feed")"
+            sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/$feed?ref=updater-feed" --jq '.sha' 2>/dev/null || true)"
+            args=(
+              --method PUT
+              "repos/$GITHUB_REPOSITORY/contents/$feed"
+              -f message="Publish Cinder updater feed for $GITHUB_SHA"
+              -f content="$content"
+              -f branch=updater-feed
+            )
+            if [ -n "$sha" ]; then
+              args+=(-f sha="$sha")
             fi
-          done
-          gh release upload matchbox-latest artifacts/* --clobber
+            gh api "${args[@]}" >/dev/null
+          }
+          publish_feed student-latest.json
+          publish_feed teacher-latest.json
 
       - name: Verify public updater feeds
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           for feed in student-latest.json teacher-latest.json; do
-            url="https://github.com/${{ github.repository }}/releases/download/matchbox-latest/$feed"
-            curl --fail --location --retry 8 --retry-all-errors --retry-delay 3 --output "/tmp/$feed" "$url"
+            raw_url="https://raw.githubusercontent.com/${{ github.repository }}/updater-feed/$feed?version=$VERSION"
+            release_url="https://github.com/${{ github.repository }}/releases/download/matchbox-v$VERSION/$feed"
+            curl --fail --location --retry 8 --retry-all-errors --retry-delay 3 --output "/tmp/raw-$feed" "$raw_url"
+            curl --fail --location --retry 8 --retry-all-errors --retry-delay 3 --output "/tmp/release-$feed" "$release_url"
             jq -e --arg version "$VERSION" '
               .version == $version and
               (.platforms["linux-x86_64"].signature | length > 0) and
               (.platforms["windows-x86_64"].signature | length > 0)
-            ' "/tmp/$feed"
+            ' "/tmp/raw-$feed"
+            cmp "/tmp/raw-$feed" "/tmp/release-$feed"
           done
