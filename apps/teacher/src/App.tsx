@@ -4488,13 +4488,14 @@ Paper specification:
       if (!result.content.trim()) throw new Error("The AI returned an empty paper.");
       setGenerationStage("Checking questions and marks");
       let nextPaper: GeneratedPaper;
+      const repairOutputTokens = Math.max(maxOutputTokens, 8_192);
       try {
         nextPaper = parseGeneratedPaperResponse(result.content);
       } catch {
         const repair = await api.chat(
           [{ role: "user", content: makeGenerationPrompt(true) }],
           `DRAFT TO REPAIR:\n${result.content}`.slice(0, 19_500),
-          maxOutputTokens,
+          repairOutputTokens,
         );
         nextPaper = parseGeneratedPaperResponse(repair.content);
       }
@@ -4507,7 +4508,7 @@ Paper specification:
             },
           ],
           JSON.stringify(nextPaper).slice(0, 19_500),
-          maxOutputTokens,
+          repairOutputTokens,
         );
         nextPaper = parseGeneratedPaperResponse(repair.content);
       }

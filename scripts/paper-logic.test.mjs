@@ -79,6 +79,18 @@ test("repairs common model JSON mistakes without losing the paper", () => {
   assert.match(parsed.instructions[0], /\\q/);
 });
 
+test("recovers complete questions when a provider truncates the JSON response", () => {
+  const parsed = parseGeneratedPaperResponse(`{
+    "instructions": ["Answer every question."],
+    "questions": [
+      {"id":"q1","prompt":"State the unit of force.","marks":1,"answer":"N"},
+      {"id":"q2","prompt":"Calculate the force.","marks":2,"answer":"6 N"},
+      {"id":"q3","prompt":"This question was cut off`);
+  assert.equal(parsed.questions.length, 2);
+  assert.equal(parsed.questions[1].prompt, "Calculate the force.");
+  assert.equal(paperTotalMarks(parsed), 3);
+});
+
 test("accepts common paper wrappers returned by compatible AI providers", () => {
   const wrapped = parseGeneratedPaperResponse(JSON.stringify({
     paper: {

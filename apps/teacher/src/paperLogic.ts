@@ -314,11 +314,65 @@ function repairCommonJsonIssues(value: string) {
   return repaired.replace(/,\s*([}\]])/g, "$1");
 }
 
+function recoverCompleteQuestions(value: string) {
+  const questionsStart = /["']questions["']\s*:\s*\[/i.exec(value);
+  if (!questionsStart) return null;
+
+  const questions: unknown[] = [];
+  let objectStart = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  const start = questionsStart.index + questionsStart[0].length;
+
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      continue;
+    }
+    if (character === "{") {
+      if (depth === 0) objectStart = index;
+      depth += 1;
+      continue;
+    }
+    if (character === "}" && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && objectStart >= 0) {
+        const fragment = value.slice(objectStart, index + 1);
+        try {
+          questions.push(JSON.parse(fragment));
+        } catch {
+          try {
+            questions.push(JSON.parse(repairCommonJsonIssues(fragment)));
+          } catch {
+            // A damaged question is skipped; later complete questions can still be recovered.
+          }
+        }
+        objectStart = -1;
+      }
+      continue;
+    }
+    if (character === "]" && depth === 0) break;
+  }
+
+  if (!questions.length) return null;
+  return normalizeGeneratedPaper({ instructions: [], questions });
+}
+
 export function parseGeneratedPaperResponse(value: string) {
   let json: string;
   try {
     json = extractJsonObject(value);
   } catch {
+    const recovered = recoverCompleteQuestions(value);
+    if (recovered) return recovered;
     throw new Error("The AI returned malformed paper data. Try creating the paper again.");
   }
   try {
@@ -330,6 +384,8 @@ export function parseGeneratedPaperResponse(value: string) {
     try {
       return normalizeGeneratedPaper(JSON.parse(repairCommonJsonIssues(json)));
     } catch {
+      const recovered = recoverCompleteQuestions(value);
+      if (recovered) return recovered;
       throw new Error("The AI returned malformed paper data. Try creating the paper again.");
     }
   }

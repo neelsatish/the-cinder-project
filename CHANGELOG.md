@@ -6,6 +6,13 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.5
+
+- Recovered complete questions from AI replies that are cut off before the final
+  JSON closing characters, then repaired only the missing paper structure.
+- Gave automatic repair requests a full-paper output allowance so low test
+  presets cannot make every retry fail in the same way.
+
 ## 0.9.4
 
 - Added a per-paper AI output allowance with low-cost presets from 512 to 8,192
