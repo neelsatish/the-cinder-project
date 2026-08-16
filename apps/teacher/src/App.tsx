@@ -76,6 +76,7 @@ import {
   type DifficultyLevel,
   type ExamBoard,
   type GeneratedPaper,
+  type PaperDiagram,
   type PaperMetadata,
   type PaperQuestion,
 } from "./paperLogic";
@@ -3283,8 +3284,26 @@ function escapeHtml(value: string) {
     .replace(/"/g, "&quot;");
 }
 
-function svgDataUrl(svg: string) {
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+function readDiagramFile(file: File): Promise<string> {
+  if (!["image/png", "image/jpeg"].includes(file.type)) {
+    return Promise.reject(new Error("Choose a PNG or JPEG image."));
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return Promise.reject(new Error("Diagram images must be 5 MB or smaller."));
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () =>
+      typeof reader.result === "string"
+        ? resolve(reader.result)
+        : reject(new Error("The diagram image could not be read."));
+    reader.onerror = () => reject(new Error("The diagram image could not be read."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function diagramDataUrl(diagram: PaperDiagram) {
+  return diagram.imageDataUrl;
 }
 
 function paperHtml(metadata: PaperMetadata, paper: GeneratedPaper, kind: "question" | "answer") {
@@ -3299,7 +3318,7 @@ function paperHtml(metadata: PaperMetadata, paper: GeneratedPaper, kind: "questi
   const questions = paper.questions
     .map((question, index) => {
       const diagram = question.diagram
-        ? `<figure><img src="${svgDataUrl(question.diagram.svg)}" alt="${escapeHtml(question.diagram.alt)}"><figcaption>${escapeHtml(question.diagram.caption)}</figcaption></figure>`
+        ? `<figure><img src="${escapeHtml(diagramDataUrl(question.diagram))}" alt="${escapeHtml(question.diagram.alt)}">${question.diagram.caption ? `<figcaption>${escapeHtml(question.diagram.caption)}</figcaption>` : ""}</figure>`
         : "";
       const subparts = question.subparts
         .map(
@@ -3488,7 +3507,7 @@ function PaperDocumentView({
 
             {question.diagram ? (
               <figure className="worksheet-diagram">
-                <img src={svgDataUrl(question.diagram.svg)} alt={question.diagram.alt} />
+                <img src={diagramDataUrl(question.diagram)} alt={question.diagram.alt} />
                 {question.diagram.caption ? <figcaption>{question.diagram.caption}</figcaption> : null}
               </figure>
             ) : null}
@@ -3630,10 +3649,52 @@ function PaperDocumentView({
                         />
                       </label>
                     ) : null}
+                    <label className="worksheet-diagram-upload">
+                      <span>{question.diagram ? "Replace source diagram" : "Attach source diagram"}</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg"
+                        aria-label={`Attach source diagram for question ${questionIndex + 1}`}
+                        onChange={(event) => {
+                          const input = event.currentTarget;
+                          const file = input.files?.[0];
+                          input.value = "";
+                          if (!file) return;
+                          void readDiagramFile(file)
+                            .then((imageDataUrl) =>
+                              replaceQuestion(questionIndex, {
+                                ...question,
+                                diagram: {
+                                  imageDataUrl,
+                                  caption: "",
+                                  alt: `Source diagram for question ${questionIndex + 1}`,
+                                },
+                              }),
+                            )
+                            .catch((failure) =>
+                              window.alert(
+                                failure instanceof Error
+                                  ? failure.message
+                                  : "The diagram image could not be attached.",
+                              ),
+                            );
+                        }}
+                      />
+                    </label>
+                    {question.diagram ? (
+                      <button
+                        type="button"
+                        className="worksheet-remove-diagram"
+                        onClick={() => replaceQuestion(questionIndex, { ...question, diagram: null })}
+                      >
+                        Remove diagram
+                      </button>
+                    ) : null}
                   </>
                 ) : null}
                 <button
                   type="button"
+                  className="worksheet-remove-question"
                   onClick={() =>
                     onChange?.({
                       ...paper,
@@ -4377,7 +4438,7 @@ function QuestionPaperStudio({
 ${repair ? "Repair the supplied draft and return a complete replacement." : "Create a new classroom-ready examination paper."}
 Return ONLY valid JSON. Do not use Markdown fences or explanatory text.
 Schema: {"instructions":["string"],"questions":[{"id":"q1","prompt":"string","marks":4,"answer":"string","working_lines":4,"source":"filename, p. 2, Q3 (adapted)","subparts":[{"label":"a","prompt":"string","marks":2,"answer":"string","working_lines":2}],"diagram":null}]}
-A diagram, when essential, must be {"svg":"<svg viewBox=\\"0 0 720 360\\">...</svg>","caption":"string","alt":"string"}. SVG may use only svg, g, line, rect, circle, ellipse, polyline, polygon, path and text with inline attributes. No scripts, styles, external images or links.
+Always set diagram to null. Never redraw, infer or approximate an examination diagram. If a question depends on a figure, choose a different self-contained question; the teacher can attach the exact PNG or JPEG from the cited official source afterwards.
 
 Paper specification:
 - Board: ${boardName(board)}.
@@ -4388,7 +4449,7 @@ Paper specification:
 - Year: ${advanced.year.trim() || "current syllabus"}; session: ${advanced.session.trim() || "not specified"}; paper or variant: ${advanced.paperVariant.trim() || "not specified"}.
 - Topics: ${advanced.topics.trim() || "balanced coverage of the selected subject"}.
 - Teacher brief: ${teacherBrief.trim().slice(0, 2_000) || "No additional brief"}.
-- ${advanced.includeDiagrams ? "Include clean black-and-white labelled diagrams where the question needs one, especially in Physics." : "Do not include diagrams."}
+- ${advanced.includeDiagrams ? "You may select questions that use official source diagrams only when a self-contained alternative is unavailable, but still set diagram to null for exact teacher attachment." : "Choose only self-contained questions that do not require diagrams."}
 - Use board-appropriate command words, mathematical notation and mark allocation. Do not create elementary recall questions at an advanced setting.
 - References are evidence, not a licence to copy. Adapt rather than reproduce long passages. Never invent a filename, page or question number.
 - Put answers only in answer fields. Never put an answer key in a prompt.
@@ -4650,7 +4711,7 @@ Paper specification:
               </Field>
               <label className="check-field">
                 <input type="checkbox" checked={advanced.includeDiagrams} onChange={(event) => setAdvanced((current) => ({ ...current, includeDiagrams: event.target.checked }))} />
-                <span>Generate diagrams when the question needs them</span>
+                <span>Allow exact source diagrams (attach PNG/JPEG in preview)</span>
               </label>
 
               <div className="reference-picker">
@@ -4658,7 +4719,7 @@ Paper specification:
                   <span><strong>Past-paper references</strong><small>Official sources and uploaded PDFs</small></span>
                   <Button variant="secondary" onClick={() => void openExternalUrl(officialSourceUrl(board, syllabusCode, subject, advanced.year))}>Open official library</Button>
                 </div>
-                <small>Download an official paper, then add it below. Selected PDF text is sent to your configured AI provider and cited by filename and page.</small>
+                <small>Download an official paper, then add it below. Selected PDF text is sent to your configured AI provider and cited by filename and page. For a figure, save the exact source diagram as PNG/JPEG and attach it beneath the matching question.</small>
                 <div className="reference-list">
                   {classroomMaterials.length ? classroomMaterials.map((material) => (
                     <label className="check-field" key={material.id}>
@@ -4737,7 +4798,7 @@ Paper specification:
                 editable
                 onChange={setPaper}
               />
-              <Button variant="secondary" icon="plus" onClick={addBlankQuestion}>Add question</Button>
+              <Button className="worksheet-add-question" variant="secondary" icon="plus" onClick={addBlankQuestion}>Add question</Button>
             </div>
             <PrintablePaper metadata={metadata} paper={paper} kind="question" />
             <PrintablePaper metadata={metadata} paper={paper} kind="answer" />

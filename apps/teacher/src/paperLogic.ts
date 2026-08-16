@@ -4,7 +4,7 @@ export type ExamBoard = "CIE" | "IGCSE" | "CBSE" | "ICSE";
 export type DifficultyLevel = 1 | 2 | 3 | 4 | 5;
 
 export type PaperDiagram = {
-  svg: string;
+  imageDataUrl: string;
   caption: string;
   alt: string;
 };
@@ -159,6 +159,13 @@ export function sanitizeDiagramSvg(value: unknown) {
   return svg;
 }
 
+export function sanitizeDiagramImageDataUrl(value: unknown) {
+  if (typeof value !== "string" || value.length > 7_000_000) return "";
+  const dataUrl = value.trim();
+  if (!/^data:image\/(?:png|jpeg);base64,[a-z0-9+/]+={0,2}$/i.test(dataUrl)) return "";
+  return dataUrl;
+}
+
 function normalizeSubparts(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 12).flatMap((item, index): PaperSubpart[] => {
@@ -181,10 +188,12 @@ function normalizeSubparts(value: unknown) {
 function normalizeDiagram(value: unknown): PaperDiagram | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
-  const svg = sanitizeDiagramSvg(candidate.svg);
-  if (!svg) return null;
+  const imageDataUrl = sanitizeDiagramImageDataUrl(
+    candidate.imageDataUrl ?? candidate.image_data_url,
+  );
+  if (!imageDataUrl) return null;
   return {
-    svg,
+    imageDataUrl,
     caption: cleanModelText(candidate.caption).slice(0, 240),
     alt: cleanModelText(candidate.alt, "Question diagram").slice(0, 240),
   };

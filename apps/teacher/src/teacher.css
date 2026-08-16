@@ -746,10 +746,9 @@
 .worksheet-canvas {
   min-height: 0;
   flex: 1;
-  display: grid;
-  justify-items: center;
-  align-content: start;
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   padding: 26px 22px 54px;
   overflow: auto;
   background: var(--surface-low);
@@ -757,9 +756,10 @@
 }
 .worksheet-page {
   color-scheme: light;
+  flex: 0 0 auto;
   width: min(100%, 794px);
   min-height: 1123px;
-  height: fit-content;
+  height: auto;
   padding: 64px 70px 80px;
   border: 1px solid var(--border);
   box-shadow: 0 16px 44px rgba(54, 32, 20, 0.12);
@@ -867,6 +867,32 @@
   background: #fff;
   color: #171717;
 }
+.worksheet-diagram-upload {
+  position: relative;
+  min-height: 30px;
+  align-self: end;
+  padding: 6px 9px;
+  border: 1px solid #cfcfcf;
+  border-radius: 4px;
+  background: #f7f7f7;
+  color: #313131;
+  font-weight: 650;
+  cursor: pointer;
+}
+.worksheet-diagram-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.worksheet-diagram-upload:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
 .worksheet-edit-meta button {
   margin-left: auto;
   padding: 6px 8px;
@@ -874,6 +900,15 @@
   background: transparent;
   color: #9d331f;
   cursor: pointer;
+}
+.worksheet-edit-meta .worksheet-remove-diagram {
+  margin-left: 0;
+  color: #666;
+}
+.worksheet-add-question {
+  position: static;
+  flex: 0 0 auto;
+  margin-top: 14px;
 }
 .paper-generation-overlay {
   position: absolute;

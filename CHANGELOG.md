@@ -6,6 +6,16 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.2
+
+- Moved **Add question** into the paper's normal document flow so it appears only
+  after the final question instead of covering paper content.
+- Stopped AI-generated SVG approximations of examination diagrams from entering
+  new or reopened papers.
+- Added exact PNG/JPEG source-diagram attachment per question, preserved in saved
+  papers and supported by preview, print, DOC and PDF export.
+- Preserved source-image aspect ratios during PDF rendering.
+
 ## 0.9.1
 
 - Fixed generated papers so a successful regeneration immediately replaces the

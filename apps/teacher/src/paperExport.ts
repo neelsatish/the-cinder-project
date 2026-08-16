@@ -1,4 +1,4 @@
-import type { GeneratedPaper, PaperMetadata, PaperQuestion } from "./paperLogic.ts";
+import type { GeneratedPaper, PaperDiagram, PaperMetadata, PaperQuestion } from "./paperLogic.ts";
 import { boardName, sourceSummary } from "./paperLogic.ts";
 
 const A4_WIDTH = 595.28;
@@ -91,34 +91,31 @@ function wrapLine(
   return lines;
 }
 
-async function svgToPng(svg: string) {
+async function diagramToPng(diagram: PaperDiagram) {
   if (typeof document === "undefined") return null;
-  const source = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(source);
-  try {
-    const image = new Image();
-    image.decoding = "sync";
-    const loaded = new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error("The generated diagram could not be rendered."));
-    });
-    image.src = url;
-    await loaded;
-    const canvas = document.createElement("canvas");
-    canvas.width = 1440;
-    canvas.height = 720;
-    const context = canvas.getContext("2d");
-    if (!context) return null;
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/png"),
-    );
-    return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  const image = new Image();
+  image.decoding = "sync";
+  const loaded = new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("The source diagram could not be rendered."));
+  });
+  image.src = diagram.imageDataUrl;
+  await loaded;
+  const naturalWidth = Math.max(1, image.naturalWidth || image.width);
+  const naturalHeight = Math.max(1, image.naturalHeight || image.height);
+  const scale = Math.min(2, 1440 / naturalWidth, 1440 / naturalHeight);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(naturalHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/png"),
+  );
+  return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
 }
 
 export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
@@ -312,7 +309,7 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
     });
     if (question.diagram) {
       try {
-        const png = await svgToPng(question.diagram.svg);
+        const png = await diagramToPng(question.diagram);
         if (png) {
           const image = await pdf.embedPng(png);
           const dimensions = image.scaleToFit(Math.min(370, contentWidth - 40), 185);

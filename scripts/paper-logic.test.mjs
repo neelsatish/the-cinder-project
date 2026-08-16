@@ -9,6 +9,7 @@ import {
   parseGeneratedPaperResponse,
   questionPaperText,
   answerKeyText,
+  sanitizeDiagramImageDataUrl,
   sanitizeDiagramSvg,
 } from "../apps/teacher/src/paperLogic.ts";
 import { createPaperPdf } from "../apps/teacher/src/paperExport.ts";
@@ -105,6 +106,15 @@ test("sanitizes diagrams and rejects active SVG content", () => {
   assert.equal((safe.match(/xmlns=/g) ?? []).length, 1);
   assert.equal(sanitizeDiagramSvg('<svg><script>alert(1)</script></svg>'), "");
   assert.equal(sanitizeDiagramSvg('<svg><image href="https://example.com/a.png"/></svg>'), "");
+});
+
+test("accepts exact PNG/JPEG diagrams and rejects executable image formats", () => {
+  const png = "data:image/png;base64,iVBORw0KGgo=";
+  assert.equal(sanitizeDiagramImageDataUrl(png), png);
+  assert.equal(
+    sanitizeDiagramImageDataUrl("data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="),
+    "",
+  );
 });
 
 test("migrates a legacy markdown-style paper without leaking table syntax", () => {
