@@ -115,10 +115,10 @@ const SESSION_KEYS = [SESSION_KEY, LEGACY_SESSION_KEY] as const;
 const DEV_HOST = "http://127.0.0.1:7373";
 const navigation: NavigationItem<TeacherTab>[] = [
   { id: "dashboard", label: "Overview", icon: "dashboard" },
-  { id: "students", label: "Students", icon: "students" },
   { id: "classrooms", label: "Classrooms", icon: "classrooms" },
-  { id: "assignments", label: "Assignments", icon: "assignments" },
+  { id: "students", label: "Students", icon: "students" },
   { id: "attendance", label: "Attendance", icon: "attendance" },
+  { id: "assignments", label: "Assignments", icon: "assignments" },
   { id: "gradebook", label: "Gradebook", icon: "spreadsheet" },
   { id: "assistant", label: "AI assistant", icon: "assistant" },
   { id: "settings", label: "Settings", icon: "settings" },
@@ -2529,6 +2529,7 @@ function GradebookView({
       const result = await api.chat(
         [{ role: "user", content: instruction }],
         JSON.stringify(context),
+        DEFAULT_PAPER_OUTPUT_TOKENS * 2,
       );
       const parsed = parseAiGradebook(result.content);
       if (!parsed) {
@@ -2726,6 +2727,17 @@ function GradebookView({
     }
   };
 
+  const printGradebook = () => {
+    window.document.body.dataset.cinderGradebookPrint = "1";
+    const cleanup = () => {
+      delete window.document.body.dataset.cinderGradebookPrint;
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup, { once: true });
+    window.requestAnimationFrame(() => window.print());
+    window.setTimeout(cleanup, 60_000);
+  };
+
   const resetSheet = () => {
     if (gradebookRef.current) gradebookRef.current.resetWorkbook();
     else
@@ -2787,6 +2799,13 @@ function GradebookView({
               disabled={!roster.length}
             >
               Export CSV
+            </Button>
+            <Button
+              icon="download"
+              onClick={printGradebook}
+              disabled={!roster.length}
+            >
+              Export PDF
             </Button>
           </div>
         }
@@ -2912,6 +2931,52 @@ function GradebookView({
           </div>
         </Modal>
       ) : null}
+      <PrintableGradebook
+        classroomName={classrooms.find((item) => item.id === classroomId)?.name ?? "Cinder"}
+        roster={roster}
+        assignments={roomAssignments}
+        scores={scores}
+      />
+    </div>
+  );
+}
+
+function PrintableGradebook({
+  classroomName,
+  roster,
+  assignments,
+  scores,
+}: {
+  classroomName: string;
+  roster: User[];
+  assignments: Assignment[];
+  scores: Record<string, string>;
+}) {
+  return (
+    <div className="gradebook-print-copy">
+      <h1>{classroomName} gradebook</h1>
+      <table>
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Username</th>
+            {assignments.map((assignment) => (
+              <th key={assignment.id}>{assignment.title} / {assignment.max_points}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {roster.map((student) => (
+            <tr key={student.id}>
+              <td>{student.display_name}</td>
+              <td>{student.username}</td>
+              {assignments.map((assignment) => (
+                <td key={assignment.id}>{scores[`${student.id}:${assignment.id}`] ?? ""}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -3398,6 +3463,7 @@ async function extractPdfText(blob: Blob, name: string): Promise<ExtractedPdf> {
 }
 
 const ACTIVE_PAPER_KEY = "cinder.teacher.active-question-paper";
+const CHAT_TOKENS_KEY = "cinder.teacher.chat-max-output-tokens";
 
 function createPaperId() {
   const values = new Uint32Array(2);
@@ -3744,7 +3810,30 @@ function AssistantView({
   assignments: Assignment[];
 }) {
   const [mode, setMode] = useState<"chat" | "paper" | "saved">("chat");
-  const [settings, setSettings] = useState<AiSettings | null>(null);
+  const [chatMaxOutputTokens, setChatMaxOutputTokens] = useState(() =>
+    normalizePaperOutputTokens(localStorage.getItem(CHAT_TOKENS_KEY)),
+  );
+  const [chatFloating, setChatFloating] = useState(false);
+  const [floatPos, setFloatPos] = useState({ x: 96, y: 96 });
+  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const startDrag = (event: { clientX: number; clientY: number }) => {
+    dragRef.current = { startX: event.clientX, startY: event.clientY, originX: floatPos.x, originY: floatPos.y };
+    const onMove = (moveEvent: MouseEvent) => {
+      if (!dragRef.current) return;
+      const { startX, startY, originX, originY } = dragRef.current;
+      setFloatPos({
+        x: Math.max(0, originX + (moveEvent.clientX - startX)),
+        y: Math.max(0, originY + (moveEvent.clientY - startY)),
+      });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
@@ -3779,9 +3868,6 @@ function AssistantView({
       assistantMountedRef.current = false;
     };
   }, []);
-  useEffect(() => {
-    void api.aiSettings().then(setSettings);
-  }, [api]);
   useEffect(() => {
     if (!contextClassroomId && classrooms[0]) {
       setContextClassroomId(classrooms[0].id);
@@ -3944,6 +4030,7 @@ function AssistantView({
       const result = await api.chat(
         outgoing.filter((item) => item.role !== "system"),
         context,
+        chatMaxOutputTokens,
       );
       setMessages([
         ...outgoing,
@@ -4030,40 +4117,73 @@ function AssistantView({
             className="chat-panel panel-flush"
             title="Teacher assistant"
             eyebrow="AI"
-          >
-            <div className="chat-messages" ref={messagesRef}>
-              {messages.map((message, index) => (
-                <div key={index} className={`message message-${message.role}`}>
-                  {message.content}
-                </div>
-              ))}
-              {busy ? <div className="message message-assistant">Thinking…</div> : null}
-            </div>
-            <div className="chat-compose">
-              <textarea
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    void send();
-                  }
-                }}
-                placeholder="Ask about a lesson or student work…"
-              />
-              <Button
-                variant="primary"
-                icon="send"
-                onClick={() => void send()}
-                disabled={busy || !prompt.trim()}
-              >
-                {busy ? "Thinking…" : "Send"}
+            action={
+              <Button variant="ghost" icon="popout" onClick={() => setChatFloating(true)}>
+                Pop out
               </Button>
-            </div>
+            }
+          >
+            {chatFloating ? (
+              <EmptyState
+                icon="assistant"
+                title="Chat is floating"
+                description="The assistant is open in a floating window. Move it, or dock it back here."
+                action={<Button onClick={() => setChatFloating(false)}>Dock chat</Button>}
+              />
+            ) : (
+              <>
+                <div className="chat-messages" ref={messagesRef}>
+                  {messages.map((message, index) => (
+                    <div key={index} className={`message message-${message.role}`}>
+                      {message.content}
+                    </div>
+                  ))}
+                  {busy ? <div className="message message-assistant">Thinking…</div> : null}
+                </div>
+                <div className="chat-compose">
+                  <textarea
+                    value={prompt}
+                    onChange={(event) => setPrompt(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void send();
+                      }
+                    }}
+                    placeholder="Ask about a lesson or student work…"
+                  />
+                  <Button
+                    variant="primary"
+                    icon="send"
+                    onClick={() => void send()}
+                    disabled={busy || !prompt.trim()}
+                  >
+                    {busy ? "Thinking…" : "Send"}
+                  </Button>
+                </div>
+              </>
+            )}
           </Panel>
           <div className="assistant-side-stack">
             <Panel title="Copilot context" eyebrow="Teacher controlled">
               <div className="form-stack copilot-context">
+                <Field
+                  label="AI output allowance"
+                  hint="Maximum output per reply. A lower limit keeps replies short and predictable."
+                >
+                  <select
+                    value={chatMaxOutputTokens}
+                    onChange={(event) => {
+                      const next = normalizePaperOutputTokens(event.target.value);
+                      setChatMaxOutputTokens(next);
+                      localStorage.setItem(CHAT_TOKENS_KEY, String(next));
+                    }}
+                  >
+                    {PAPER_OUTPUT_TOKEN_OPTIONS.map((option) => (
+                      <option value={option.value} key={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </Field>
                 <Field label="Classroom">
                   <select
                     value={contextClassroomId}
@@ -4124,7 +4244,6 @@ function AssistantView({
                 </p>
               </div>
             </Panel>
-            <AiSettingsPanel api={api} settings={settings} onSettings={setSettings} />
           </div>
         </div>
       ) : mode === "paper" ? (
@@ -4147,6 +4266,50 @@ function AssistantView({
           onCreate={startNewPaper}
         />
       )}
+      {chatFloating ? (
+        <div className="chat-float" style={{ left: floatPos.x, top: floatPos.y }}>
+          <div className="chat-float-header" onMouseDown={startDrag}>
+            <span>Teacher assistant</span>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => setChatFloating(false)}
+              aria-label="Dock chat"
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+          <div className="chat-messages" ref={messagesRef}>
+            {messages.map((message, index) => (
+              <div key={index} className={`message message-${message.role}`}>
+                {message.content}
+              </div>
+            ))}
+            {busy ? <div className="message message-assistant">Thinking…</div> : null}
+          </div>
+          <div className="chat-compose">
+            <textarea
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+              placeholder="Ask about a lesson or student work…"
+            />
+            <Button
+              variant="primary"
+              icon="send"
+              onClick={() => void send()}
+              disabled={busy || !prompt.trim()}
+            >
+              {busy ? "Thinking…" : "Send"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -4432,6 +4595,12 @@ function QuestionPaperStudio({
     if ((selected.length || localFiles.length) && !references.length) {
       throw new Error(warnings.join(" ") || "None of the selected references could be read.");
     }
+    // Shuffle so repeated generations draw from every attached past paper rather than
+    // always favouring whichever source happens to sort first (and survives truncation below).
+    for (let i = references.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [references[i], references[j]] = [references[j], references[i]];
+    }
     const perReferenceLimit = Math.max(2_400, Math.floor(19_000 / Math.max(1, references.length)));
     return {
       context: references.map((reference) => reference.slice(0, perReferenceLimit)).join("\n\n").slice(0, 19_500),
@@ -4458,6 +4627,7 @@ Paper specification:
 - ${advanced.includeDiagrams ? "You may select questions that use official source diagrams only when a self-contained alternative is unavailable, but still set diagram to null for exact teacher attachment." : "Choose only self-contained questions that do not require diagrams."}
 - Use board-appropriate command words, mathematical notation and mark allocation. Do not create elementary recall questions at an advanced setting.
 - References are evidence, not a licence to copy. Adapt rather than reproduce long passages. Never invent a filename, page or question number.
+${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are supplied. Draw questions across all of them, not just the first, weighted by the teacher brief and topics rather than by block order." : ""}
 - Put answers only in answer fields. Never put an answer key in a prompt.
 - Give enough working_lines for a student to solve each question.
 - Keep prompts and answers concise enough for the complete JSON response to finish.
@@ -4778,7 +4948,7 @@ Paper specification:
             <Button variant="primary" icon="assistant" onClick={() => void generate()} disabled={busy || !title.trim() || !classroomId}>
               {busy ? "Creating paper..." : "Create paper"}
             </Button>
-            <Button onClick={onCreateNew}>New blank setup</Button>
+            <Button variant="ghost" onClick={onCreateNew}>Start a new blank paper</Button>
           </div>
           {status ? <p className={/could not|must|unavailable|incomplete/i.test(status) ? "form-error" : "form-hint"}>{status}</p> : null}
         </div>
@@ -4959,6 +5129,10 @@ function SettingsView({
   const [password, setPassword] = useState("");
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountError, setAccountError] = useState("");
+  const [aiSettings, setAiSettings] = useState<AiSettings | null>(null);
+  useEffect(() => {
+    void api.aiSettings().then(setAiSettings);
+  }, [api]);
   const loadTeachers = useCallback(async () => {
     try {
       setTeachers(await api.teacherAccounts());
@@ -5043,6 +5217,7 @@ function SettingsView({
             for that account.
           </p>
         </Panel>
+        <AiSettingsPanel api={api} settings={aiSettings} onSettings={setAiSettings} />
         <AppUpdater appName="Cinder Teacher" />
       </div>
       {createOpen ? (

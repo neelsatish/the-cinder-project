@@ -259,10 +259,11 @@
 .gradebook-page {
   max-width: none;
   margin: 0 auto;
+  min-height: calc(100vh - 140px);
   height: calc(100vh - 140px);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 .gradebook-layout {
   flex: 1;
@@ -270,18 +271,18 @@
   display: grid;
   grid-template-columns: minmax(620px, 1fr) minmax(290px, 330px);
   gap: 18px;
-  overflow: hidden;
+  overflow: visible;
 }
 .legacy-gradebook-hidden { display: none; }
-.univer-gradebook-panel { min-width: 0; min-height: 0; overflow: hidden; }
+.univer-gradebook-panel { min-width: 0; min-height: 0; overflow: visible; }
 .univer-gradebook-panel > .panel-body {
   min-height: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
-.univer-gradebook { width: 100%; height: 100%; min-height: 0; flex: 1; overflow: hidden; background: var(--surface); }
+.univer-gradebook { width: 100%; height: 100%; min-height: 520px; flex: 1; overflow: visible; background: var(--surface); }
 .univer-loading { min-height: 520px; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--muted); }
 .gradebook-sheet {
   min-width: 0;
@@ -495,6 +496,33 @@
 .copilot-context > small {
   color: var(--muted);
   line-height: 1.45;
+}
+.chat-float {
+  position: fixed;
+  width: 380px;
+  height: 520px;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.28);
+  z-index: 60;
+  overflow: hidden;
+}
+.chat-float-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: move;
+  user-select: none;
+  font-weight: 600;
+}
+.chat-float .chat-messages {
+  flex: 1;
 }
 .copilot-materials {
   max-height: 170px;
@@ -937,6 +965,9 @@
 .paper-print-copy {
   display: none;
 }
+.gradebook-print-copy {
+  display: none;
+}
 .teacher-account-list {
   max-height: 300px;
   margin: 0 0 14px;
@@ -1021,6 +1052,42 @@
     border: 0;
     box-shadow: none;
     font: inherit;
+  }
+  body[data-cinder-gradebook-print] {
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  body[data-cinder-gradebook-print] * {
+    visibility: hidden !important;
+  }
+  body[data-cinder-gradebook-print] .gradebook-print-copy,
+  body[data-cinder-gradebook-print] .gradebook-print-copy * {
+    visibility: visible !important;
+  }
+  body[data-cinder-gradebook-print] .gradebook-print-copy {
+    display: block !important;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    padding: 0;
+    background: #fff;
+    color: #181512;
+    font: 11pt/1.5 Arial, "Liberation Sans", sans-serif;
+  }
+  .gradebook-print-copy h1 {
+    margin: 0 0 14pt;
+    font: 700 18pt/1.2 "Liberation Sans", Arial, sans-serif;
+  }
+  .gradebook-print-copy table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .gradebook-print-copy th,
+  .gradebook-print-copy td {
+    border: 1px solid #181512;
+    padding: 4pt 6pt;
+    text-align: left;
+    font-size: 10pt;
   }
   .paper-print-copy h1 {
     margin: 0 0 14pt;
