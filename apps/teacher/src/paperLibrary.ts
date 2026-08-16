@@ -16,6 +16,7 @@ export type PaperAdvancedOptions = {
   durationMinutes: number;
   topics: string;
   includeDiagrams: boolean;
+  maxOutputTokens?: number;
 };
 
 export type SavedQuestionPaper = {
@@ -89,7 +90,11 @@ function isSavedQuestionPaper(value: unknown): value is SavedQuestionPaper {
           typeof paper.advanced.paperVariant === "string" &&
           Number.isFinite(paper.advanced.durationMinutes) &&
           typeof paper.advanced.topics === "string" &&
-          typeof paper.advanced.includeDiagrams === "boolean",
+          typeof paper.advanced.includeDiagrams === "boolean" &&
+          (paper.advanced.maxOutputTokens === undefined ||
+            (Number.isInteger(paper.advanced.maxOutputTokens) &&
+              paper.advanced.maxOutputTokens >= 256 &&
+              paper.advanced.maxOutputTokens <= 8_192)),
       )) &&
     (paper.paperSpec === undefined || Boolean(paper.paperSpec && typeof paper.paperSpec === "object")) &&
     Array.isArray(paper.sources) &&

@@ -64,8 +64,11 @@ import {
   answerKeyText,
   boardName,
   compactPageRanges,
+  DEFAULT_PAPER_OUTPUT_TOKENS,
   difficultyName,
   difficultyPrompt,
+  normalizePaperOutputTokens,
+  PAPER_OUTPUT_TOKEN_OPTIONS,
   legacyPaperToSpec,
   normalizeGeneratedPaper,
   officialSourceUrl,
@@ -4238,6 +4241,7 @@ const DEFAULT_PAPER_ADVANCED: PaperAdvancedOptions = {
   durationMinutes: 60,
   topics: "",
   includeDiagrams: true,
+  maxOutputTokens: DEFAULT_PAPER_OUTPUT_TOKENS,
 };
 
 function QuestionPaperStudio({
@@ -4293,6 +4297,7 @@ function QuestionPaperStudio({
       10,
       Math.min(360, activePaper?.advanced?.durationMinutes ?? DEFAULT_PAPER_ADVANCED.durationMinutes),
     ),
+    maxOutputTokens: normalizePaperOutputTokens(activePaper?.advanced?.maxOutputTokens),
   }));
   const [paper, setPaper] = useState<GeneratedPaper>(() => initialPaperSpec(activePaper));
   const [sources, setSources] = useState<PaperSourceCitation[]>(activePaper?.sources ?? []);
@@ -4306,6 +4311,7 @@ function QuestionPaperStudio({
   const discardingPaperRef = useRef(false);
 
   const classroom = classrooms.find((item) => item.id === classroomId) ?? null;
+  const maxOutputTokens = normalizePaperOutputTokens(advanced.maxOutputTokens);
   const subject = classroom?.name ?? activePaper?.subject ?? "General";
   const classroomMaterials = materials.filter(
     (material) => !classroomId || material.classroom_id === classroomId,
@@ -4455,6 +4461,7 @@ Paper specification:
 - Put answers only in answer fields. Never put an answer key in a prompt.
 - Give enough working_lines for a student to solve each question.
 - Keep prompts and answers concise enough for the complete JSON response to finish.
+- Fit the complete JSON response within ${maxOutputTokens.toLocaleString()} output tokens. Prefer concise wording over an incomplete response.
 - Use neutral, grammatical language when a person's pronouns are unknown.
 `.trim();
 
@@ -4476,7 +4483,7 @@ Paper specification:
       const result = await api.chat(
         [{ role: "user", content: makeGenerationPrompt() }],
         references.context || undefined,
-        8_192,
+        maxOutputTokens,
       );
       if (!result.content.trim()) throw new Error("The AI returned an empty paper.");
       setGenerationStage("Checking questions and marks");
@@ -4487,7 +4494,7 @@ Paper specification:
         const repair = await api.chat(
           [{ role: "user", content: makeGenerationPrompt(true) }],
           `DRAFT TO REPAIR:\n${result.content}`.slice(0, 19_500),
-          8_192,
+          maxOutputTokens,
         );
         nextPaper = parseGeneratedPaperResponse(repair.content);
       }
@@ -4500,7 +4507,7 @@ Paper specification:
             },
           ],
           JSON.stringify(nextPaper).slice(0, 19_500),
-          8_192,
+          maxOutputTokens,
         );
         nextPaper = parseGeneratedPaperResponse(repair.content);
       }
@@ -4708,6 +4715,22 @@ Paper specification:
               </div>
               <Field label="Topics">
                 <input maxLength={400} value={advanced.topics} onChange={(event) => setAdvanced((current) => ({ ...current, topics: event.target.value }))} placeholder="Mechanics, electricity..." />
+              </Field>
+              <Field
+                label="AI output allowance"
+                hint="Maximum output per AI request. PDF and prompt input tokens are separate; repairs may make another request. Use a small paper with the test presets."
+              >
+                <select
+                  value={maxOutputTokens}
+                  onChange={(event) => setAdvanced((current) => ({
+                    ...current,
+                    maxOutputTokens: normalizePaperOutputTokens(event.target.value),
+                  }))}
+                >
+                  {PAPER_OUTPUT_TOKEN_OPTIONS.map((option) => (
+                    <option value={option.value} key={option.value}>{option.label}</option>
+                  ))}
+                </select>
               </Field>
               <label className="check-field">
                 <input type="checkbox" checked={advanced.includeDiagrams} onChange={(event) => setAdvanced((current) => ({ ...current, includeDiagrams: event.target.checked }))} />

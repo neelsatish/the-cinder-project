@@ -3,6 +3,23 @@ import type { PaperSourceCitation } from "./paperLibrary";
 export type ExamBoard = "CIE" | "IGCSE" | "CBSE" | "ICSE";
 export type DifficultyLevel = 1 | 2 | 3 | 4 | 5;
 
+export const PAPER_OUTPUT_TOKEN_OPTIONS = [
+  { value: 512, label: "512 - Smoke test" },
+  { value: 1_024, label: "1,024 - Small test" },
+  { value: 2_048, label: "2,048 - Economy" },
+  { value: 4_096, label: "4,096 - Balanced" },
+  { value: 8_192, label: "8,192 - Full paper" },
+] as const;
+
+export const DEFAULT_PAPER_OUTPUT_TOKENS = 4_096;
+
+export function normalizePaperOutputTokens(value: unknown) {
+  const numeric = Number(value);
+  return PAPER_OUTPUT_TOKEN_OPTIONS.some((option) => option.value === numeric)
+    ? numeric
+    : DEFAULT_PAPER_OUTPUT_TOKENS;
+}
+
 export type PaperDiagram = {
   imageDataUrl: string;
   caption: string;

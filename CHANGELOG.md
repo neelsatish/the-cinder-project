@@ -6,6 +6,15 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.4
+
+- Added a per-paper AI output allowance with low-cost presets from 512 to 8,192
+  tokens and a balanced 4,096-token default.
+- Saved the allowance with each paper and applied it to initial generation and
+  repair requests while asking the model to keep its JSON inside the budget.
+- Clarified that reference PDFs, prompts and additional repair calls use tokens
+  outside the selected output allowance.
+
 ## 0.9.3
 
 - Moved update manifests to a direct raw-GitHub feed with the release asset as a

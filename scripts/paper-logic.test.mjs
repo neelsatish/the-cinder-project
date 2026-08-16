@@ -5,6 +5,8 @@ import {
   compactPageRanges,
   difficultyPrompt,
   legacyPaperToSpec,
+  normalizePaperOutputTokens,
+  PAPER_OUTPUT_TOKEN_OPTIONS,
   paperTotalMarks,
   parseGeneratedPaperResponse,
   questionPaperText,
@@ -106,6 +108,17 @@ test("sanitizes diagrams and rejects active SVG content", () => {
   assert.equal((safe.match(/xmlns=/g) ?? []).length, 1);
   assert.equal(sanitizeDiagramSvg('<svg><script>alert(1)</script></svg>'), "");
   assert.equal(sanitizeDiagramSvg('<svg><image href="https://example.com/a.png"/></svg>'), "");
+});
+
+test("paper output allowances use safe presets and a balanced fallback", () => {
+  assert.deepEqual(
+    PAPER_OUTPUT_TOKEN_OPTIONS.map((option) => option.value),
+    [512, 1024, 2048, 4096, 8192],
+  );
+  assert.equal(normalizePaperOutputTokens("1024"), 1024);
+  assert.equal(normalizePaperOutputTokens(8192), 8192);
+  assert.equal(normalizePaperOutputTokens(1234), 4096);
+  assert.equal(normalizePaperOutputTokens(undefined), 4096);
 });
 
 test("accepts exact PNG/JPEG diagrams and rejects executable image formats", () => {
