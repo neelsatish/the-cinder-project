@@ -6,6 +6,23 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.8
+
+- Fixed the gradebook AI assistant failing on even a short message: the
+  fixed 8,192-token output reservation alone was nearly exhausting some
+  providers' entire per-minute budget before the prompt was even counted.
+  Lowered to the balanced 4,096-token default used elsewhere.
+- Fixed the updater silently reporting "no update" after a transient
+  network hiccup: its fallback endpoint pointed at a `matchbox-latest`
+  release that CI stopped updating back at 0.9.2. Repointed it at GitHub's
+  dynamic "latest release" alias, which is always current with zero extra
+  publishing steps required.
+- Removed several redundant hint and warning captions across Settings,
+  Students, Attendance, AI Chat and the gradebook.
+- Restyled dropdowns app-wide to match the theme instead of falling back
+  to the OS's native white control, and widened and centred the gradebook
+  classroom selector.
+
 ## 0.9.7
 
 - Removed the redundant hint text under the gradebook title.

@@ -705,7 +705,6 @@ function StudentsView({
       <PageHeader
         eyebrow="Accounts"
         title="Students"
-        description="Create accounts here, then enrol students into one or more classrooms."
         action={
           <Button
             variant="primary"
@@ -2196,7 +2195,6 @@ function AttendanceView({
       <PageHeader
         eyebrow="Daily register"
         title="Attendance"
-        description="Each date has its own status and note. A login is only a hint; your mark is official."
         action={
           <div className="list-actions">
             <Button icon="refresh" onClick={() => void load()}>
@@ -2530,7 +2528,7 @@ function GradebookView({
       const result = await api.chat(
         [{ role: "user", content: instruction }],
         JSON.stringify(context),
-        DEFAULT_PAPER_OUTPUT_TOKENS * 2,
+        DEFAULT_PAPER_OUTPUT_TOKENS,
       );
       const parsed = parseAiGradebook(result.content);
       if (!parsed) {
@@ -2912,11 +2910,6 @@ function GradebookView({
                 </div>
               </div>
             ) : null}
-            <p className="ai-warning">
-              Names and grade data leave the school network when a cloud AI
-              provider is used. Keep the names option off unless your school
-              permits it.
-            </p>
           </div>
         </Panel>
         </div>
@@ -4252,9 +4245,6 @@ function AssistantView({
                   )}
                 </div>
                 <small>{contextStatus}</small>
-                <p className="ai-warning">
-                  Enabled names, scores and PDF text leave the school network when a cloud AI provider is used.
-                </p>
               </div>
             </Panel>
           </div>
@@ -5110,10 +5100,6 @@ function AiSettingsPanel({
         <Button variant="primary" type="submit" disabled={!model.trim()}>
           Save AI settings
         </Button>
-        <p className="ai-warning">
-          AI suggestions are never applied automatically. Check facts and grades
-          before using them.
-        </p>
       </form>
     </Panel>
   );
@@ -5166,7 +5152,6 @@ function SettingsView({
       <PageHeader
         eyebrow="Settings"
         title="School server"
-        description="The Teacher app stores the authoritative classroom database on this computer."
       />
       <div className="grid grid-2">
         <Panel title="Local network" eyebrow="Student access">

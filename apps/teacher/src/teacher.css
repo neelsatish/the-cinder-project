@@ -280,6 +280,15 @@
 }
 .gradebook-classroom-field {
   justify-self: center;
+  min-width: 220px;
+}
+.gradebook-classroom-field .field {
+  text-align: center;
+}
+.gradebook-classroom-field select {
+  min-width: 220px;
+  text-align: center;
+  text-align-last: center;
 }
 .gradebook-layout {
   flex: 1;
