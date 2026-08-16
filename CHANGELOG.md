@@ -6,6 +6,22 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.6
+
+- Reordered the Teacher sidebar into roster (Classrooms, Students, Attendance),
+  work (Assignments, Gradebook), then AI assistant and Settings last.
+- Moved AI connection settings out of the AI Chat page and into Settings.
+- AI Chat and the gradebook AI assistant now send an explicit output-token cap
+  on every request, so the server-side limit actually applies. Chat exposes a
+  teacher-facing allowance control; the gradebook assistant uses a fixed cap
+  sized for its longer action payloads.
+- Paper maker shuffles attached past-paper PDFs before generation and
+  instructs the model to draw questions across all attached sources instead
+  of favouring whichever sorts first.
+- Fixed the gradebook clipping the Univer sheet, and added an Export PDF
+  button next to the existing CSV export.
+- AI Chat can now pop out into a small floating, draggable window.
+
 ## 0.9.5
 
 - Recovered complete questions from AI replies that are cut off before the final
