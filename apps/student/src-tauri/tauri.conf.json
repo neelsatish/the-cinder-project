@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Cinder Student",
+  "version": "0.9.5",
+  "identifier": "org.cinder.student",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Cinder Student",
+        "width": 1240,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 620,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://*:7373 http://*.local:7373; worker-src 'self' blob:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "category": "Education",
+    "publisher": "The Cinder Project",
+    "copyright": "Copyright 2026 The Cinder Project. Licensed under Apache-2.0.",
+    "homepage": "https://github.com/neelsatish/the-cinder-project",
+    "licenseFile": "../../../LICENSE",
+    "shortDescription": "Cinder classroom workspace for students",
+    "longDescription": "A focused classroom workspace for assignments, private notes, teacher feedback, study materials and flashcards.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkwNTMxQUYzMTkwM0VBNUEKUldSYTZnTVo4eHBUa0lia0tkaGxCcllYa0N5U3JQNnduSzlXQ1YyaEtLUkZzVC9paS9XZGhrV0QK",
+      "endpoints": [
+        "https://raw.githubusercontent.com/neelsatish/the-cinder-project/updater-feed/student-latest.json?installed={{current_version}}",
+        "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-latest/student-latest.json"
+      ]
+    }
+  }
+}

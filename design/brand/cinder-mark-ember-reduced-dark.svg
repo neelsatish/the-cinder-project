@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Cinder mark — Ember, reduced, gradient. Dark scheme: Char/Warm/Spark tips, warm centre glow, on Ground. -->
+  <defs>
+    <linearGradient id="outerD" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="20" y2="0">
+      <stop offset="0%" stop-color="#A5602E"/>
+      <stop offset="100%" stop-color="#6E3216"/>
+    </linearGradient>
+    <linearGradient id="midD" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="26" y2="0">
+      <stop offset="0%" stop-color="#F0A15C"/>
+      <stop offset="100%" stop-color="#DD8B36"/>
+    </linearGradient>
+    <linearGradient id="coreD" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="33" y2="0">
+      <stop offset="0%" stop-color="#FFC78A"/>
+      <stop offset="100%" stop-color="#D9631F"/>
+    </linearGradient>
+    <radialGradient id="dotD" cx="0" cy="-2" r="5" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFB566"/>
+      <stop offset="100%" stop-color="#6E3216"/>
+    </radialGradient>
+  </defs>
+  <g transform="translate(32 49)">
+    <g fill="url(#outerD)">
+      <path d="M0 0 Q6.4 -6.9 20 0 Q10 3 0 0 Z" transform="rotate(-161)"/>
+      <path d="M0 0 Q6.4 -6.9 20 0 Q10 3 0 0 Z" transform="rotate(-19)"/>
+    </g>
+    <g fill="url(#midD)">
+      <path d="M0 0 Q8.3 -8.8 26 0 Q13 3.9 0 0 Z" transform="rotate(-126)"/>
+      <path d="M0 0 Q8.3 -8.8 26 0 Q13 3.9 0 0 Z" transform="rotate(-54)"/>
+    </g>
+    <path d="M0 0 Q10.6 -10.6 33 0 Q16.5 4.7 0 0 Z" transform="rotate(-90)" fill="url(#coreD)"/>
+    <circle r="4" fill="url(#dotD)"/>
+  </g>
+</svg>

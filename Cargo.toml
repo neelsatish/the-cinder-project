@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/host",
+    "crates/ai",
+    "apps/student/src-tauri",
+    "apps/teacher/src-tauri",
+]
+
+[workspace.package]
+version = "0.9.5"
+edition = "2021"
+rust-version = "1.77"
+license = "Apache-2.0"
+authors = ["The Cinder Project"]
+repository = "https://github.com/neelsatish/the-cinder-project"
+homepage = "https://github.com/neelsatish/the-cinder-project"
+
+[workspace.dependencies]
+cinder-core = { path = "crates/core" }
+cinder-host = { path = "crates/host" }
+cinder-ai = { path = "crates/ai" }
+
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "process", "sync", "time", "signal", "io-util"] }
+axum = { version = "0.8", features = ["multipart", "macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# `bundled` compiles SQLite from source with FTS5/JSON1 enabled. This is deliberate:
+# the Debian 12 system libsqlite3 on a recovered PC may lack FTS5, and we cannot
+# rely on internet access to fix that in the field.
+rusqlite = { version = "0.32", features = ["bundled", "chrono", "uuid"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.25"
+
+argon2 = "0.5"
+rand = "0.8"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+ts-rs = "10"
+mdns-sd = "0.13"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+aes-gcm = "0.10"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

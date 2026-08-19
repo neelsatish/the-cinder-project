@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Cinder - Library</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@520;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary-fixed": "#e0e0ff",
+                      "on-primary-container": "#000992",
+                      "secondary": "#50d8e9",
+                      "inverse-primary": "#3d4ae0",
+                      "inverse-on-surface": "#313031",
+                      "accent-lemon": "#C4FF44",
+                      "on-tertiary-container": "#471e00",
+                      "tertiary-fixed-dim": "#ffb68a",
+                      "tertiary-container": "#c28259",
+                      "on-surface": "#e5e2e3",
+                      "surface-container": "#201f21",
+                      "surface-variant": "#353436",
+                      "surface-deep": "#050505",
+                      "text-muted": "#9A9DA3",
+                      "surface-panel": "#111214",
+                      "tertiary": "#ffb68a",
+                      "primary-container": "#7a85ff",
+                      "surface-container-lowest": "#0e0e0f",
+                      "error": "#ffb4ab",
+                      "surface-dim": "#131314",
+                      "primary-fixed-dim": "#bec2ff",
+                      "on-surface-variant": "#c6c5d8",
+                      "surface-container-highest": "#353436",
+                      "inverse-surface": "#e5e2e3",
+                      "outline": "#8f8fa1",
+                      "accent-teal": "#D1EBEB",
+                      "surface-tint": "#bec2ff",
+                      "on-secondary": "#00363c",
+                      "primary": "#bec2ff",
+                      "tertiary-fixed": "#ffdbc8",
+                      "error-container": "#93000a",
+                      "on-tertiary-fixed": "#321300",
+                      "on-secondary-fixed-variant": "#004f57",
+                      "on-tertiary-fixed-variant": "#6c3a17",
+                      "outline-variant": "#454655",
+                      "on-primary-fixed": "#000469",
+                      "on-secondary-fixed": "#001f23",
+                      "on-secondary-container": "#003e44",
+                      "on-primary": "#000ba6",
+                      "secondary-container": "#00b1c1",
+                      "on-primary-fixed-variant": "#1f2bc8",
+                      "secondary-fixed-dim": "#50d8e9",
+                      "surface": "#131314",
+                      "on-error-container": "#ffdad6",
+                      "on-tertiary": "#502403",
+                      "surface-container-low": "#1c1b1d",
+                      "background": "#131314",
+                      "on-background": "#e5e2e3",
+                      "border-muted": "#232426",
+                      "surface-container-high": "#2a2a2b",
+                      "secondary-fixed": "#91f1ff",
+                      "surface-bright": "#3a393a",
+                      "on-error": "#690005"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "xl": "40px",
+                      "margin-safe": "32px",
+                      "md": "16px",
+                      "lg": "24px",
+                      "gutter": "20px",
+                      "xs": "4px",
+                      "sm": "8px"
+              },
+              "fontFamily": {
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "mono-data": [
+                              "Inter"
+                      ],
+                      "label-sm": [
+                              "Inter"
+                      ],
+                      "mono-telemetry": [
+                              "Inter"
+                      ],
+                      "h2": [
+                              "Manrope"
+                      ],
+                      "hero-headline": [
+                              "Manrope"
+                      ],
+                      "h3": [
+                              "Manrope"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "h1": [
+                              "Manrope"
+                      ]
+              },
+              "fontSize": {
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "1.5",
+                                      "letterSpacing": "0em",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "mono-data": [
+                              "13px",
+                              {
+                                      "lineHeight": "1.0",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "1.0",
+                                      "letterSpacing": "0.02em",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "mono-telemetry": [
+                              "9px",
+                              {
+                                      "lineHeight": "1.0",
+                                      "letterSpacing": "0.2em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "h2": [
+                              "32px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "letterSpacing": "-0.05em",
+                                      "fontWeight": "520"
+                              }
+                      ],
+                      "hero-headline": [
+                              "76px",
+                              {
+                                      "lineHeight": "1.1",
+                                      "letterSpacing": "-0.055em",
+                                      "fontWeight": "520"
+                              }
+                      ],
+                      "h3": [
+                              "24px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "letterSpacing": "-0.04em",
+                                      "fontWeight": "520"
+                              }
+                      ],
+                      "body-lg": [
+                              "19px",
+                              {
+                                      "lineHeight": "1.6",
+                                      "letterSpacing": "0em",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "h1": [
+                              "48px",
+                              {
+                                      "lineHeight": "1.1",
+                                      "letterSpacing": "-0.05em",
+                                      "fontWeight": "520"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+          .bg-dot-pattern {
+              background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 0);
+              background-size: 16px 16px;
+          }
+          .glass-panel {
+              background: rgba(16, 17, 18, 0.8);
+              backdrop-filter: blur(20px);
+              -webkit-backdrop-filter: blur(20px);
+              box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+          }
+          
+          /* Custom Scrollbar for a more technical look */
+          ::-webkit-scrollbar {
+              width: 6px;
+              height: 6px;
+          }
+          ::-webkit-scrollbar-track {
+              background: #050505;
+          }
+          ::-webkit-scrollbar-thumb {
+              background: #232426;
+              border-radius: 3px;
+          }
+          ::-webkit-scrollbar-thumb:hover {
+              background: #353436;
+          }
+      </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex selection:bg-primary/30">
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 h-full z-40 w-20 flex flex-col border-r border-outline-variant bg-surface-deep dark:bg-surface-deep">
+<!-- Logo Area -->
+<div class="h-16 flex items-center justify-center border-b border-outline-variant/30">
+<div class="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center relative overflow-hidden group">
+<div class="absolute inset-0 bg-primary/20 scale-y-0 group-hover:scale-y-100 transition-transform origin-bottom duration-300"></div>
+<span class="font-h3 text-h3 font-bold text-primary tracking-tighter relative z-10">L</span>
+</div>
+</div>
+<!-- Nav Items -->
+<div class="flex-1 py-lg flex flex-col items-center gap-sm">
+<a class="w-12 h-12 rounded-lg flex items-center justify-center text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors active:scale-95 transition-transform" href="#" title="Command Center">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+</a>
+<a class="w-12 h-12 rounded-lg flex items-center justify-center text-primary bg-primary/10 border-r-2 border-primary active:scale-95 transition-transform" href="#" title="Library">
+<span class="material-symbols-outlined" data-icon="folder_open" style="font-variation-settings: 'FILL' 1;">folder_open</span>
+</a>
+<a class="w-12 h-12 rounded-lg flex items-center justify-center text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors active:scale-95 transition-transform" href="#" title="Study">
+<span class="material-symbols-outlined" data-icon="edit_note">edit_note</span>
+</a>
+<a class="w-12 h-12 rounded-lg flex items-center justify-center text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors active:scale-95 transition-transform" href="#" title="AI Assistant">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+</a>
+<a class="w-12 h-12 rounded-lg flex items-center justify-center text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors active:scale-95 transition-transform" href="#" title="Timer">
+<span class="material-symbols-outlined" data-icon="timer">timer</span>
+</a>
+</div>
+<!-- Bottom Actions -->
+<div class="pb-lg flex flex-col items-center gap-sm border-t border-outline-variant/30 pt-md">
+<a class="w-12 h-12 rounded-lg flex items-center justify-center text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors active:scale-95 transition-transform" href="#" title="Settings">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</a>
+<div class="w-10 h-10 rounded-full border border-outline-variant overflow-hidden mt-2">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="A futuristic avatar of a user in a high-tech control room setting. Dark mode lighting with neon blue accents. Minimalist and professional." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB_fxM6fABa27Hx4nNY3wtUiAcGDj3aE-zI7QvFmdMZEUoK12v_6jdY8vZiBRfnG6SZQYJpnab3TnIr1Fmk4p3fF9FtHAc1viwdBMWSMwS26brFfElizaR4QRbv7tfr5mYtQ0pR-KwkGbFeCOGuRwtTGFdyEkxD-48Xtn9hbqqvLOi4n1QmCanpwgrhXZVPHa1937Ik15p1OhDP77GEcpexkBlRs5mWx7VhHwt1nKu5wxHMPwh2Qws"/>
+</div>
+</div>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 ml-20 flex flex-col min-h-screen bg-surface-deep">
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-20 z-30 flex justify-between items-center px-lg h-16 bg-surface/80 dark:bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30">
+<!-- Left: Context -->
+<div class="flex items-center gap-md">
+<h1 class="font-h3 text-h3 font-black text-primary">Library</h1>
+<div class="h-4 w-px bg-outline-variant/50"></div>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted uppercase">Local Storage / Root</span>
+</div>
+<!-- Right: Actions -->
+<div class="flex items-center gap-md font-label-sm text-label-sm text-on-surface dark:text-on-surface">
+<div class="flex items-center gap-sm px-sm py-xs border border-border-muted rounded bg-surface-panel/50">
+<span class="w-2 h-2 rounded-full bg-accent-lemon shadow-[0_0_8px_rgba(196,255,68,0.5)]"></span>
+<span class="font-mono-telemetry text-mono-telemetry">Streak: 12d</span>
+</div>
+<button class="px-md py-sm bg-primary-fixed text-on-primary-fixed font-bold rounded hover:opacity-90 transition-opacity flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px]" data-icon="play_arrow">play_arrow</span>
+                    Study Session
+                </button>
+<div class="flex items-center gap-xs ml-sm border-l border-outline-variant/30 pl-md">
+<button class="w-8 h-8 flex items-center justify-center text-text-muted hover:text-primary transition-all active:opacity-80">
+<span class="material-symbols-outlined text-[20px]" data-icon="dark_mode">dark_mode</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center text-text-muted hover:text-primary transition-all active:opacity-80 relative">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-error rounded-full border border-surface-deep"></span>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Workspace -->
+<main class="flex-1 mt-16 p-lg flex flex-col gap-lg max-w-[1728px] mx-auto w-full relative">
+<div class="absolute inset-0 bg-dot-pattern opacity-30 pointer-events-none z-0"></div>
+<div class="relative z-10 flex flex-col h-full gap-md">
+<!-- Controls & Filters Bar -->
+<div class="flex items-center justify-between glass-panel p-md rounded-lg border border-white/[0.05]">
+<!-- Search -->
+<div class="relative w-96">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-[18px]">search</span>
+<input class="w-full bg-surface-dim border border-border-muted rounded-md py-sm pl-10 pr-sm font-mono-data text-mono-data text-on-surface focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 placeholder:text-text-muted/50 transition-all" placeholder="Search knowledge base..." type="text"/>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+<kbd class="px-1.5 py-0.5 rounded bg-surface-variant text-[10px] font-mono-telemetry text-text-muted border border-border-muted">⌘</kbd>
+<kbd class="px-1.5 py-0.5 rounded bg-surface-variant text-[10px] font-mono-telemetry text-text-muted border border-border-muted">K</kbd>
+</div>
+</div>
+<!-- Filters -->
+<div class="flex items-center gap-sm">
+<div class="flex items-center gap-xs px-3 py-1.5 border border-border-muted rounded-md bg-surface-dim hover:border-outline-variant transition-colors cursor-pointer group">
+<span class="font-label-sm text-label-sm text-text-muted group-hover:text-on-surface">Subject</span>
+<span class="material-symbols-outlined text-[16px] text-text-muted">arrow_drop_down</span>
+</div>
+<div class="flex items-center gap-xs px-3 py-1.5 border border-border-muted rounded-md bg-surface-dim hover:border-outline-variant transition-colors cursor-pointer group">
+<span class="font-label-sm text-label-sm text-text-muted group-hover:text-on-surface">Date</span>
+<span class="material-symbols-outlined text-[16px] text-text-muted">arrow_drop_down</span>
+</div>
+<div class="flex items-center gap-xs px-3 py-1.5 border border-border-muted rounded-md bg-surface-dim hover:border-outline-variant transition-colors cursor-pointer group">
+<span class="font-label-sm text-label-sm text-text-muted group-hover:text-on-surface">Type</span>
+<span class="material-symbols-outlined text-[16px] text-text-muted">arrow_drop_down</span>
+</div>
+<div class="h-6 w-px bg-border-muted mx-xs"></div>
+<button class="w-8 h-8 flex items-center justify-center rounded border border-indigo-500/30 text-primary hover:bg-indigo-500/10 transition-colors" title="Grid View">
+<span class="material-symbols-outlined text-[18px]">grid_view</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded bg-surface-variant text-on-surface transition-colors" title="List View">
+<span class="material-symbols-outlined text-[18px]">view_list</span>
+</button>
+</div>
+</div>
+<!-- Main Grid Layout -->
+<div class="grid grid-cols-12 gap-md flex-1 min-h-0">
+<!-- Left Sidebar: Directories -->
+<div class="col-span-3 glass-panel rounded-lg border border-white/[0.05] flex flex-col overflow-hidden">
+<div class="p-md border-b border-border-muted flex items-center justify-between">
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted tracking-widest uppercase">Directories</span>
+<button class="text-text-muted hover:text-primary transition-colors"><span class="material-symbols-outlined text-[16px]">add</span></button>
+</div>
+<div class="flex-1 overflow-y-auto p-sm font-label-sm text-label-sm">
+<ul class="space-y-0.5">
+<li>
+<a class="flex items-center gap-sm px-sm py-2 rounded bg-surface-variant/50 text-on-surface border border-white/[0.02]" href="#">
+<span class="material-symbols-outlined text-[18px] text-primary" style="font-variation-settings: 'FILL' 1;">folder</span>
+                                        Root
+                                    </a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-2 rounded text-text-muted hover:bg-surface-variant/30 hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">folder</span>
+                                        Neuroscience 101
+                                    </a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-2 rounded text-text-muted hover:bg-surface-variant/30 hover:text-on-surface transition-colors ml-lg relative before:content-[''] before:absolute before:left-[-12px] before:top-0 before:w-px before:h-full before:bg-border-muted" href="#">
+<span class="material-symbols-outlined text-[18px]">folder</span>
+                                        Synaptic Plasticity
+                                    </a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-2 rounded text-text-muted hover:bg-surface-variant/30 hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">folder</span>
+                                        Quantum Mechanics
+                                    </a>
+</li>
+<li>
+<a class="flex items-center gap-sm px-sm py-2 rounded text-text-muted hover:bg-surface-variant/30 hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined text-[18px]">folder</span>
+                                        Language Arts
+                                    </a>
+</li>
+</ul>
+</div>
+</div>
+<!-- Center & Right: File List & Drop Zone -->
+<div class="col-span-9 flex flex-col gap-md h-full min-h-0">
+<!-- File List -->
+<div class="glass-panel rounded-lg border border-white/[0.05] flex-1 flex flex-col overflow-hidden">
+<!-- Table Header -->
+<div class="grid grid-cols-12 gap-sm px-lg py-sm border-b border-border-muted bg-surface-dim/50 font-mono-telemetry text-mono-telemetry text-text-muted uppercase">
+<div class="col-span-5">Name</div>
+<div class="col-span-2">Type</div>
+<div class="col-span-2">Size</div>
+<div class="col-span-2">Mastery</div>
+<div class="col-span-1 text-right">Last</div>
+</div>
+<!-- Table Body -->
+<div class="flex-1 overflow-y-auto">
+<!-- Item 1 -->
+<div class="grid grid-cols-12 gap-sm px-lg py-md border-b border-border-muted/50 hover:bg-surface-variant/20 transition-colors items-center group cursor-pointer">
+<div class="col-span-5 flex items-center gap-md">
+<div class="w-8 h-8 rounded bg-error-container/20 border border-error/20 flex items-center justify-center text-error">
+<span class="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface group-hover:text-primary transition-colors">Cerebral_Cortex_Notes_v2.pdf</span>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted mt-0.5">Neuroscience 101</span>
+</div>
+</div>
+<div class="col-span-2 font-mono-data text-mono-data text-text-muted">Document</div>
+<div class="col-span-2 font-mono-data text-mono-data text-text-muted">2.4 MB</div>
+<div class="col-span-2 flex items-center gap-2">
+<div class="flex-1 h-1 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-secondary w-[85%]"></div>
+</div>
+<span class="font-mono-data text-mono-data text-secondary">85%</span>
+</div>
+<div class="col-span-1 font-mono-data text-mono-data text-text-muted text-right">2h</div>
+</div>
+<!-- Item 2 -->
+<div class="grid grid-cols-12 gap-sm px-lg py-md border-b border-border-muted/50 hover:bg-surface-variant/20 transition-colors items-center group cursor-pointer">
+<div class="col-span-5 flex items-center gap-md">
+<div class="w-8 h-8 rounded bg-primary-container/20 border border-primary/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">style</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface group-hover:text-primary transition-colors">Cranial Nerves Flashcards</span>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted mt-0.5">Neuroscience 101</span>
+</div>
+</div>
+<div class="col-span-2 font-mono-data text-mono-data text-text-muted">Deck (42)</div>
+<div class="col-span-2 font-mono-data text-mono-data text-text-muted">12 KB</div>
+<div class="col-span-2 flex items-center gap-2">
+<div class="flex-1 h-1 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-accent-lemon w-[40%]"></div>
+</div>
+<span class="font-mono-data text-mono-data text-accent-lemon">40%</span>
+</div>
+<div class="col-span-1 font-mono-data text-mono-data text-text-muted text-right">1d</div>
+</div>
+</div>
+</div>
+<!-- Drag and Drop Zone -->
+<div class="h-32 rounded-lg border-2 border-dashed border-outline-variant/50 bg-surface-dim/30 hover:bg-surface-variant/20 hover:border-primary/50 transition-all flex flex-col items-center justify-center gap-sm cursor-pointer group">
+<div class="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center group-hover:bg-primary/20 group-hover:text-primary transition-colors text-text-muted">
+<span class="material-symbols-outlined">upload_file</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="font-label-sm text-label-sm text-on-surface">Drag &amp; Drop files here</span>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted mt-1">or click to browse (PDF, MD, CSV)</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Cinder Teacher",
+  "version": "0.9.5",
+  "identifier": "org.cinder.teacher",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5174",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Cinder Teacher",
+        "width": 1360,
+        "height": 860,
+        "minWidth": 1040,
+        "minHeight": 680,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:7373; worker-src 'self' blob:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "category": "Education",
+    "publisher": "The Cinder Project",
+    "copyright": "Copyright 2026 The Cinder Project. Licensed under Apache-2.0.",
+    "homepage": "https://github.com/neelsatish/the-cinder-project",
+    "licenseFile": "../../../LICENSE",
+    "shortDescription": "Cinder classroom management for teachers",
+    "longDescription": "Manage classrooms, student accounts, assignments, grading, attendance, feedback and AI-assisted lesson work from one teacher computer.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkwNTMxQUYzMTkwM0VBNUEKUldSYTZnTVo4eHBUa0lia0tkaGxCcllYa0N5U3JQNnduSzlXQ1YyaEtLUkZzVC9paS9XZGhrV0QK",
+      "endpoints": [
+        "https://raw.githubusercontent.com/neelsatish/the-cinder-project/updater-feed/teacher-latest.json?installed={{current_version}}",
+        "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-latest/teacher-latest.json"
+      ]
+    }
+  }
+}

@@ -1,0 +1,290 @@
+name: Cross-platform installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: cinder-cross-platform-installers
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux Mint x86_64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      checks: write
+    env:
+      CARGO_TERM_COLOR: always
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Audit Rust dependencies
+        uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev patchelf
+
+      - name: Install locked frontend dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify shared source on Linux
+        run: |
+          npm run typecheck
+          npm run test:gradebook-intent
+          npm run test:paper-logic
+          npm run audit:dependencies
+          cargo fmt --all -- --check
+          cargo test --workspace --locked
+
+      - name: Build Student Linux installers
+        run: |
+          npm run bundle:student
+          mkdir -p artifacts
+          student_appimage="$(find target/release/bundle/appimage -maxdepth 1 -type f -name 'Cinder Student_*.AppImage' | head -n 1)"
+          test -n "$student_appimage"
+          test -f "$student_appimage.sig"
+          cp target/release/bundle/deb/Cinder\ Student_*.deb artifacts/Cinder-Student-Linux-x86_64.deb
+          cp "$student_appimage" artifacts/Cinder-Student-Linux-x86_64.AppImage
+          cp "$student_appimage.sig" artifacts/Cinder-Student-Linux-x86_64.AppImage.sig
+
+      - name: Build Teacher Linux installers
+        run: |
+          npm run bundle:teacher
+          teacher_appimage="$(find target/release/bundle/appimage -maxdepth 1 -type f -name 'Cinder Teacher_*.AppImage' | head -n 1)"
+          test -n "$teacher_appimage"
+          test -f "$teacher_appimage.sig"
+          cp target/release/bundle/deb/Cinder\ Teacher_*.deb artifacts/Cinder-Teacher-Linux-x86_64.deb
+          cp "$teacher_appimage" artifacts/Cinder-Teacher-Linux-x86_64.AppImage
+          cp "$teacher_appimage.sig" artifacts/Cinder-Teacher-Linux-x86_64.AppImage.sig
+
+      - name: Verify Linux installer set
+        run: |
+          test "$(find artifacts -maxdepth 1 -type f \( -name '*.deb' -o -name '*.AppImage' \) | wc -l)" -eq 4
+          test "$(find artifacts -maxdepth 1 -type f -name '*.sig' | wc -l)" -eq 2
+          find artifacts -maxdepth 1 -type f -print
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: cinder-linux-x86_64
+          if-no-files-found: error
+          path: artifacts/
+
+  windows:
+    name: Windows 11-compatible x86_64
+    runs-on: windows-2022
+    timeout-minutes: 55
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Install locked frontend dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify shared source and Windows native code
+        run: |
+          npm run typecheck
+          npm run test:gradebook-intent
+          npm run test:paper-logic
+          cargo fmt --all -- --check
+          cargo test --workspace --locked
+
+      - name: Build Student Windows installer
+        shell: pwsh
+        run: |
+          npm run bundle:windows:student
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          $setup = Get-ChildItem target\release\bundle\nsis -Filter 'Cinder Student_*-setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $setup -or -not (Test-Path "$($setup.FullName).sig")) { throw 'Student NSIS artifacts are incomplete.' }
+          Copy-Item $setup.FullName artifacts\Cinder-Student-Windows-x86_64-Setup.exe
+          Copy-Item "$($setup.FullName).sig" artifacts\Cinder-Student-Windows-x86_64-Setup.exe.sig
+
+      - name: Build Teacher Windows installer
+        shell: pwsh
+        run: |
+          npm run bundle:windows:teacher
+          $setup = Get-ChildItem target\release\bundle\nsis -Filter 'Cinder Teacher_*-setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $setup -or -not (Test-Path "$($setup.FullName).sig")) { throw 'Teacher NSIS artifacts are incomplete.' }
+          Copy-Item $setup.FullName artifacts\Cinder-Teacher-Windows-x86_64-Setup.exe
+          Copy-Item "$($setup.FullName).sig" artifacts\Cinder-Teacher-Windows-x86_64-Setup.exe.sig
+
+      - name: Verify Windows installer set
+        shell: pwsh
+        run: |
+          if ((Get-ChildItem artifacts -Filter '*.exe').Count -ne 2) { throw 'Expected two Windows setup executables.' }
+          if ((Get-ChildItem artifacts -Filter '*.sig').Count -ne 2) { throw 'Expected two Windows updater signatures.' }
+          Get-ChildItem artifacts | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: cinder-windows-x86_64
+          if-no-files-found: error
+          path: artifacts/
+
+  release:
+    name: Publish verified installers
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: cinder-*-x86_64
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create cross-platform updater feeds
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          RELEASE_BASE="https://github.com/${{ github.repository }}/releases/download/matchbox-v$VERSION"
+          PUBLISHED_AT="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pub_date "$PUBLISHED_AT" \
+            --arg notes "Cinder Matchbox $VERSION" \
+            --arg linux_signature "$(cat artifacts/Cinder-Student-Linux-x86_64.AppImage.sig)" \
+            --arg linux_url "$RELEASE_BASE/Cinder-Student-Linux-x86_64.AppImage" \
+            --arg windows_signature "$(cat artifacts/Cinder-Student-Windows-x86_64-Setup.exe.sig)" \
+            --arg windows_url "$RELEASE_BASE/Cinder-Student-Windows-x86_64-Setup.exe" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"linux-x86_64": {signature: $linux_signature, url: $linux_url}, "windows-x86_64": {signature: $windows_signature, url: $windows_url}}}' \
+            > artifacts/student-latest.json
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pub_date "$PUBLISHED_AT" \
+            --arg notes "Cinder Matchbox $VERSION" \
+            --arg linux_signature "$(cat artifacts/Cinder-Teacher-Linux-x86_64.AppImage.sig)" \
+            --arg linux_url "$RELEASE_BASE/Cinder-Teacher-Linux-x86_64.AppImage" \
+            --arg windows_signature "$(cat artifacts/Cinder-Teacher-Windows-x86_64-Setup.exe.sig)" \
+            --arg windows_url "$RELEASE_BASE/Cinder-Teacher-Windows-x86_64-Setup.exe" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"linux-x86_64": {signature: $linux_signature, url: $linux_url}, "windows-x86_64": {signature: $windows_signature, url: $windows_url}}}' \
+            > artifacts/teacher-latest.json
+
+      - name: Verify release and create checksums
+        run: |
+          test "$(find artifacts -maxdepth 1 -type f -name '*.exe' | wc -l)" -eq 2
+          test "$(find artifacts -maxdepth 1 -type f -name '*.deb' | wc -l)" -eq 2
+          test "$(find artifacts -maxdepth 1 -type f -name '*.AppImage' | wc -l)" -eq 2
+          test "$(find artifacts -maxdepth 1 -type f -name '*.AppImage.sig' | wc -l)" -eq 2
+          test "$(find artifacts -maxdepth 1 -type f -name '*.exe.sig' | wc -l)" -eq 2
+          jq -e '.platforms["linux-x86_64"].signature | length > 0' artifacts/student-latest.json
+          jq -e '.platforms["windows-x86_64"].signature | length > 0' artifacts/student-latest.json
+          jq -e '.platforms["linux-x86_64"].signature | length > 0' artifacts/teacher-latest.json
+          jq -e '.platforms["windows-x86_64"].signature | length > 0' artifacts/teacher-latest.json
+          (cd artifacts && sha256sum Cinder-Student-* Cinder-Teacher-* > SHA256SUMS.txt)
+          find artifacts -maxdepth 1 -type f -print
+
+      - name: Prepare bullet-point release notes
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          {
+            echo "Cinder Matchbox $VERSION"
+            echo
+            awk -v heading="## $VERSION" '
+              $0 == heading { found=1; next }
+              found && /^## / { exit }
+              found { print }
+            ' CHANGELOG.md
+            echo
+            echo "Built automatically from commit $GITHUB_SHA."
+          } > release-notes.md
+          grep -q '^- ' release-notes.md
+
+      - name: Publish latest installers to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          RELEASE_TAG="matchbox-v$VERSION"
+          REMOTE_TAG_SHA="$(git ls-remote origin "refs/tags/$RELEASE_TAG" | cut -f1)"
+          if [ -n "$REMOTE_TAG_SHA" ]; then
+            test "$REMOTE_TAG_SHA" = "$GITHUB_SHA"
+          else
+            git tag "$RELEASE_TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --target "$GITHUB_SHA" --title "Cinder Matchbox $VERSION" --notes-file release-notes.md --latest
+          else
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "Cinder Matchbox $VERSION" --notes-file release-notes.md --latest
+          fi
+          gh release upload "$RELEASE_TAG" artifacts/* --clobber
+
+      - name: Publish redirect-free updater feeds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          publish_feed() {
+            feed="$1"
+            content="$(base64 -w 0 "artifacts/$feed")"
+            sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/$feed?ref=updater-feed" --jq '.sha' 2>/dev/null || true)"
+            args=(
+              --method PUT
+              "repos/$GITHUB_REPOSITORY/contents/$feed"
+              -f message="Publish Cinder updater feed for $GITHUB_SHA"
+              -f content="$content"
+              -f branch=updater-feed
+            )
+            if [ -n "$sha" ]; then
+              args+=(-f sha="$sha")
+            fi
+            gh api "${args[@]}" >/dev/null
+          }
+          publish_feed student-latest.json
+          publish_feed teacher-latest.json
+
+      - name: Verify public updater feeds
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          for feed in student-latest.json teacher-latest.json; do
+            raw_url="https://raw.githubusercontent.com/${{ github.repository }}/updater-feed/$feed?version=$VERSION"
+            release_url="https://github.com/${{ github.repository }}/releases/download/matchbox-v$VERSION/$feed"
+            curl --fail --location --retry 8 --retry-all-errors --retry-delay 3 --output "/tmp/raw-$feed" "$raw_url"
+            curl --fail --location --retry 8 --retry-all-errors --retry-delay 3 --output "/tmp/release-$feed" "$release_url"
+            jq -e --arg version "$VERSION" '
+              .version == $version and
+              (.platforms["linux-x86_64"].signature | length > 0) and
+              (.platforms["windows-x86_64"].signature | length > 0)
+            ' "/tmp/raw-$feed"
+            cmp "/tmp/raw-$feed" "/tmp/release-$feed"
+          done

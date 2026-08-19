@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Cinder Study Workspace</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@520;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed": "#e0e0ff",
+                        "on-primary-container": "#000992",
+                        "secondary": "#50d8e9",
+                        "inverse-primary": "#3d4ae0",
+                        "inverse-on-surface": "#313031",
+                        "accent-lemon": "#C4FF44",
+                        "on-tertiary-container": "#471e00",
+                        "tertiary-fixed-dim": "#ffb68a",
+                        "tertiary-container": "#c28259",
+                        "on-surface": "#e5e2e3",
+                        "surface-container": "#201f21",
+                        "surface-variant": "#353436",
+                        "surface-deep": "#050505",
+                        "text-muted": "#9A9DA3",
+                        "surface-panel": "#111214",
+                        "tertiary": "#ffb68a",
+                        "primary-container": "#7a85ff",
+                        "surface-container-lowest": "#0e0e0f",
+                        "error": "#ffb4ab",
+                        "surface-dim": "#131314",
+                        "primary-fixed-dim": "#bec2ff",
+                        "on-surface-variant": "#c6c5d8",
+                        "surface-container-highest": "#353436",
+                        "inverse-surface": "#e5e2e3",
+                        "outline": "#8f8fa1",
+                        "accent-teal": "#D1EBEB",
+                        "surface-tint": "#bec2ff",
+                        "on-secondary": "#00363c",
+                        "primary": "#bec2ff",
+                        "tertiary-fixed": "#ffdbc8",
+                        "error-container": "#93000a",
+                        "on-tertiary-fixed": "#321300",
+                        "on-secondary-fixed-variant": "#004f57",
+                        "on-tertiary-fixed-variant": "#6c3a17",
+                        "outline-variant": "#454655",
+                        "on-primary-fixed": "#000469",
+                        "on-secondary-fixed": "#001f23",
+                        "on-secondary-container": "#003e44",
+                        "on-primary": "#000ba6",
+                        "secondary-container": "#00b1c1",
+                        "on-primary-fixed-variant": "#1f2bc8",
+                        "secondary-fixed-dim": "#50d8e9",
+                        "surface": "#131314",
+                        "on-error-container": "#ffdad6",
+                        "on-tertiary": "#502403",
+                        "surface-container-low": "#1c1b1d",
+                        "background": "#131314",
+                        "on-background": "#e5e2e3",
+                        "border-muted": "#232426",
+                        "surface-container-high": "#2a2a2b",
+                        "secondary-fixed": "#91f1ff",
+                        "surface-bright": "#3a393a",
+                        "on-error": "#690005"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "xl": "40px",
+                        "margin-safe": "32px",
+                        "md": "16px",
+                        "lg": "24px",
+                        "gutter": "20px",
+                        "xs": "4px",
+                        "sm": "8px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter", "sans-serif"],
+                        "mono-data": ["Inter", "monospace"],
+                        "label-sm": ["Inter", "sans-serif"],
+                        "mono-telemetry": ["Inter", "monospace"],
+                        "h2": ["Manrope", "sans-serif"],
+                        "hero-headline": ["Manrope", "sans-serif"],
+                        "h3": ["Manrope", "sans-serif"],
+                        "body-lg": ["Inter", "sans-serif"],
+                        "h1": ["Manrope", "sans-serif"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "1.5", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "mono-data": ["13px", { "lineHeight": "1.0", "letterSpacing": "-0.01em", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "1.0", "letterSpacing": "0.02em", "fontWeight": "500" }],
+                        "mono-telemetry": ["9px", { "lineHeight": "1.0", "letterSpacing": "0.2em", "fontWeight": "600" }],
+                        "h2": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.05em", "fontWeight": "520" }],
+                        "hero-headline": ["76px", { "lineHeight": "1.1", "letterSpacing": "-0.055em", "fontWeight": "520" }],
+                        "h3": ["24px", { "lineHeight": "1.2", "letterSpacing": "-0.04em", "fontWeight": "520" }],
+                        "body-lg": ["19px", { "lineHeight": "1.6", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "h1": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.05em", "fontWeight": "520" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Dot Pattern for technical feel */
+        .bg-dots {
+            background-image: radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 16px 16px;
+        }
+        
+        /* Inner glow for active panels */
+        .inner-glow {
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Status Indicator Glow */
+        .status-glow-ok {
+            box-shadow: 0 0 10px rgba(80, 216, 233, 0.6);
+        }
+        
+        /* Custom scrollbar for minimal look */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #454655;
+            border-radius: 2px;
+        }
+        
+        /* Grid Lines */
+        .grid-line-bottom {
+            border-bottom: 0.5px solid rgba(255, 255, 255, 0.05);
+        }
+        .grid-line-right {
+            border-right: 0.5px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+<body class="bg-surface-deep text-on-surface h-screen overflow-hidden flex font-body-md text-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- SideNavBar (Shared Component) -->
+<nav class="fixed left-0 top-0 h-full z-40 w-20 flex flex-col border-r border-outline-variant bg-surface-deep">
+<div class="h-16 flex items-center justify-center border-b border-outline-variant/30 inner-glow">
+<span class="font-h3 text-h3 font-bold text-primary tracking-tighter">L</span>
+</div>
+<div class="flex-1 flex flex-col items-center py-md gap-lg">
+<!-- Command Center -->
+<button class="w-12 h-12 flex items-center justify-center rounded-lg text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors group" title="Command Center">
+<span class="material-symbols-outlined transition-transform group-active:scale-95" data-icon="dashboard">dashboard</span>
+</button>
+<!-- Library -->
+<button class="w-12 h-12 flex items-center justify-center rounded-lg text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors group" title="Library">
+<span class="material-symbols-outlined transition-transform group-active:scale-95" data-icon="folder_open">folder_open</span>
+</button>
+<!-- Study (Active) -->
+<button class="w-12 h-12 flex items-center justify-center rounded-lg text-primary bg-primary/10 border-r-2 border-primary group" title="Study">
+<span class="material-symbols-outlined transition-transform group-active:scale-95" data-icon="edit_note" data-weight="fill" style="font-variation-settings: 'FILL' 1;">edit_note</span>
+</button>
+<!-- AI Assistant -->
+<button class="w-12 h-12 flex items-center justify-center rounded-lg text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors group" title="AI Assistant">
+<span class="material-symbols-outlined transition-transform group-active:scale-95" data-icon="psychology">psychology</span>
+</button>
+<!-- Timer -->
+<button class="w-12 h-12 flex items-center justify-center rounded-lg text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors group" title="Timer">
+<span class="material-symbols-outlined transition-transform group-active:scale-95" data-icon="timer">timer</span>
+</button>
+</div>
+<div class="pb-md flex flex-col items-center">
+<!-- Settings -->
+<button class="w-12 h-12 flex items-center justify-center rounded-lg text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors group" title="Settings">
+<span class="material-symbols-outlined transition-transform group-active:scale-95" data-icon="settings">settings</span>
+</button>
+<div class="mt-sm w-10 h-10 rounded-full overflow-hidden border border-outline-variant mt-sm">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="A clinical, high-contrast, black and white portrait of a user avatar, evoking a technical, anonymous command center operator. Deep blacks and stark whites, sharp focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDeQ6PwhoNqmEx19-g_OU07k-yLQHORhQn58wGU8P8QviXk6o5SfYhY6T0dj2xRrM9Prk-qWt9Ea0n3wyPWVvl4796Kyw5qP11mfEjLmfWpGwT0Bc0xW1Y8DeM1b4al939wJWFrrqQMH6y1lWIT8uQJVG0Kdao_Ek89XkdAXW6aSNWr7PhI8t7FqOlUYgp23Ig9B0YJOKLPJXYcpMHlr6ADFzUuPqemoUZUi3HrBWnVArJO-T6OivI"/>
+</div>
+</div>
+</nav>
+<!-- TopAppBar (Shared Component) -->
+<header class="fixed top-0 right-0 left-20 z-30 flex justify-between items-center px-lg h-16 bg-surface/80 dark:bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30 inner-glow">
+<div class="flex items-center gap-md">
+<h1 class="font-h3 text-h3 font-black text-primary">Cinder</h1>
+<div class="h-4 w-px bg-outline-variant/50"></div>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted uppercase">Study Session_012</span>
+</div>
+<div class="flex items-center gap-md font-label-sm text-label-sm">
+<!-- Precision Timer Telemetry -->
+<div class="flex items-center gap-sm px-sm py-xs bg-surface-panel border border-border-muted rounded-DEFAULT inner-glow">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary status-glow-ok"></div>
+<span class="font-mono-telemetry text-mono-telemetry text-secondary tracking-widest" id="telemetry-timer">00:42:15.89</span>
+</div>
+<div class="h-4 w-px bg-outline-variant/50 mx-xs"></div>
+<button class="text-text-muted hover:text-primary transition-all opacity-80 hover:opacity-100 flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px]" data-icon="dark_mode">dark_mode</span>
+</button>
+<button class="text-text-muted hover:text-primary transition-all opacity-80 hover:opacity-100 flex items-center gap-xs">
+<span class="material-symbols-outlined text-[16px]" data-icon="notifications">notifications</span>
+</button>
+<div class="ml-sm flex items-center gap-sm">
+<span class="text-text-muted">Streak: 12d</span>
+<button class="bg-white text-surface-deep font-bold px-md py-xs rounded-DEFAULT border border-transparent hover:bg-on-surface transition-colors uppercase tracking-wider text-[10px]">
+                    Study Session
+                </button>
+</div>
+</div>
+</header>
+<!-- Main Workspace Canvas -->
+<main class="ml-20 mt-16 flex-1 flex flex-col md:flex-row h-[calc(100vh-4rem)] w-[calc(100vw-5rem)] bg-background relative z-10">
+<!-- Background Pattern -->
+<div class="absolute inset-0 bg-dots z-0 pointer-events-none"></div>
+<!-- Left Pane: Document Editor -->
+<section class="flex-1 flex flex-col min-w-0 border-r border-border-muted relative z-10 bg-surface/50 backdrop-blur-sm">
+<!-- Toolbar -->
+<div class="h-10 border-b border-border-muted flex items-center px-sm gap-xs bg-surface-panel/80">
+<div class="flex items-center gap-1 border-r border-border-muted pr-2 mr-1">
+<button class="w-6 h-6 flex items-center justify-center text-text-muted hover:text-primary hover:bg-surface-variant rounded"><span class="material-symbols-outlined text-[14px]" data-icon="undo">undo</span></button>
+<button class="w-6 h-6 flex items-center justify-center text-text-muted hover:text-primary hover:bg-surface-variant rounded"><span class="material-symbols-outlined text-[14px]" data-icon="redo">redo</span></button>
+</div>
+<select class="bg-transparent border-none text-label-sm font-label-sm text-text-muted focus:ring-0 py-0 pl-1 pr-6 cursor-pointer hover:text-primary">
+<option class="bg-surface-panel">Heading 1</option>
+<option class="bg-surface-panel">Heading 2</option>
+<option class="bg-surface-panel" selected="">Body Text</option>
+<option class="bg-surface-panel">Monospace</option>
+</select>
+<div class="h-3 w-px bg-border-muted mx-1"></div>
+<button class="w-6 h-6 flex items-center justify-center text-on-surface bg-surface-variant rounded"><span class="material-symbols-outlined text-[14px]" data-icon="format_bold">format_bold</span></button>
+<button class="w-6 h-6 flex items-center justify-center text-text-muted hover:text-primary hover:bg-surface-variant rounded"><span class="material-symbols-outlined text-[14px]" data-icon="format_italic">format_italic</span></button>
+<button class="w-6 h-6 flex items-center justify-center text-text-muted hover:text-primary hover:bg-surface-variant rounded"><span class="material-symbols-outlined text-[14px]" data-icon="format_list_bulleted">format_list_bulleted</span></button>
+<button class="w-6 h-6 flex items-center justify-center text-text-muted hover:text-primary hover:bg-surface-variant rounded"><span class="material-symbols-outlined text-[14px]" data-icon="code">code</span></button>
+<div class="flex-1"></div>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted">WORDS: 1,245 | LAST SAVED: 10:42Z</span>
+</div>
+<!-- Editor Canvas -->
+<div class="flex-1 overflow-y-auto p-lg lg:px-xl py-xl">
+<div class="max-w-3xl mx-auto">
+<h2 class="font-h2 text-h2 text-on-surface mb-md">Quantum Computing Principles</h2>
+<p class="font-body-lg text-body-lg text-text-muted mb-lg leading-relaxed">
+                        Quantum superposition is a fundamental principle of quantum mechanics. It states that, much like waves in classical physics, any two (or more) quantum states can be added together ("superposed") and the result will be another valid quantum state.
+                    </p>
+<h3 class="font-h3 text-h3 text-on-surface mb-sm mt-lg">Mathematical Formulation</h3>
+<p class="font-body-md text-body-md text-text-muted mb-md">
+                        In quantum mechanics, a state vector <code class="font-mono-data text-mono-data bg-surface-panel border border-border-muted px-1 py-0.5 rounded text-primary">|ψ⟩</code> in a complex Hilbert space represents the state of a quantum system.
+                    </p>
+<div class="bg-surface-panel border border-border-muted rounded-DEFAULT p-md my-md font-mono-data text-mono-data text-secondary/80 inner-glow relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary/30 group-hover:bg-secondary transition-colors"></div>
+                        |ψ⟩ = α|0⟩ + β|1⟩<br/><br/>
+                        Where |α|² + |β|² = 1
+                    </div>
+<p class="font-body-md text-body-md text-text-muted mb-lg">
+                        The coefficients <code class="font-mono-data text-mono-data text-accent-lemon">α</code> and <code class="font-mono-data text-mono-data text-accent-lemon">β</code> are probability amplitudes.
+                    </p>
+</div>
+</div>
+<!-- Bottom Panel: Flashcard Storage (Docked to Editor) -->
+<div class="h-48 border-t border-border-muted bg-surface-container-lowest/80 backdrop-blur flex flex-col">
+<div class="h-8 border-b border-border-muted flex items-center px-sm justify-between bg-surface-panel/50">
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted tracking-widest">LOCAL STORAGE: FLASHCARDS [4]</span>
+<button class="text-text-muted hover:text-primary"><span class="material-symbols-outlined text-[14px]" data-icon="add">add</span></button>
+</div>
+<div class="flex-1 flex items-center gap-md px-md overflow-x-auto pb-sm pt-sm">
+<!-- Flashcard 1 -->
+<div class="w-48 h-full bg-surface border border-border-muted rounded-DEFAULT flex flex-col p-sm hover:border-primary/50 transition-colors cursor-pointer inner-glow shrink-0">
+<div class="flex justify-between items-start mb-xs">
+<span class="font-label-sm text-label-sm text-primary">Q-01</span>
+<span class="w-2 h-2 rounded-full bg-accent-lemon opacity-50"></span>
+</div>
+<p class="font-body-md text-body-md text-on-surface line-clamp-3 text-[12px] leading-tight flex-1">Define Quantum Superposition in terms of Hilbert Space.</p>
+<div class="mt-auto border-t border-border-muted/50 pt-xs flex justify-between">
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted">REV: 2d</span>
+</div>
+</div>
+<!-- Flashcard 2 -->
+<div class="w-48 h-full bg-surface border border-border-muted rounded-DEFAULT flex flex-col p-sm hover:border-primary/50 transition-colors cursor-pointer inner-glow shrink-0">
+<div class="flex justify-between items-start mb-xs">
+<span class="font-label-sm text-label-sm text-primary">Q-02</span>
+<span class="w-2 h-2 rounded-full bg-error opacity-50"></span>
+</div>
+<p class="font-body-md text-body-md text-on-surface line-clamp-3 text-[12px] leading-tight flex-1">What is the significance of probability amplitudes α and β?</p>
+<div class="mt-auto border-t border-border-muted/50 pt-xs flex justify-between">
+<span class="font-mono-telemetry text-mono-telemetry text-error">REV: NOW</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Pane: AI Study Assistant -->
+<aside class="w-96 flex flex-col bg-surface-panel border-l border-border-muted relative z-10 shadow-[-4px_0_24px_rgba(0,0,0,0.5)]">
+<!-- Assistant Header -->
+<div class="h-12 border-b border-border-muted flex items-center justify-between px-md bg-surface-container-lowest inner-glow">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary" data-icon="neurology">neurology</span>
+<span class="font-label-sm text-label-sm text-on-surface font-bold tracking-wide">ASSISTANT_NEXUS</span>
+</div>
+<!-- API Status Indicators -->
+<div class="flex gap-2">
+<div class="flex items-center gap-1 group relative">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary status-glow-ok"></div>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted group-hover:text-secondary transition-colors">LLM</span>
+</div>
+<div class="flex items-center gap-1 group relative">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary status-glow-ok"></div>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted group-hover:text-secondary transition-colors">VDB</span>
+</div>
+</div>
+</div>
+<!-- Chat History -->
+<div class="flex-1 overflow-y-auto p-md flex flex-col gap-md">
+<!-- User Msg -->
+<div class="self-end max-w-[85%] bg-surface-variant/50 border border-border-muted rounded-DEFAULT p-sm rounded-tr-none inner-glow">
+<p class="font-body-md text-body-md text-on-surface text-[13px]">Can you clarify the normalization condition for the state vector?</p>
+</div>
+<!-- System Msg -->
+<div class="self-start max-w-[90%] bg-transparent border-l-2 border-primary pl-sm py-xs">
+<div class="flex items-center gap-xs mb-1">
+<span class="font-mono-telemetry text-mono-telemetry text-primary">SYS_RSP</span>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted">| 10:43:12Z</span>
+</div>
+<p class="font-body-md text-body-md text-text-muted text-[13px] leading-relaxed">
+                        The normalization condition <code class="font-mono-data text-mono-data text-accent-lemon">|α|² + |β|² = 1</code> ensures that the total probability of finding the system in either state |0⟩ or |1⟩ is exactly 1 (or 100%). It is a conservation of probability intrinsic to unitary evolution in quantum mechanics.
+                    </p>
+<div class="mt-2 flex gap-2">
+<button class="font-mono-telemetry text-mono-telemetry text-text-muted border border-border-muted px-1.5 py-0.5 rounded hover:border-primary hover:text-primary transition-colors">ADD TO NOTES</button>
+</div>
+</div>
+</div>
+<!-- Input Area -->
+<div class="p-md border-t border-border-muted bg-surface-container-lowest inner-glow">
+<div class="relative">
+<textarea class="w-full bg-surface border border-border-muted rounded-DEFAULT p-sm pr-8 font-body-md text-body-md text-on-surface placeholder:text-text-muted focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-all inner-glow" placeholder="Query nexus or select text in editor..." rows="3"></textarea>
+<div class="absolute bottom-2 right-2 flex flex-col gap-1">
+<button class="w-6 h-6 flex items-center justify-center bg-transparent border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-500 rounded transition-colors" title="Execute Query">
+<span class="material-symbols-outlined text-[14px]" data-icon="send">send</span>
+</button>
+</div>
+</div>
+<div class="flex justify-between items-center mt-xs px-1">
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted">CONTEXT: DOCUMENT_ONLY</span>
+<span class="font-mono-telemetry text-mono-telemetry text-text-muted">TOKENS: 42/8K</span>
+</div>
+</div>
+</aside>
+</main>
+<script>
+        // Simple telemetry timer script for realism
+        const timerElement = document.getElementById('telemetry-timer');
+        let startTime = Date.now() - (42 * 60 * 1000 + 15 * 1000); // Start at 42m 15s
+        
+        function updateTimer() {
+            const now = Date.now();
+            const diff = now - startTime;
+            
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const secs = Math.floor((diff % (1000 * 60)) / 1000);
+            const ms = Math.floor((diff % 1000) / 10); // 2 digits
+            
+            const format = (num) => num.toString().padStart(2, '0');
+            
+            if(timerElement) {
+                timerElement.textContent = `${format(hours)}:${format(mins)}:${format(secs)}.${format(ms)}`;
+            }
+            
+            requestAnimationFrame(updateTimer);
+        }
+        
+        requestAnimationFrame(updateTimer);
+    </script>
+</body></html>

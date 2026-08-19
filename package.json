@@ -1,0 +1,30 @@
+{
+  "name": "cinder",
+  "private": true,
+  "version": "0.9.5",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "apps/student",
+    "apps/teacher",
+    "packages/ui"
+  ],
+  "overrides": {
+    "@univerjs/core@0.25.1": {
+      "nanoid": "5.1.16"
+    }
+  },
+  "scripts": {
+    "dev:student": "npm run dev --workspace @cinder/student",
+    "dev:teacher": "npm run dev --workspace @cinder/teacher",
+    "build:student": "npm run build --workspace @cinder/student",
+    "build:teacher": "npm run build --workspace @cinder/teacher",
+    "test:gradebook-intent": "node --experimental-strip-types --test scripts/gradebook-intent.test.mjs",
+    "test:paper-logic": "node --experimental-strip-types --test scripts/paper-logic.test.mjs",
+    "bundle:student": "npm run app:build --workspace @cinder/student",
+    "bundle:teacher": "npm run app:build --workspace @cinder/teacher",
+    "bundle:windows:student": "npm run app:build --workspace @cinder/student -- --bundles nsis",
+    "bundle:windows:teacher": "npm run app:build --workspace @cinder/teacher -- --bundles nsis",
+    "audit:dependencies": "npm audit --omit=dev --audit-level=high",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

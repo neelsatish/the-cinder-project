@@ -1,0 +1,11 @@
+node_modules/
+target/
+tmp/
+apps/*/dist/
+*.log
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.tauri-signing/
+graphify-out/
