@@ -6,6 +6,21 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.9
+
+- Ember Glass: dark ("Ember") is now the default theme, with a slow ambient
+  glow, glass-panelled nav rail and topbar, and a runtime capability probe
+  that measures actual paint cost on the machine and falls back to a flat
+  (no-blur) recipe automatically on slower hardware. Nothing changes for
+  scrolling data - the gradebook, attendance grid and data tables stay
+  fully opaque.
+- Added a third theme, Black - a pure OLED-style dark theme alongside Light
+  and Ember.
+- Added an Effects control to Teacher Settings (Auto/On/Off + a re-check
+  action) for the glass rendering mode.
+- Small layout polish: page transitions, card hover lift, and spacing
+  tweaks across both apps.
+
 ## 0.9.8
 
 - Fixed the gradebook AI assistant failing on even a short message: the

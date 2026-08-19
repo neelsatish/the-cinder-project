@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cinder-teacher",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:teacher"],
+      "port": 5174
+    },
+    {
+      "name": "cinder-student",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:student"],
+      "port": 5173
+    }
+  ]
+}

@@ -32,6 +32,7 @@ import {
   Panel,
   saveSessionValue,
   openExternalUrl,
+  useTheme,
   type AiSettings,
   type Assignment,
   type AttendanceDay,
@@ -5122,6 +5123,7 @@ function SettingsView({
   onCurrentDeleted: () => void;
   onForgetAccount: (username: string) => void;
 }) {
+  const { glass, glassMode, setGlassMode, recheckGlass } = useTheme();
   const [teachers, setTeachers] = useState<User[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleting, setDeleting] = useState<User | null>(null);
@@ -5216,6 +5218,34 @@ function SettingsView({
           </p>
         </Panel>
         <AiSettingsPanel api={api} settings={aiSettings} onSettings={setAiSettings} />
+        <Panel title="Effects" eyebrow="Appearance">
+          <dl className="detail-list">
+            <div>
+              <dt>Glass rendering</dt>
+              <dd>
+                <Badge tone={glass === "on" ? "good" : "neutral"}>
+                  {glass === "on" ? "On" : "Flat (fallback)"}
+                </Badge>
+              </dd>
+            </div>
+          </dl>
+          <Field
+            label="Mode"
+            hint="Auto measures this computer's paint speed and picks the cheaper look automatically on slow hardware."
+          >
+            <select
+              value={glassMode}
+              onChange={(event) =>
+                setGlassMode(event.target.value as "auto" | "on" | "off")
+              }
+            >
+              <option value="auto">Auto</option>
+              <option value="on">On</option>
+              <option value="off">Off</option>
+            </select>
+          </Field>
+          <Button onClick={recheckGlass}>Re-check performance</Button>
+        </Panel>
         <AppUpdater appName="Cinder Teacher" />
       </div>
       {createOpen ? (

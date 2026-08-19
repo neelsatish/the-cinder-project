@@ -3,22 +3,35 @@ import type { ReactNode } from "react";
 import { setTheme as setNativeTheme } from "@tauri-apps/api/app";
 
 import { Icon } from "./icons";
+import {
+  applyGlassAttribute,
+  clearGlassCache,
+  initialGlassState,
+  measureGlassCapability,
+  readGlassMode,
+  writeGlassMode,
+  type GlassMode,
+  type GlassState,
+} from "./glassProbe";
 
 export type CinderTheme = "light" | "cinder" | "dark";
+export type { GlassMode, GlassState };
 
 const THEME_STORAGE_KEY = "cinder.appearance.theme";
 const THEME_COLORS: Record<CinderTheme, string> = {
   light: "#F7F1E7",
   cinder: "#221309",
-  dark: "#15171A",
+  dark: "#000000",
 };
 
 function storedTheme(): CinderTheme {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    return stored === "cinder" || stored === "dark" ? stored : "light";
+    return stored === "light" || stored === "cinder" || stored === "dark"
+      ? stored
+      : "cinder";
   } catch {
-    return "light";
+    return "cinder";
   }
 }
 
@@ -34,16 +47,25 @@ function applyDocumentTheme(theme: CinderTheme) {
 const initialTheme = storedTheme();
 applyDocumentTheme(initialTheme);
 
+const initialGlassMode = readGlassMode();
+applyGlassAttribute(initialGlassState(initialGlassMode));
+
 type ThemeContextValue = {
   theme: CinderTheme;
   setTheme: (theme: CinderTheme) => void;
   toggleTheme: () => void;
+  glass: GlassState;
+  glassMode: GlassMode;
+  setGlassMode: (mode: GlassMode) => void;
+  recheckGlass: () => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<CinderTheme>(initialTheme);
+  const [glassMode, setGlassModeState] = useState<GlassMode>(initialGlassMode);
+  const [glass, setGlass] = useState<GlassState>(() => initialGlassState(initialGlassMode));
 
   useEffect(() => {
     applyDocumentTheme(theme);
@@ -58,6 +80,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [theme]);
 
+  useEffect(() => {
+    applyGlassAttribute(glass);
+  }, [glass]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void measureGlassCapability(glassMode).then((result) => {
+      if (!cancelled) setGlass(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [glassMode]);
+
   const value = useMemo<ThemeContextValue>(
     () => ({
       theme,
@@ -66,8 +102,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         setTheme((current) =>
           current === "light" ? "cinder" : current === "cinder" ? "dark" : "light",
         ),
+      glass,
+      glassMode,
+      setGlassMode: (mode) => {
+        writeGlassMode(mode);
+        setGlassModeState(mode);
+      },
+      recheckGlass: () => {
+        clearGlassCache();
+        void measureGlassCapability(glassMode).then(setGlass);
+      },
     }),
-    [theme],
+    [theme, glass, glassMode],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
@@ -94,8 +140,8 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
         aria-label="Appearance"
       >
         <option value="light">Light</option>
-        <option value="cinder">Cinder original</option>
-        <option value="dark">Plain dark</option>
+        <option value="cinder">Ember</option>
+        <option value="dark">Black</option>
       </select>
     </label>
   );
