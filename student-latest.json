@@ -1,15 +1,15 @@
 {
-  "version": "0.9.9",
-  "notes": "Cinder Matchbox 0.9.9",
-  "pub_date": "2026-08-19T16:41:03Z",
+  "version": "0.9.10",
+  "notes": "Cinder Matchbox 0.9.10",
+  "pub_date": "2026-08-20T15:57:39Z",
   "platforms": {
     "linux-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa0oxZFB5SWxMaWhtTWlYcGZBWHRUVm1vbkdZZGlaM2l3bDVMTWU2V2tpZ3ozNE9SeW14R055MmE2VndmSlZmclU3TExCYnUzcDZtSzhRd3FKSE9BR0FBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MTU3Mzk5CWZpbGU6Q2luZGVyIFN0dWRlbnRfMC45LjlfYW1kNjQuQXBwSW1hZ2UKK09HU3dSRGxwTVhEV3REUmlsODYwSmJnMUYreDN0c3dPOXJUVTBZcTZXdVEyTzZQME1ZS3IxQ1FGWVBzOC9VSitIN3N4QmUybUVkMzRjcHhoNk9TQ0E9PQo=",
-      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.9.9/Cinder-Student-Linux-x86_64.AppImage"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa0Z4NHBOSHJObEQ3ZlUxQmk1WkMwREg0elNUUFAxRWtPVFBYZWFpY3dBb21MeWF0R0JKbXpOTlBBL2hvT3NnN3AwS0NxZEk0QURteXdIVkttL01jdXdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MjQxMTgxCWZpbGU6Q2luZGVyIFN0dWRlbnRfMC45LjEwX2FtZDY0LkFwcEltYWdlCmYxcVY4V2wyY3B4d0lraWp2VEFWSTY1UkhLRUFiRngzNklORXdYdGNiVUlHaDZRNXhMay9rb2xabE8vRmdxU0JvcWw5SkZmV0thVDgyc1JUMWJMV0RRPT0K",
+      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.9.10/Cinder-Student-Linux-x86_64.AppImage"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa0lUaWJrQ0V5U3UvV04xN0tEK2JSOVAwVjVVZEhlaEMxekFObWZFNEdmZ1hXOENsNml1SmVOVitZajdyMFJGeXVnNk12QlhiUnYxblJJSmpxRkFTU0FZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MTU3MjQ0CWZpbGU6Q2luZGVyIFN0dWRlbnRfMC45LjlfeDY0LXNldHVwLmV4ZQp0MWpJeEx0K09JQlNGaktseUtxTWU3RTk4aXFsRTFMa00ydi9kQ0F3T0RBaUJsR0ZYSm9TdkV4ajhQOVhsZEZRZUNzRUZEb2o1WmRSRzVoaWVXQnBBQT09Cg==",
-      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.9.9/Cinder-Student-Windows-x86_64-Setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa09Nbk5RQk40ZHRrYUp3WlIrbHVyNGsxaTRRblg3T3Z4U3hBQTd1T0dvNzllZUxaNW15V2VoMGdiVElUZ1ExdnNMdURaV3pvL25KdktweDlBbU5UQ3dJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MjQxMTU0CWZpbGU6Q2luZGVyIFN0dWRlbnRfMC45LjEwX3g2NC1zZXR1cC5leGUKZ2ZIRTY2bTRKc2JOTm85YmF1S1RoR2ZkcFhTNWQ2TnMvaTBZc05wWXlsWVFHN1ZPNVNQdUVxRXJNZm4raDhJV2szbThiVWltelAvNkdFaDlnU1o4RHc9PQo=",
+      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.9.10/Cinder-Student-Windows-x86_64-Setup.exe"
     }
   }
 }
