@@ -3844,8 +3844,7 @@ function AssistantView({
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      content:
-        "Ask me to explain a topic, draft a quiz, or suggest feedback. You make the final decision.",
+      content: "Ask about a lesson, a quiz, or student feedback.",
     },
   ]);
   const [prompt, setPrompt] = useState("");
@@ -3857,9 +3856,7 @@ function AssistantView({
   const [includeScores, setIncludeScores] = useState(true);
   const [materials, setMaterials] = useState<StudyNode[]>([]);
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
-  const [contextStatus, setContextStatus] = useState(
-    "Scores use aliases until student names are enabled.",
-  );
+  const [contextStatus, setContextStatus] = useState("");
   const [savedPapers, setSavedPapers] = useState<SavedQuestionPaper[]>([]);
   const [papersLoading, setPapersLoading] = useState(true);
   const [papersError, setPapersError] = useState("");
@@ -4172,12 +4169,9 @@ function AssistantView({
             )}
           </Panel>
           <div className="assistant-side-stack">
-            <Panel title="Copilot context" eyebrow="Teacher controlled">
+            <Panel title="Copilot context">
               <div className="form-stack copilot-context">
-                <Field
-                  label="AI output allowance"
-                  hint="Maximum output per reply. A lower limit keeps replies short and predictable."
-                >
+                <Field label="AI output allowance">
                   <select
                     value={chatMaxOutputTokens}
                     onChange={(event) => {
@@ -4891,10 +4885,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
               <Field label="Topics">
                 <input maxLength={400} value={advanced.topics} onChange={(event) => setAdvanced((current) => ({ ...current, topics: event.target.value }))} placeholder="Mechanics, electricity..." />
               </Field>
-              <Field
-                label="AI output allowance"
-                hint="Maximum output per AI request. PDF and prompt input tokens are separate; repairs may make another request. Use a small paper with the test presets."
-              >
+              <Field label="AI output allowance">
                 <select
                   value={maxOutputTokens}
                   onChange={(event) => setAdvanced((current) => ({

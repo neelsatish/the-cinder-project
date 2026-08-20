@@ -6,6 +6,13 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.10
+
+- Replaced hand-drawn nav-rail and UI icons with Phosphor icons for a
+  cleaner, more consistent look.
+- Trimmed filler text across the Teacher app: shorter assistant greeting,
+  removed redundant hints and labels that repeated what was already shown.
+
 ## 0.9.9
 
 - Ember Glass: dark ("Ember") is now the default theme, with a slow ambient
