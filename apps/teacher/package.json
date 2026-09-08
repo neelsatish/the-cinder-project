@@ -1,17 +1,18 @@
 {
   "name": "@cinder/teacher",
   "private": true,
-  "version": "0.9.10",
+  "version": "0.9.11",
   "type": "module",
   "scripts": {
     "dev": "vite --port 5174",
     "build": "tsc -b && vite build",
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test checks/teacher-session.test.mjs",
     "app:dev": "tauri dev",
     "app:build": "tauri build"
   },
   "dependencies": {
-    "@cinder/ui": "0.9.10",
+    "@cinder/ui": "0.9.11",
     "@tauri-apps/api": "^2.8.0",
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "@univerjs/core": "0.25.1",

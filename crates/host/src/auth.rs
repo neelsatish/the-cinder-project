@@ -39,6 +39,15 @@ pub fn hash_temporary_pin(pin: &str) -> Result<String, HostError> {
     hash_secret(pin)
 }
 
+pub fn hash_one_time_pin(pin: &str) -> Result<String, HostError> {
+    if pin.len() != 8 || !pin.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(HostError::BadRequest(
+            "A setup or invite PIN must contain exactly eight digits.".into(),
+        ));
+    }
+    hash_secret(pin)
+}
+
 fn hash_secret(secret: &str) -> Result<String, HostError> {
     if secret.chars().count() > MAX_PASSWORD_CHARS {
         return Err(HostError::BadRequest(

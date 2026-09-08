@@ -634,7 +634,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-ai"
-version = "0.9.8"
+version = "0.9.11"
 dependencies = [
  "anyhow",
  "cinder-core",
@@ -647,7 +647,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-core"
-version = "0.9.8"
+version = "0.9.11"
 dependencies = [
  "aes-gcm",
  "chrono",
@@ -661,8 +661,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "cinder-forge"
+version = "0.9.11"
+dependencies = [
+ "anyhow",
+ "cinder-core",
+ "mdns-sd",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tauri-plugin-process",
+ "tauri-plugin-updater",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "cinder-host"
-version = "0.9.8"
+version = "0.9.11"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -693,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-student"
-version = "0.9.8"
+version = "0.9.11"
 dependencies = [
  "anyhow",
  "cinder-core",
@@ -716,12 +737,12 @@ dependencies = [
 
 [[package]]
 name = "cinder-teacher"
-version = "0.9.8"
+version = "0.9.11"
 dependencies = [
  "anyhow",
- "cinder-ai",
  "cinder-core",
- "cinder-host",
+ "mdns-sd",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tauri",
@@ -731,9 +752,6 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

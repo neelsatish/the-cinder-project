@@ -24,8 +24,21 @@ export type Classroom = {
   subject_code: string | null;
   description: string;
   color: string;
+  owner_teacher_id: string;
+  owner_teacher_name: string;
+  enrolment_code: string;
   student_count: number;
   created_at: string;
+};
+
+export type ClassroomTeachers = {
+  owner: User;
+  co_teachers: User[];
+};
+
+export type TeacherInvitePin = {
+  invite_pin: string;
+  expires_at: string;
 };
 
 export type ClassroomRoster = {
@@ -107,8 +120,40 @@ export type AttendanceRecord = {
 };
 
 export type AttendanceDay = {
+  classroom_id: string;
   day: string;
   records: AttendanceRecord[];
+};
+
+export type LiveSession = {
+  id: string;
+  classroom_id: string;
+  classroom_name: string;
+  module_id: string;
+  module_name: string;
+  duration_minutes: number;
+  join_code: string;
+  starts_at: string;
+  ends_at: string;
+  ended_at: string | null;
+};
+
+export type LiveSessionResult = {
+  score: number;
+  elapsed_seconds: number;
+  submitted_at: string;
+};
+
+export type LiveSessionParticipant = {
+  student_id: string;
+  student_name: string;
+  joined_at: string;
+  result: LiveSessionResult | null;
+};
+
+export type LiveSessionDetails = {
+  session: LiveSession;
+  participants: LiveSessionParticipant[];
 };
 
 export type DashboardStats = {

@@ -1,8 +1,11 @@
 {
   "name": "@cinder/ui",
   "private": true,
-  "version": "0.9.10",
+  "version": "0.9.11",
   "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types --test checks/session.test.mjs checks/document-bridge.test.mjs"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./styles.css": "./src/styles.css"

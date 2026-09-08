@@ -1,44 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Extension } from "@tiptap/core";
-import CharacterCount from "@tiptap/extension-character-count";
-import Color from "@tiptap/extension-color";
-import FontFamily from "@tiptap/extension-font-family";
-import Highlight from "@tiptap/extension-highlight";
-import Link from "@tiptap/extension-link";
-import Placeholder from "@tiptap/extension-placeholder";
-import TextAlign from "@tiptap/extension-text-align";
-import TextStyle from "@tiptap/extension-text-style";
-import Underline from "@tiptap/extension-underline";
 import { EditorContent, useEditor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-
-type DocumentValue = Record<string, unknown>;
-
-const EMPTY_DOCUMENT: DocumentValue = {
-  type: "doc",
-  content: [{ type: "paragraph" }],
-};
-
-const FontSize = Extension.create({
-  name: "fontSize",
-  addGlobalAttributes() {
-    return [
-      {
-        types: ["textStyle"],
-        attributes: {
-          fontSize: {
-            default: null,
-            parseHTML: (element) => element.style.fontSize || null,
-            renderHTML: (attributes) =>
-              attributes.fontSize
-                ? { style: `font-size: ${attributes.fontSize}` }
-                : {},
-          },
-        },
-      },
-    ];
-  },
-});
+import {
+  createDocumentExtensions,
+  EMPTY_DOCUMENT,
+  type DocumentValue,
+} from "./documentBridge";
 
 export function DocumentEditor({
   value = EMPTY_DOCUMENT,
@@ -60,22 +26,7 @@ export function DocumentEditor({
   onSaveRef.current = onSaveRequest;
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-      TextStyle,
-      Color,
-      FontFamily,
-      FontSize,
-      Underline,
-      Highlight.configure({ multicolor: true }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: { rel: "noopener noreferrer" },
-      }),
-      TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Placeholder.configure({ placeholder: "Start writing…" }),
-      CharacterCount,
-    ],
+    extensions: createDocumentExtensions(),
     content: value,
     editable: !readOnly,
     editorProps: {

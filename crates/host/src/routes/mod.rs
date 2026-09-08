@@ -7,5 +7,6 @@ pub mod classrooms;
 pub mod dashboard;
 pub mod files;
 pub mod health;
+pub mod live_sessions;
 pub mod notes;
 pub mod tree;

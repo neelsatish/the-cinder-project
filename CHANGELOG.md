@@ -6,6 +6,14 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.9.11
+
+- Replaced the legacy Student release target with the current Cinder Student app.
+- Restored Live Classroom with timed sessions, temporary join codes and participant tracking.
+- Fixed the classroom enrolment-code form crash.
+- Removed Atlas and teacher-facing AI tools.
+- Added signed in-app updates to the current Student app.
+
 ## 0.9.10
 
 - Replaced hand-drawn nav-rail and UI icons with Phosphor icons for a

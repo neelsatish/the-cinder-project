@@ -10,14 +10,48 @@
   width: 58px;
   height: 58px;
 }
-.teacher-recovery-button {
+.teacher-connection-button {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  border: 0;
-  background: transparent;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--muted);
   cursor: pointer;
+}
+.teacher-auth-actions {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.teacher-auth-actions button,
+.host-list button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.teacher-auth-actions button:hover,
+.host-list button:hover {
+  border-color: var(--primary);
+  color: var(--text);
+}
+.host-list {
+  display: grid;
+  gap: 7px;
+}
+.host-list button {
+  width: 100%;
+  text-align: left;
 }
 .setup-screen {
   width: 100%;
@@ -113,6 +147,62 @@
 .manager-heading h3 {
   margin: 4px 0 0;
   font-size: 15px;
+}
+.subject-card > .badge {
+  align-self: flex-start;
+}
+.subject-card > .badge + .badge {
+  margin-top: 6px;
+}
+.subject-card > small {
+  display: block;
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.classroom-identity {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 0;
+}
+.classroom-identity > div {
+  display: grid;
+  gap: 4px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-lowest);
+}
+.classroom-identity dt,
+.classroom-identity dd {
+  margin: 0;
+}
+.classroom-identity dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+.classroom-identity code {
+  color: var(--primary);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.classroom-teacher-list {
+  margin-bottom: 12px;
+}
+.co-teacher-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+.teacher-invite-box {
+  margin-bottom: 12px;
+}
+.teacher-invite-box small {
+  display: block;
+  color: var(--muted);
 }
 .upload-button {
   position: relative;
@@ -1055,6 +1145,20 @@
     overflow: visible;
   }
   .paper-editor-panel { min-height: 720px !important; }
+}
+
+@media (max-width: 720px) {
+  .teacher-auth-actions {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .classroom-identity,
+  .co-teacher-add {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media print {

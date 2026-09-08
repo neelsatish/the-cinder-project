@@ -302,6 +302,7 @@ export function LoginScreen({
   offlineHint,
   rememberedUsernames = [],
   onCreateAccount,
+  showThemeToggle = true,
 }: {
   role: Role;
   subtitle: string;
@@ -310,6 +311,7 @@ export function LoginScreen({
   offlineHint?: string;
   rememberedUsernames?: string[];
   onCreateAccount?: () => void;
+  showThemeToggle?: boolean;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -331,7 +333,7 @@ export function LoginScreen({
 
   return (
     <div className="auth-screen">
-      <ThemeToggle className="auth-theme-toggle" />
+      {showThemeToggle ? <ThemeToggle className="auth-theme-toggle" /> : null}
       <div className="auth-visual">
         <BrandMark size={64} />
         <p className="eyebrow">Learning, clearly organised</p>

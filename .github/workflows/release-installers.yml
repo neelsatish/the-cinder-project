@@ -80,6 +80,11 @@ jobs:
           cp "$teacher_appimage" artifacts/Cinder-Teacher-Linux-x86_64.AppImage
           cp "$teacher_appimage.sig" artifacts/Cinder-Teacher-Linux-x86_64.AppImage.sig
 
+      - name: Build Linux classroom host
+        run: |
+          cargo build -p cinder-host --release --locked
+          cp target/release/cinder-host artifacts/Cinder-Host-Linux-x86_64
+
       - name: Verify Linux installer set
         run: |
           test "$(find artifacts -maxdepth 1 -type f \( -name '*.deb' -o -name '*.AppImage' \) | wc -l)" -eq 4
@@ -143,6 +148,12 @@ jobs:
           if (-not $setup -or -not (Test-Path "$($setup.FullName).sig")) { throw 'Teacher NSIS artifacts are incomplete.' }
           Copy-Item $setup.FullName artifacts\Cinder-Teacher-Windows-x86_64-Setup.exe
           Copy-Item "$($setup.FullName).sig" artifacts\Cinder-Teacher-Windows-x86_64-Setup.exe.sig
+
+      - name: Build Windows classroom host
+        shell: pwsh
+        run: |
+          cargo build -p cinder-host --release --locked
+          Copy-Item target\release\cinder-host.exe artifacts\Cinder-Host-Windows-x86_64.exe
 
       - name: Verify Windows installer set
         shell: pwsh
@@ -210,7 +221,7 @@ jobs:
           jq -e '.platforms["windows-x86_64"].signature | length > 0' artifacts/student-latest.json
           jq -e '.platforms["linux-x86_64"].signature | length > 0' artifacts/teacher-latest.json
           jq -e '.platforms["windows-x86_64"].signature | length > 0' artifacts/teacher-latest.json
-          (cd artifacts && sha256sum Cinder-Student-* Cinder-Teacher-* > SHA256SUMS.txt)
+          (cd artifacts && sha256sum Cinder-Student-* Cinder-Teacher-* Cinder-Host-* > SHA256SUMS.txt)
           find artifacts -maxdepth 1 -type f -print
 
       - name: Prepare bullet-point release notes

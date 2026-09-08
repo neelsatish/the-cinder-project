@@ -7,17 +7,23 @@ import type {
   Card,
   Classroom,
   ClassroomRoster,
+  ClassroomTeachers,
   DashboardStats,
   Grade,
   GradeChange,
   LoginResponse,
+  LiveSession,
+  LiveSessionDetails,
+  LiveSessionResult,
   NoteBody,
   Role,
   StudyNode,
   Submission,
   SubmissionComment,
+  TeacherInvitePin,
   User,
 } from "./types";
+import { isCinderHealthResponse } from "./health";
 
 export class ApiError extends Error {
   constructor(
@@ -97,8 +103,16 @@ export class CinderApi {
     return (await response.json()) as T;
   }
 
-  health() {
-    return this.request<{ ok: boolean; version: string }>("/api/health");
+  async health(timeoutMs = 10_000) {
+    const health = await this.request<unknown>("/api/health", {}, timeoutMs);
+    if (!isCinderHealthResponse(health)) {
+      throw new ApiError(
+        "invalid_host",
+        "The server did not identify as Cinder Host.",
+        200,
+      );
+    }
+    return health;
   }
 
   authStatus() {
@@ -134,12 +148,22 @@ export class CinderApi {
     return this.request<{ ok: true }>("/api/auth/logout", { method: "POST" });
   }
 
-  bootstrapTeacher(username: string, displayName: string, password: string) {
+  bootstrapTeacher(
+    username: string,
+    displayName: string,
+    password: string,
+    bootstrapPin: string,
+  ) {
     return this.request<{ user: User; recovery_code: string }>(
       "/api/auth/bootstrap",
       {
         method: "POST",
-        body: JSON.stringify({ username, display_name: displayName, password }),
+        body: JSON.stringify({
+          username,
+          display_name: displayName,
+          password,
+          bootstrap_pin: bootstrapPin,
+        }),
       },
     );
   }
@@ -148,7 +172,7 @@ export class CinderApi {
     username: string,
     displayName: string,
     password: string,
-    schoolRecoveryCode: string,
+    invitePin: string,
   ) {
     return this.request<{ user: User; recovery_code: string }>(
       "/api/auth/register-teacher",
@@ -158,28 +182,20 @@ export class CinderApi {
           username,
           display_name: displayName,
           password,
-          school_recovery_code: schoolRecoveryCode,
+          invite_pin: invitePin,
         }),
       },
     );
+  }
+
+  generateTeacherInvite() {
+    return this.request<TeacherInvitePin>("/api/teacher/invite-pin", {
+      method: "POST",
+    });
   }
 
   teacherAccounts() {
     return this.request<User[]>("/api/teacher/accounts");
-  }
-
-  createTeacher(username: string, displayName: string, password: string) {
-    return this.request<{ user: User; recovery_code: string }>(
-      "/api/teacher/accounts",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          username,
-          display_name: displayName,
-          password,
-        }),
-      },
-    );
   }
 
   deleteTeacher(teacherId: string, currentPassword: string) {
@@ -221,6 +237,7 @@ export class CinderApi {
   }
 
   createStudent(input: {
+    classroom_id: string;
     username: string;
     display_name: string;
     grade_level?: string | null;
@@ -285,6 +302,31 @@ export class CinderApi {
     return this.request<Classroom[]>("/api/classrooms");
   }
 
+  joinClassroom(code: string) {
+    return this.request<Classroom>("/api/classrooms/join", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  classroomTeachers(id: string) {
+    return this.request<ClassroomTeachers>(`/api/classrooms/${id}/teachers`);
+  }
+
+  addClassroomTeacher(id: string, teacherId: string) {
+    return this.request<{ ok: true }>(`/api/classrooms/${id}/teachers`, {
+      method: "POST",
+      body: JSON.stringify({ teacher_id: teacherId }),
+    });
+  }
+
+  removeClassroomTeacher(id: string, teacherId: string) {
+    return this.request<{ ok: true }>(
+      `/api/classrooms/${id}/teachers/${teacherId}`,
+      { method: "DELETE" },
+    );
+  }
+
   createClassroom(input: {
     name: string;
     subject_code?: string | null;
@@ -337,6 +379,44 @@ export class CinderApi {
       `/api/classrooms/${classroomId}/students/${studentId}`,
       { method: "DELETE" },
     );
+  }
+
+  startLiveSession(input: {
+    classroom_id: string;
+    module_id: string;
+    module_name: string;
+    duration_minutes: number;
+  }) {
+    return this.request<LiveSession>("/api/live-sessions", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  activeLiveSession(classroomId: string) {
+    return this.request<LiveSession | null>(`/api/classrooms/${classroomId}/live-session`);
+  }
+
+  joinLiveSession(code: string) {
+    return this.request<LiveSession>("/api/live-sessions/join", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  liveSessionDetails(id: string) {
+    return this.request<LiveSessionDetails>(`/api/live-sessions/${id}`);
+  }
+
+  submitLiveSessionResult(id: string, input: { score: number; elapsed_seconds: number }) {
+    return this.request<LiveSessionResult>(`/api/live-sessions/${id}/result`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  endLiveSession(id: string) {
+    return this.request<LiveSession>(`/api/live-sessions/${id}/end`, { method: "POST" });
   }
 
   assignments(classroomId?: string) {
@@ -462,18 +542,21 @@ export class CinderApi {
     );
   }
 
-  attendance(day: string) {
-    return this.request<AttendanceDay>(`/api/attendance/${day}`);
+  attendance(classroomId: string, day: string) {
+    return this.request<AttendanceDay>(
+      `/api/classrooms/${classroomId}/attendance/${day}`,
+    );
   }
 
   saveAttendance(
+    classroomId: string,
     day: string,
     studentId: string,
     status: AttendanceStatus,
     note = "",
   ) {
     return this.request<AttendanceDay["records"][number]>(
-      `/api/attendance/${day}`,
+      `/api/classrooms/${classroomId}/attendance/${day}`,
       {
         method: "PUT",
         body: JSON.stringify({ student_id: studentId, status, note }),
@@ -636,16 +719,10 @@ export class CinderApi {
 }
 
 export async function probeHost(baseUrl: string, timeoutMs = 2500) {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/health`, {
-      signal: controller.signal,
-    });
-    return response.ok;
+    await new CinderApi(baseUrl).health(timeoutMs);
+    return true;
   } catch {
     return false;
-  } finally {
-    window.clearTimeout(timeout);
   }
 }

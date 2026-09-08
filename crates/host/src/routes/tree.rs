@@ -16,6 +16,7 @@ use uuid::Uuid;
 use crate::auth::CurrentUser;
 use crate::db::PooledConn;
 use crate::error::{HostError, HostResult};
+use crate::routes::classrooms::teacher_can_access;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -38,7 +39,18 @@ async fn get_tree(
         .db(move |conn| {
             let sql = if teacher {
                 "SELECT id, owner_id, parent_id, classroom_id, name, kind, position, icon, created_at, updated_at
-                   FROM nodes WHERE owner_id = ?1 OR owner_id IS NULL
+                   FROM nodes n
+                  WHERE n.owner_id = ?1
+                     OR (n.owner_id IS NULL AND (
+                         n.classroom_id IS NULL OR EXISTS(
+                           SELECT 1 FROM classrooms c
+                            WHERE c.id = n.classroom_id AND c.archived_at IS NULL
+                              AND (c.owner_teacher_id = ?1 OR EXISTS(
+                                  SELECT 1 FROM classroom_teachers ct
+                                   WHERE ct.classroom_id = c.id AND ct.teacher_id = ?1
+                              ))
+                         )
+                     ))
                   ORDER BY position, lower(name)"
             } else {
                 "SELECT id, owner_id, parent_id, classroom_id, name, kind, position, icon, created_at, updated_at
@@ -46,8 +58,12 @@ async fn get_tree(
                   WHERE n.owner_id = ?1
                      OR (n.owner_id IS NULL AND (
                          n.classroom_id IS NULL OR EXISTS(
-                           SELECT 1 FROM classroom_enrolments e
-                            WHERE e.classroom_id = n.classroom_id AND e.student_id = ?1
+                           SELECT 1
+                             FROM classroom_enrolments e
+                             JOIN classrooms c ON c.id = e.classroom_id
+                            WHERE e.classroom_id = n.classroom_id
+                              AND e.student_id = ?1
+                              AND c.archived_at IS NULL
                          )
                      ))
                   ORDER BY position, lower(name)"
@@ -79,7 +95,7 @@ async fn create_node(
 
             if let Some(parent_id) = req.parent_id {
                 let parent = load_node(conn, parent_id)?;
-                assert_writable(&parent, owner)?;
+                assert_personal_writable(&parent, owner)?;
                 if !parent.kind.can_have_children() {
                     return Err(HostError::BadRequest(
                         "You can only put things inside a folder.".into(),
@@ -93,15 +109,19 @@ async fn create_node(
             }
 
             if let Some(classroom_id) = req.classroom_id {
-                let enrolled: bool = conn.query_row(
-                    "SELECT EXISTS(
-                        SELECT 1 FROM classroom_enrolments
-                         WHERE classroom_id = ?1 AND student_id = ?2
-                    )",
-                    rusqlite::params![classroom_id.to_string(), owner.to_string()],
-                    |row| row.get(0),
-                )?;
-                if !enrolled && !user.0.role.is_teacher() {
+                let allowed = if user.0.role.is_teacher() {
+                    teacher_can_access(conn, classroom_id, owner)?
+                } else {
+                    conn.query_row(
+                        "SELECT EXISTS(
+                            SELECT 1 FROM classroom_enrolments
+                             WHERE classroom_id = ?1 AND student_id = ?2
+                        )",
+                        rusqlite::params![classroom_id.to_string(), owner.to_string()],
+                        |row| row.get(0),
+                    )?
+                };
+                if !allowed {
                     return Err(HostError::Forbidden);
                 }
             }
@@ -165,18 +185,17 @@ async fn update_node(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateNodeRequest>,
 ) -> HostResult<Json<Node>> {
-    let owner = user.id();
     state
         .db(move |conn| {
             let existing = load_node(conn, id)?;
-            assert_writable(&existing, owner)?;
+            assert_writable(conn, &existing, &user)?;
 
             let tx = conn.transaction()?;
 
             if let Some(new_parent) = req.parent_id {
                 if let Some(parent_id) = new_parent {
                     let parent = load_node_tx(&tx, parent_id)?;
-                    assert_writable(&parent, owner)?;
+                    assert_writable(&tx, &parent, &user)?;
                     if !parent.kind.can_have_children() {
                         return Err(HostError::BadRequest(
                             "You can only put things inside a folder.".into(),
@@ -185,6 +204,14 @@ async fn update_node(
                     if would_create_cycle(&tx, id, parent_id)? {
                         return Err(HostError::BadRequest(
                             "You cannot move a folder into itself.".into(),
+                        ));
+                    }
+                    if parent.owner_id != existing.owner_id
+                        || parent.classroom_id != existing.classroom_id
+                    {
+                        return Err(HostError::BadRequest(
+                            "A folder and its contents must have the same owner and classroom."
+                                .into(),
                         ));
                     }
                 }
@@ -236,11 +263,10 @@ async fn delete_node(
     user: CurrentUser,
     Path(id): Path<Uuid>,
 ) -> HostResult<Json<serde_json::Value>> {
-    let owner = user.id();
     state
         .db(move |conn| {
             let existing = load_node(conn, id)?;
-            assert_writable(&existing, owner)?;
+            assert_writable(conn, &existing, &user)?;
             // Children go with it via ON DELETE CASCADE, which is why
             // `foreign_keys = ON` is set on every pooled connection.
             conn.execute("DELETE FROM nodes WHERE id = ?1", [id.to_string()])?;
@@ -253,9 +279,24 @@ async fn delete_node(
 
 /// Students may only touch their own nodes. The shared library is readable by
 /// everyone and writable by teachers.
-fn assert_writable(node: &Node, owner: Uuid) -> HostResult<()> {
+fn assert_personal_writable(node: &Node, owner: Uuid) -> HostResult<()> {
     match node.owner_id {
         Some(id) if id == owner => Ok(()),
+        _ => Err(HostError::Forbidden),
+    }
+}
+
+fn assert_writable(conn: &rusqlite::Connection, node: &Node, user: &CurrentUser) -> HostResult<()> {
+    match node.owner_id {
+        Some(id) if id == user.id() => Ok(()),
+        None if user.0.role.is_teacher() => {
+            if let Some(classroom_id) = node.classroom_id {
+                if !teacher_can_access(conn, classroom_id, user.id())? {
+                    return Err(HostError::Forbidden);
+                }
+            }
+            Ok(())
+        }
         _ => Err(HostError::Forbidden),
     }
 }
@@ -374,4 +415,286 @@ fn row_to_node(row: &rusqlite::Row<'_>) -> rusqlite::Result<HostResult<Node>> {
                 .map_err(|e: chrono::ParseError| bad("updated_at", e.to_string()))?,
         })
     })())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{assert_writable, delete_node, get_tree, load_node, update_node};
+    use crate::auth::CurrentUser;
+    use crate::{db, AppState};
+    use axum::extract::{Path, State};
+    use axum::Json;
+    use chrono::Utc;
+    use cinder_ai::Ai;
+    use cinder_core::{Role, UpdateNodeRequest, User};
+    use std::sync::Arc;
+    use uuid::Uuid;
+
+    fn user(id: Uuid, username: &str, role: Role, now: chrono::DateTime<Utc>) -> CurrentUser {
+        CurrentUser(
+            User {
+                id,
+                username: username.into(),
+                display_name: username.into(),
+                role,
+                grade_level: None,
+                section: None,
+                roll_number: None,
+                must_change_password: false,
+                created_at: now,
+            },
+            "token".into(),
+        )
+    }
+
+    #[tokio::test]
+    async fn shared_classroom_nodes_follow_teacher_access_and_stay_in_their_tree() {
+        let pool = db::open_in_memory().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let owner = Uuid::new_v4();
+        let co_teacher = Uuid::new_v4();
+        let outsider = Uuid::new_v4();
+        let classroom = Uuid::new_v4();
+        let shared = Uuid::new_v4();
+        let personal_folder = Uuid::new_v4();
+        let now = Utc::now();
+        {
+            let conn = pool.get().unwrap();
+            for (id, username) in [(owner, "owner"), (co_teacher, "co"), (outsider, "outsider")] {
+                conn.execute(
+                    "INSERT INTO users (id, username, display_name, pw_hash, role, created_at)
+                     VALUES (?1, ?2, ?2, 'hash', 'teacher', ?3)",
+                    rusqlite::params![id.to_string(), username, now.to_rfc3339()],
+                )
+                .unwrap();
+            }
+            conn.execute(
+                "INSERT INTO classrooms
+                    (id, name, description, color, created_at, owner_teacher_id, enrolment_code)
+                 VALUES (?1, 'Science', '', '#BEC2FF', ?2, ?3, 'ABCDEFGH')",
+                rusqlite::params![classroom.to_string(), now.to_rfc3339(), owner.to_string()],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO classroom_teachers (classroom_id, teacher_id, added_by, created_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![
+                    classroom.to_string(),
+                    co_teacher.to_string(),
+                    owner.to_string(),
+                    now.to_rfc3339()
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO nodes
+                    (id, owner_id, classroom_id, name, kind, position, created_at, updated_at)
+                 VALUES (?1, NULL, ?2, 'Material', 'pdf', 1024, ?3, ?3)",
+                rusqlite::params![shared.to_string(), classroom.to_string(), now.to_rfc3339()],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO nodes
+                    (id, owner_id, name, kind, position, created_at, updated_at)
+                 VALUES (?1, ?2, 'Personal', 'folder', 1024, ?3, ?3)",
+                rusqlite::params![
+                    personal_folder.to_string(),
+                    co_teacher.to_string(),
+                    now.to_rfc3339()
+                ],
+            )
+            .unwrap();
+        }
+        let state = AppState {
+            pool: pool.clone(),
+            files_dir: directory.path().to_owned(),
+            ai: Arc::new(Ai::disabled()),
+            ai_key_secret: [0; 32],
+        };
+        let teacher = |id: Uuid, username: &str| {
+            CurrentUser(
+                User {
+                    id,
+                    username: username.into(),
+                    display_name: username.into(),
+                    role: Role::Teacher,
+                    grade_level: None,
+                    section: None,
+                    roll_number: None,
+                    must_change_password: false,
+                    created_at: now,
+                },
+                "token".into(),
+            )
+        };
+
+        let Json(renamed) = update_node(
+            State(state.clone()),
+            teacher(co_teacher, "co"),
+            Path(shared),
+            Json(UpdateNodeRequest {
+                name: Some("Renamed".into()),
+                ..Default::default()
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(renamed.name, "Renamed");
+
+        let invalid_move = update_node(
+            State(state.clone()),
+            teacher(co_teacher, "co"),
+            Path(shared),
+            Json(UpdateNodeRequest {
+                parent_id: Some(Some(personal_folder)),
+                ..Default::default()
+            }),
+        )
+        .await;
+        assert!(matches!(
+            invalid_move,
+            Err(crate::error::HostError::BadRequest(_))
+        ));
+
+        let unrelated_delete = delete_node(
+            State(state.clone()),
+            teacher(outsider, "outsider"),
+            Path(shared),
+        )
+        .await;
+        assert!(matches!(
+            unrelated_delete,
+            Err(crate::error::HostError::Forbidden)
+        ));
+
+        let _ = delete_node(State(state), teacher(owner, "owner"), Path(shared))
+            .await
+            .unwrap();
+    }
+
+    #[test]
+    fn global_shared_nodes_are_teacher_writable_but_private_nodes_are_owner_only() {
+        let pool = db::open_in_memory().unwrap();
+        let teacher_id = Uuid::new_v4();
+        let student_id = Uuid::new_v4();
+        let global_id = Uuid::new_v4();
+        let private_id = Uuid::new_v4();
+        let now = Utc::now();
+        let conn = pool.get().unwrap();
+        for (id, username, role) in [
+            (teacher_id, "teacher", "teacher"),
+            (student_id, "student", "student"),
+        ] {
+            conn.execute(
+                "INSERT INTO users (id, username, display_name, pw_hash, role, created_at)
+                 VALUES (?1, ?2, ?2, 'hash', ?3, ?4)",
+                rusqlite::params![id.to_string(), username, role, now.to_rfc3339()],
+            )
+            .unwrap();
+        }
+        conn.execute(
+            "INSERT INTO nodes
+                (id, owner_id, name, kind, position, created_at, updated_at)
+             VALUES (?1, NULL, 'Legacy shared', 'folder', 1024, ?3, ?3),
+                    (?2, ?4, 'Private', 'folder', 2048, ?3, ?3)",
+            rusqlite::params![
+                global_id.to_string(),
+                private_id.to_string(),
+                now.to_rfc3339(),
+                student_id.to_string()
+            ],
+        )
+        .unwrap();
+
+        let global = load_node(&conn, global_id).unwrap();
+        let private = load_node(&conn, private_id).unwrap();
+        let teacher = user(teacher_id, "teacher", Role::Teacher, now);
+        let student = user(student_id, "student", Role::Student, now);
+        assert!(assert_writable(&conn, &global, &teacher).is_ok());
+        assert!(matches!(
+            assert_writable(&conn, &global, &student),
+            Err(crate::error::HostError::Forbidden)
+        ));
+        assert!(assert_writable(&conn, &private, &student).is_ok());
+        assert!(matches!(
+            assert_writable(&conn, &private, &teacher),
+            Err(crate::error::HostError::Forbidden)
+        ));
+    }
+
+    #[tokio::test]
+    async fn archived_classroom_nodes_are_hidden_from_enrolled_students() {
+        let pool = db::open_in_memory().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let teacher_id = Uuid::new_v4();
+        let student_id = Uuid::new_v4();
+        let classroom_id = Uuid::new_v4();
+        let archived_node = Uuid::new_v4();
+        let global_node = Uuid::new_v4();
+        let now = Utc::now();
+        {
+            let conn = pool.get().unwrap();
+            for (id, username, role) in [
+                (teacher_id, "teacher", "teacher"),
+                (student_id, "student", "student"),
+            ] {
+                conn.execute(
+                    "INSERT INTO users (id, username, display_name, pw_hash, role, created_at)
+                     VALUES (?1, ?2, ?2, 'hash', ?3, ?4)",
+                    rusqlite::params![id.to_string(), username, role, now.to_rfc3339()],
+                )
+                .unwrap();
+            }
+            conn.execute(
+                "INSERT INTO classrooms
+                    (id, name, description, color, created_at, archived_at,
+                     owner_teacher_id, enrolment_code)
+                 VALUES (?1, 'Archived', '', '#BEC2FF', ?2, ?2, ?3, 'ARCHIVE1')",
+                rusqlite::params![
+                    classroom_id.to_string(),
+                    now.to_rfc3339(),
+                    teacher_id.to_string()
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO classroom_enrolments (classroom_id, student_id, created_at)
+                 VALUES (?1, ?2, ?3)",
+                rusqlite::params![
+                    classroom_id.to_string(),
+                    student_id.to_string(),
+                    now.to_rfc3339()
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO nodes
+                    (id, owner_id, classroom_id, name, kind, position, created_at, updated_at)
+                 VALUES (?1, NULL, ?2, 'Archived material', 'pdf', 1024, ?3, ?3),
+                        (?4, NULL, NULL, 'School material', 'pdf', 2048, ?3, ?3)",
+                rusqlite::params![
+                    archived_node.to_string(),
+                    classroom_id.to_string(),
+                    now.to_rfc3339(),
+                    global_node.to_string()
+                ],
+            )
+            .unwrap();
+        }
+        let state = AppState {
+            pool,
+            files_dir: directory.path().to_owned(),
+            ai: Arc::new(Ai::disabled()),
+            ai_key_secret: [0; 32],
+        };
+
+        let Json(tree) = get_tree(
+            State(state),
+            user(student_id, "student", Role::Student, now),
+        )
+        .await
+        .unwrap();
+        assert!(tree.nodes.iter().any(|node| node.id == global_node));
+        assert!(!tree.nodes.iter().any(|node| node.id == archived_node));
+    }
 }
