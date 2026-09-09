@@ -1,58 +1,4 @@
-/* Pre-JS fallback so the first paint isn't a flash of unstyled background —
-   theme.tsx sets [data-theme] before React mounts, but this covers the
-   instant before that module evaluates. */
 :root {
-  --forge-bg: #221309;
-  color-scheme: dark;
-
-  /* Three faces, one job each: Ubuntu carries the interface, Georgia the
-     display headings, the mono the kickers. Ubuntu leads the UI stack
-     because it is now bundled (see main.tsx) — the rest are fallbacks for
-     a build where the woff2 failed to load. Ubuntu ships 300/400/500/700
-     only, and packages/ui sets `font-synthesis: none`, so weights outside
-     that set snap to a neighbour rather than being drawn: keep to 500/700. */
-  --forge-font-ui: Ubuntu, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --forge-font-display: Georgia, "Times New Roman", serif;
-  --forge-font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
-}
-
-:root[data-theme="ember-glass"] {
-  color-scheme: dark;
-  --forge-bg: #221309;
-  --forge-surface: rgba(25, 18, 14, 0.56);
-  --forge-surface-strong: rgba(18, 13, 10, 0.78);
-  --forge-surface-soft: rgba(244, 227, 198, 0.065);
-  --forge-border: rgba(244, 227, 198, 0.07);
-  --forge-border-strong: rgba(244, 227, 198, 0.16);
-  --forge-text: #f3e3c6;
-  --forge-text-soft: color-mix(in srgb, var(--forge-text) 78%, var(--forge-bg));
-  --forge-muted: color-mix(in srgb, var(--forge-text) 55%, var(--forge-bg));
-  --forge-accent: #d9631f;
-  --forge-accent-hover: color-mix(in srgb, var(--forge-accent) 85%, #f3e3c6);
-  --forge-accent-ink: #2e160a;
-  --forge-danger: #e08273;
-  --forge-radius: 18px;
-  --forge-radius-small: 10px;
-  --forge-shadow: 0 22px 70px rgba(7, 3, 1, 0.28), inset 0 1px 0 rgba(255, 239, 215, 0.035);
-
-  /* Liquid-glass fill. Edge light is animated separately so glass never
-     becomes a static white-outlined card. */
-  --forge-glass: linear-gradient(168deg, rgba(255, 247, 237, 0.085), rgba(255, 247, 237, 0.038) 46%, rgba(255, 247, 237, 0.018));
-  --forge-glass-strong: linear-gradient(168deg, rgba(38, 26, 20, 0.76), rgba(22, 15, 11, 0.82) 60%, rgba(18, 12, 9, 0.84));
-  --forge-glass-shadow: 0 18px 44px rgba(0, 0, 0, 0.42), 0 2px 6px rgba(0, 0, 0, 0.3);
-  --forge-glass-blur: 16px;
-  --forge-glass-sat: 1.6;
-  --forge-glass-opaque: rgba(20, 14, 11, 0.94);
-  --forge-glass-backdrop: blur(var(--forge-glass-blur)) saturate(var(--forge-glass-sat));
-
-  --forge-atmo-image: url("./assets/ember-field.png");
-  --forge-atmo-scrim: linear-gradient(180deg, rgba(11, 7, 5, 0.56), rgba(11, 7, 5, 0.74));
-  --forge-atmo-glow-a: rgba(187, 74, 24, 0.38);
-  --forge-atmo-glow-b: rgba(222, 126, 54, 0.26);
-  --forge-atmo-mote: #e98a49;
-}
-
-:root[data-theme="forge-brutalist"] {
   color-scheme: light;
   --forge-bg: #f7f1e7;
   --forge-surface: #fffaf2;
@@ -67,53 +13,12 @@
   --forge-accent-hover: #c75b1f;
   --forge-accent-ink: #fffaf2;
   --forge-danger: #9e3025;
-  --forge-radius: 0px;
-  --forge-radius-small: 0px;
+  --forge-radius: 0;
+  --forge-radius-small: 0;
   --forge-shadow: 5px 5px 0 #2e160a;
-
-  /* Paper never glasses — every glass token collapses to a flat value so the
-     one shared glass recipe rule renders correctly here too. */
-  --forge-glass: var(--forge-surface);
-  --forge-glass-strong: var(--forge-surface-strong);
-  --forge-glass-shadow: var(--forge-shadow);
-  --forge-glass-blur: 0px;
-  --forge-glass-sat: 1;
-  --forge-glass-opaque: var(--forge-surface);
-  --forge-glass-backdrop: none;
-}
-
-:root[data-theme="nightdesk"] {
-  color-scheme: dark;
-  --forge-bg: #0a1219;
-  --forge-surface: rgba(18, 30, 41, 0.62);
-  --forge-surface-strong: rgba(9, 16, 23, 0.8);
-  --forge-surface-soft: rgba(214, 232, 245, 0.06);
-  --forge-border: rgba(206, 228, 244, 0.07);
-  --forge-border-strong: rgba(206, 228, 244, 0.16);
-  --forge-text: #dce7f0;
-  --forge-text-soft: color-mix(in srgb, var(--forge-text) 78%, var(--forge-bg));
-  --forge-muted: color-mix(in srgb, var(--forge-text) 55%, var(--forge-bg));
-  --forge-accent: #4c9bc4;
-  --forge-accent-hover: color-mix(in srgb, var(--forge-accent) 85%, #e8f4ff);
-  --forge-accent-ink: #04121b;
-  --forge-danger: #e08273;
-  --forge-radius: 18px;
-  --forge-radius-small: 10px;
-  --forge-shadow: 0 22px 70px rgba(2, 7, 12, 0.5), inset 0 1px 0 rgba(214, 236, 255, 0.05);
-
-  --forge-glass: linear-gradient(168deg, rgba(226, 242, 255, 0.07), rgba(226, 242, 255, 0.03) 46%, rgba(226, 242, 255, 0.014));
-  --forge-glass-strong: linear-gradient(168deg, rgba(19, 32, 44, 0.76), rgba(11, 19, 28, 0.82) 60%, rgba(9, 16, 23, 0.84));
-  --forge-glass-shadow: 0 18px 44px rgba(2, 7, 12, 0.5), 0 2px 6px rgba(0, 0, 0, 0.32);
-  --forge-glass-blur: 12px;
-  --forge-glass-sat: 1.4;
-  --forge-glass-opaque: rgba(11, 19, 27, 0.94);
-  --forge-glass-backdrop: blur(var(--forge-glass-blur)) saturate(var(--forge-glass-sat));
-
-  --forge-atmo-image: url("./assets/nightdesk-winter.webp");
-  --forge-atmo-scrim: linear-gradient(180deg, rgba(6, 11, 16, 0.62), rgba(6, 11, 16, 0.8));
-  --forge-atmo-glow-a: rgba(58, 128, 168, 0.14);
-  --forge-atmo-glow-b: rgba(84, 176, 178, 0.09);
-  --forge-atmo-mote: #8fd3e8;
+  --forge-font-ui: Ubuntu, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --forge-font-display: Georgia, "Times New Roman", serif;
+  --forge-font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -153,16 +58,6 @@ button { -webkit-tap-highlight-color: transparent; }
   transition: grid-template-columns 180ms ease;
 }
 
-/* ===== Liquid-glass recipe =====
-   Three layers, each doing exactly one job (the layering technique is
-   ui-layouts.com/components/liquid-glass; the gradient-edge treatment is
-   glinui's, whose glass tokens light the top edge brighter than the sides
-   rather than stroking a uniform ring):
-
-     element  — border-radius + the outer drop shadow.
-     ::before — the fill and backdrop-filter, behind content.
-
-   There is deliberately no edge glow, static rim or animated highlight. */
 .forge-sidebar,
 .forge-topbar,
 .forge-panel,
@@ -171,177 +66,15 @@ button { -webkit-tap-highlight-color: transparent; }
 .search-panel {
   position: relative;
   isolation: isolate;
-  box-shadow: var(--forge-glass-shadow);
+  background: var(--forge-surface);
+  box-shadow: var(--forge-shadow);
 }
+.forge-popover,
+.search-panel { background: var(--forge-surface-strong); }
 
-.forge-sidebar::before,
-.forge-topbar::before,
-.forge-panel::before,
-.widget-editor::before,
-.forge-popover::before,
-.search-panel::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: var(--forge-glass);
-  backdrop-filter: var(--forge-glass-backdrop);
-  -webkit-backdrop-filter: var(--forge-glass-backdrop);
-}
-.forge-popover::before,
-.search-panel::before { background: var(--forge-glass-strong); }
-
-/* Paper is the one theme with a real border, drawn directly (no ring —
-   that's a glass-only technique, see below). Sidebar/topbar already have
-   their own border rules further down (they're docked, not floating, in
-   this theme); this covers the rest. */
 :root[data-theme="forge-brutalist"] .forge-panel,
 :root[data-theme="forge-brutalist"] .widget-editor,
 :root[data-theme="forge-brutalist"] .forge-popover { border: 2px solid var(--forge-border); }
-
-/* Real liquid-glass refraction (SVG feTurbulence + feDisplacementMap,
-   defined once in Atmosphere.tsx) layered on top of the blur — only while
-   the capability probe says this device can afford it, and only on the
-   ::before blur layer (never the real element) so the displaced backdrop
-   stays isolated from anything drawing
-   a box-shadow. A literal url() (not a var()) is deliberate: on a browser
-   that can't use url() in backdrop-filter, this whole rule fails to parse
-   and the browser discards it, leaving the plain blur/saturate rule above
-   intact. A var() that resolved to an unusable value would instead fail
-   at compute time and drop backdrop-filter to `none` entirely. */
-:root[data-glass="on"]:not([data-theme="forge-brutalist"]) .forge-sidebar::before,
-:root[data-glass="on"]:not([data-theme="forge-brutalist"]) .forge-topbar::before,
-:root[data-glass="on"]:not([data-theme="forge-brutalist"]) .forge-panel::before,
-:root[data-glass="on"]:not([data-theme="forge-brutalist"]) .widget-editor::before,
-:root[data-glass="on"]:not([data-theme="forge-brutalist"]) .forge-popover::before,
-:root[data-glass="on"]:not([data-theme="forge-brutalist"]) .search-panel::before {
-  backdrop-filter: blur(var(--forge-glass-blur)) saturate(var(--forge-glass-sat)) url("#forge-refract");
-  -webkit-backdrop-filter: blur(var(--forge-glass-blur)) saturate(var(--forge-glass-sat)) url("#forge-refract");
-}
-
-.forge-filter-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
-
-.forge-atmosphere {
-  position: absolute;
-  inset: 0;
-  z-index: -3;
-  overflow: hidden;
-}
-
-.atmo-photo {
-  position: absolute;
-  inset: 0;
-  background-image: var(--forge-atmo-image);
-  background-size: cover;
-  background-position: center;
-}
-
-:root[data-background="image"] .atmo-photo {
-  background-image: var(--forge-custom-background-image, var(--forge-atmo-image));
-}
-
-:root[data-background="solid"] .atmo-photo {
-  background-color: var(--forge-custom-background-color);
-  background-image: none;
-}
-
-:root[data-background="pattern"] .atmo-photo { background-color: var(--forge-custom-background-color); }
-:root[data-background="pattern"][data-pattern="grid"] .atmo-photo {
-  background-image:
-    linear-gradient(var(--forge-border-strong) 1px, transparent 1px),
-    linear-gradient(90deg, var(--forge-border-strong) 1px, transparent 1px);
-  background-size: 30px 30px;
-}
-:root[data-background="pattern"][data-pattern="dots"] .atmo-photo {
-  background-image: radial-gradient(circle, var(--forge-border-strong) 1.5px, transparent 1.7px);
-  background-size: 24px 24px;
-}
-:root[data-background="pattern"][data-pattern="diagonal"] .atmo-photo {
-  background-image: repeating-linear-gradient(135deg, transparent 0 18px, var(--forge-border-strong) 18px 19px);
-}
-
-:root[data-background="solid"] .atmo-scrim,
-:root[data-background="pattern"] .atmo-scrim { background-image: none; }
-:root[data-background="image"] .atmo-horizon,
-:root[data-background="image"] .atmo-current,
-:root[data-background="image"] .atmo-mote,
-:root[data-background="solid"] .atmo-horizon,
-:root[data-background="solid"] .atmo-current,
-:root[data-background="solid"] .atmo-mote,
-:root[data-background="pattern"] .atmo-horizon,
-:root[data-background="pattern"] .atmo-current,
-:root[data-background="pattern"] .atmo-mote { display: none; }
-
-.atmo-scrim {
-  position: absolute;
-  inset: 0;
-  background-image: var(--forge-atmo-scrim);
-}
-
-.atmo-horizon {
-  position: absolute;
-  right: -8%;
-  bottom: -32%;
-  width: 88%;
-  height: 68%;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at center, var(--forge-atmo-glow-a), transparent 70%);
-  filter: blur(32px);
-  animation: forge-atmo-breathe 12s ease-in-out infinite alternate;
-}
-
-.atmo-current {
-  position: absolute;
-  width: 46vw;
-  height: 22vw;
-  border-radius: 50%;
-  filter: blur(72px);
-  opacity: 0.3;
-  will-change: transform;
-}
-
-.atmo-current-one {
-  top: 13%;
-  left: 31%;
-  background: radial-gradient(ellipse, var(--forge-atmo-glow-a), transparent 68%);
-  animation: forge-atmo-current-one 26s cubic-bezier(.45, 0, .55, 1) infinite alternate;
-}
-
-.atmo-current-two {
-  right: -8%;
-  bottom: 2%;
-  background: radial-gradient(ellipse, var(--forge-atmo-glow-b), transparent 70%);
-  animation: forge-atmo-current-two 34s cubic-bezier(.45, 0, .55, 1) infinite alternate;
-}
-
-.atmo-mote {
-  position: absolute;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--forge-atmo-mote);
-  box-shadow: 0 0 18px var(--forge-atmo-mote);
-  opacity: 0;
-  will-change: transform, opacity;
-}
-
-.atmo-mote-one { left: 30%; bottom: 8%; animation: forge-atmo-mote-rise 13s 1s ease-in infinite; }
-.atmo-mote-two { left: 53%; bottom: 2%; width: 3px; height: 3px; animation: forge-atmo-mote-rise 17s 7s ease-in infinite; }
-.atmo-mote-three { left: 76%; bottom: 11%; width: 4px; height: 4px; animation: forge-atmo-mote-rise 15s 4s ease-in infinite; }
-.atmo-mote-four { left: 89%; bottom: 3%; width: 2px; height: 2px; animation: forge-atmo-mote-rise 19s 11s ease-in infinite; }
-
-.atmo-grain {
-  position: absolute;
-  inset: -50%;
-  opacity: 0.045;
-  background-image:
-    repeating-radial-gradient(circle at 30% 20%, #fff 0 0.6px, transparent 0.8px 4px),
-    repeating-radial-gradient(circle at 70% 80%, #fff 0 0.4px, transparent 0.8px 5px);
-  background-size: 9px 11px, 13px 15px;
-  transform: rotate(7deg);
-  animation: forge-atmo-grain-shift 8s steps(2) infinite;
-}
 
 .forge-sidebar,
 .forge-workspace,
@@ -353,13 +86,6 @@ button { -webkit-tap-highlight-color: transparent; }
   min-width: 0;
   flex-direction: column;
   padding: 20px 16px 15px;
-}
-
-:root:not([data-theme="forge-brutalist"]) .forge-sidebar {
-  height: calc(100% - 28px);
-  margin: 14px 0 14px 14px;
-  overflow: hidden;
-  border-radius: 22px;
 }
 
 /* Brutalist docks the sidebar to the window edge rather than floating it as
@@ -411,9 +137,6 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 .forge-brand > svg { flex: 0 0 auto; }
-/* The mark's official gradients are Ember-only (BRAND.md) — Nightdesk tints
-   it to match rather than carrying an orange mark into a blue theme. */
-:root[data-theme="nightdesk"] .forge-brand > svg { filter: hue-rotate(178deg) saturate(1.6) brightness(1.05); }
 .forge-brand-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .forge-brand-copy strong { font-size: 14px; font-weight: 700; letter-spacing: -0.02em; }
 .forge-brand-copy small { color: var(--forge-muted); font-size: 10px; }
@@ -478,11 +201,6 @@ button { -webkit-tap-highlight-color: transparent; }
   min-height: 72px;
   gap: 20px;
   padding: 13px 24px;
-}
-
-:root:not([data-theme="forge-brutalist"]) .forge-topbar {
-  margin: 14px 14px 0 12px;
-  border-radius: 17px;
 }
 
 /* Same reasoning as the sidebar above — docked, not floating, in brutalist. */
@@ -1013,38 +731,7 @@ input:focus-visible,
 textarea:focus-visible,
 summary:focus-visible { outline: 3px solid var(--forge-accent); outline-offset: 3px; }
 
-@keyframes forge-atmo-breathe { to { transform: translate3d(-4%, -3%, 0) scale(1.08); opacity: .8; } }
-@keyframes forge-atmo-current-one { to { transform: translate3d(23%, 13%, 0) scale(1.16) rotate(4deg); opacity: .5; } }
-@keyframes forge-atmo-current-two { to { transform: translate3d(-27%, -9%, 0) scale(.9) rotate(-6deg); opacity: .42; } }
-@keyframes forge-atmo-mote-rise {
-  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(.7); }
-  12% { opacity: .7; }
-  70% { opacity: .38; }
-  100% { opacity: 0; transform: translate3d(44px, -76vh, 0) scale(.2); }
-}
-@keyframes forge-atmo-grain-shift { 50% { transform: translate3d(2%, -1%, 0) rotate(7deg); } }
 @keyframes recording-pulse { 50% { opacity: .4; transform: scale(.82); } }
-
-/* One rule covers every glass surface's fallback, including any added
-   later — this is what fixed .search-panel never degrading before. */
-:root[data-glass="fallback"] {
-  --forge-glass-backdrop: none;
-  --forge-glass: var(--forge-glass-opaque);
-  --forge-glass-strong: var(--forge-glass-opaque);
-}
-:root[data-glass="fallback"] .forge-atmosphere .atmo-horizon,
-:root[data-glass="fallback"] .forge-atmosphere .atmo-current,
-:root[data-glass="fallback"] .forge-atmosphere .atmo-mote,
-:root[data-glass="fallback"] .forge-atmosphere .atmo-grain { animation: none; }
-:root[data-glass="fallback"] .forge-atmosphere .atmo-grain { display: none; }
-
-@media (prefers-reduced-transparency: reduce) {
-  :root {
-    --forge-glass-backdrop: none;
-    --forge-glass: var(--forge-glass-opaque);
-    --forge-glass-strong: var(--forge-glass-opaque);
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
@@ -1093,14 +780,12 @@ summary:focus-visible { outline: 3px solid var(--forge-accent); outline-offset: 
   .forge-frame { display: block; min-height: 100dvh; height: auto; overflow: visible; }
   .appearance-controls { grid-template-columns: 1fr; }
   .forge-sidebar { position: sticky; top: 0; z-index: 50; width: 100%; height: 58px; flex-direction: row; align-items: center; padding: 7px 10px; border: 0; border-bottom: 1px solid var(--forge-border); }
-  :root:not([data-theme="forge-brutalist"]) .forge-sidebar { width: 100%; height: 58px; margin: 0; border: 0; border-bottom: 1px solid var(--forge-border); border-radius: 0; }
   .forge-brand { width: 40px; }
   .forge-brand > svg { width: 34px; height: 34px; }
   .forge-nav { flex: 1; flex-direction: row; justify-content: center; gap: 2px; margin: 0; }
   .forge-nav-item { width: 40px; min-height: 40px; padding: 0; }
   .forge-sidebar-footer { display: none; }
   .forge-topbar { min-height: 60px; padding: 9px 11px; }
-  :root:not([data-theme="forge-brutalist"]) .forge-topbar { margin: 0; border-width: 0 0 1px; border-radius: 0; }
   .forge-search { min-width: 0; }
   .forge-topbar-actions { gap: 4px; }
   .forge-topbar-actions .forge-popover-anchor:nth-of-type(2),

@@ -322,7 +322,6 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
         onSubmit={login}
         rememberedUsernames={knownAccounts}
         offlineHint={online ? `Connected to ${baseUrl}` : "Teacher computer not found. Check the school connection before signing in."}
-        showThemeToggle={false}
       />
       <button type="button" className="matchbox-connection-button" onClick={() => setConnectionOpen(true)}>School connection</button>
       {connectionOpen ? <ConnectionModal baseUrl={baseUrl} deviceLabel={deviceLabel} onClose={() => setConnectionOpen(false)} onSave={saveConnection} /> : null}

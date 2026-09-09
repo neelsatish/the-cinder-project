@@ -1,7 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Bell, MagnifyingGlass, PaintBrushBroad, UserCircle, WifiHigh, WifiSlash, X } from "@phosphor-icons/react";
-
-import { useForgeTheme } from "../theme";
+import { Bell, MagnifyingGlass, UserCircle, WifiHigh, WifiSlash, X } from "@phosphor-icons/react";
 
 type TopbarProps = {
   profileName: string;
@@ -10,15 +8,6 @@ type TopbarProps = {
   onSwitchAccount: () => void;
   onOpenConnection: () => void;
 };
-
-const THEME_CYCLE: Array<"ember-glass" | "nightdesk" | "forge-brutalist"> = ["ember-glass", "nightdesk", "forge-brutalist"];
-
-function ThemeSwitch() {
-  const { theme, toggleTheme, themeLabel } = useForgeTheme();
-  const nextTheme = THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length];
-  const label = `Switch to ${themeLabel(nextTheme)}`;
-  return <button type="button" className="forge-icon-btn" onClick={toggleTheme} title={label} aria-label={label}><PaintBrushBroad size={19} /></button>;
-}
 
 export function Topbar({ profileName, online, onSearch, onSwitchAccount, onOpenConnection }: TopbarProps) {
   const [query, setQuery] = useState("");
@@ -44,7 +33,6 @@ export function Topbar({ profileName, online, onSearch, onSwitchAccount, onOpenC
           <button type="button" className="forge-icon-btn" title="Notifications" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen((open) => !open); setProfileOpen(false); }}><Bell size={19} /></button>
           {notificationsOpen ? <div className="forge-popover forge-menu-popover notification-empty"><PopoverTitle title="Notifications" onClose={() => setNotificationsOpen(false)} /><Bell size={24} /><p>Nothing new.</p></div> : null}
         </div>
-        <ThemeSwitch />
         <div className="forge-popover-anchor">
           <button type="button" className="forge-avatar" title="Account" aria-label="Open account menu" aria-expanded={profileOpen} onClick={() => { setProfileOpen((open) => !open); setNotificationsOpen(false); }}>
             {initials ? <span>{initials}</span> : <UserCircle size={20} />}

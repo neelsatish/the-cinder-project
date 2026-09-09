@@ -4,7 +4,6 @@ export * from "./components";
 export * from "./documentBridge";
 export * from "./editor";
 export * from "./external";
-export * from "./glassProbe";
 export * from "./health";
 export * from "./icons";
 export * from "./types";

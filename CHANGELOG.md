@@ -13,6 +13,7 @@ who installed a `.deb` download the latest package again.
 - Fixed the classroom enrolment-code form crash.
 - Removed Atlas and teacher-facing AI tools.
 - Added signed in-app updates to the current Student app.
+- Made Paper the only theme and aligned the Teacher shell with the Student app.
 
 ## 0.9.10
 

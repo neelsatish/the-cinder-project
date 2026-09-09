@@ -34,7 +34,6 @@ import {
   probeHost,
   saveSessionValue,
   openExternalUrl,
-  useTheme,
   type Assignment,
   type AttendanceDay,
   type AttendanceStatus,
@@ -5586,7 +5585,6 @@ function SettingsView({
   onCurrentDeleted: () => void;
   onForgetAccount: (username: string) => void;
 }) {
-  const { glass, glassMode, setGlassMode, recheckGlass } = useTheme();
   const [teachers, setTeachers] = useState<User[]>([]);
   const [invite, setInvite] = useState<TeacherInvitePin | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
@@ -5706,34 +5704,6 @@ function SettingsView({
             Give the eight-digit PIN to the new teacher. It expires after 15
             minutes; generating another PIN retires the previous one.
           </p>
-        </Panel>
-        <Panel title="Effects" eyebrow="Appearance">
-          <dl className="detail-list">
-            <div>
-              <dt>Glass rendering</dt>
-              <dd>
-                <Badge tone={glass === "on" ? "good" : "neutral"}>
-                  {glass === "on" ? "On" : "Flat (fallback)"}
-                </Badge>
-              </dd>
-            </div>
-          </dl>
-          <Field
-            label="Mode"
-            hint="Auto measures this computer's paint speed and picks the cheaper look automatically on slow hardware."
-          >
-            <select
-              value={glassMode}
-              onChange={(event) =>
-                setGlassMode(event.target.value as "auto" | "on" | "off")
-              }
-            >
-              <option value="auto">Auto</option>
-              <option value="on">On</option>
-              <option value="off">Off</option>
-            </select>
-          </Field>
-          <Button onClick={recheckGlass}>Re-check performance</Button>
         </Panel>
         <AppUpdater appName="Cinder Teacher" />
       </div>

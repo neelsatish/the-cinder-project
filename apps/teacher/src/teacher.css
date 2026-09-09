@@ -1264,3 +1264,93 @@
     height: 13pt;
   }
 }
+.teacher-shell .nav-rail {
+  width: 222px;
+  flex-basis: 222px;
+  align-items: stretch;
+  border-right: 2px solid var(--border);
+  background: var(--background);
+}
+.teacher-shell .rail-brand {
+  height: 72px;
+  display: flex;
+  justify-content: flex-start;
+  gap: 11px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+}
+.teacher-shell .rail-brand-copy {
+  font-size: 14px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.teacher-shell .rail-nav {
+  align-items: stretch;
+  gap: 5px;
+  padding: 38px 16px 24px;
+}
+.teacher-shell .rail-button {
+  width: 100%;
+  height: 43px;
+  display: flex;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 500;
+}
+.teacher-shell .rail-button svg {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+}
+.teacher-shell .rail-button:hover {
+  background: var(--surface-raised);
+  transform: translateX(2px);
+}
+.teacher-shell .rail-button.is-active {
+  border: 2px solid var(--border);
+  background: var(--primary);
+  color: var(--primary-ink);
+  box-shadow: 3px 3px 0 var(--border);
+}
+.teacher-shell .rail-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.teacher-shell .rail-badge {
+  right: 8px;
+  top: 5px;
+}
+.teacher-shell .rail-logout {
+  width: calc(100% - 32px);
+  margin: auto 16px 16px;
+}
+.teacher-shell .topbar {
+  height: 72px;
+  flex-basis: 72px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  backdrop-filter: none;
+}
+.teacher-shell .workspace {
+  padding: 24px;
+  background: var(--background);
+}
+.teacher-shell .panel,
+.teacher-shell .metric-card,
+.teacher-shell .subject-card {
+  border-width: 2px;
+}
+.teacher-shell .button {
+  border-width: 2px;
+  box-shadow: 2px 2px 0 var(--border);
+}
+.teacher-shell .button:active {
+  box-shadow: none;
+  transform: translate(2px, 2px);
+}

@@ -1,5 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "@fontsource/ubuntu/latin-400.css";
+import "@fontsource/ubuntu/latin-500.css";
+import "@fontsource/ubuntu/latin-700.css";
 import "@cinder/ui/styles.css";
 import { ThemeProvider } from "@cinder/ui";
 import "./teacher.css";

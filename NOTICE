@@ -8,16 +8,3 @@ purpose, without asking and without paying. Those rights are permanent.
 
 The "Cinder" name and the ember mark are not covered by that grant. Please give a
 fork its own name, so a school can tell which build the project supports.
-
-## Third-party assets — Cinder Forge
-
-apps/forge/src/assets/nightdesk-winter.webp
-  "Snowy road through a winter landscape at dusk" by Simon Spring
-  https://unsplash.com/photos/snowy-road-through-a-winter-landscape-at-dusk-rK_Bno4P8fg
-  Unsplash License (free for commercial use, no attribution required)
-
-apps/forge/src/assets/ember-field.png
-apps/forge/src/assets/ember-log.png
-  Present in the repository prior to this entry; original source/licence not
-  recorded at the time they were added. Flag for follow-up if provenance
-  cannot be established before Forge's source is made public.

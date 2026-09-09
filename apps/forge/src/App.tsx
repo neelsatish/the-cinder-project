@@ -19,7 +19,6 @@ import {
   X,
 } from "@phosphor-icons/react";
 
-import { Atmosphere } from "./components/Atmosphere";
 import { Topbar } from "./components/Topbar";
 import { MatchboxSessionGate, type MatchboxSession } from "./matchboxSession";
 import { useCountdown, TimerControls, FloatingTimer, type Countdown } from "./components/Countdown";
@@ -63,7 +62,7 @@ export function App() {
 function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
   const [openDocumentId, setOpenDocumentId] = useState<string | null>(null);
   const forge = useForgeData(session.user.id, session.user.display_name);
-  const { theme, clearBackgroundImage } = useForgeTheme();
+  const { clearBackgroundImage } = useForgeTheme();
   const [page, setPage] = useState<Page>("home");
   const [toast, setToast] = useState("");
   const timer = useCountdown(session.user.id);
@@ -145,8 +144,6 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
 
   return (
     <div className="forge-frame" data-page={page} data-sidebar-collapsed={sidebarCollapsed}>
-      {theme !== "forge-brutalist" && <Atmosphere />}
-
       <aside className="forge-sidebar">
         <button type="button" className="forge-brand" onClick={() => selectPage("home")}>
           <BrandMark size={36} />
@@ -549,56 +546,13 @@ function StudioNotesTab({ accountId, openDocumentId, notes, files, onAdd, onUpda
 
 
 function SettingsPage({ name, onSaveName, onReset }: { name: string; onSaveName: (name: string) => void; onReset: () => void }) {
-  const { theme, setTheme, glassMode, setGlassMode, background, setBackgroundMode, setBackgroundColor, setBackgroundPattern, setBackgroundImage, clearBackgroundImage } = useForgeTheme();
   const [draft, setDraft] = useState(name);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [backgroundError, setBackgroundError] = useState("");
   return (
-    <div className="forge-page"><PageHeader kicker="This device" title="Settings" detail="Profile and appearance preferences stay local." />
+    <div className="forge-page"><PageHeader kicker="This device" title="Settings" detail="Profile, updates and local data." />
       <div className="settings-grid"><form className="forge-panel settings-panel" onSubmit={(event) => { event.preventDefault(); onSaveName(draft); }}><h2>Profile</h2><label>Name<input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Add your name" /></label><button type="submit" className="forge-button primary">Save name</button></form>
-      <section className="forge-panel settings-panel">
-        <h2>Appearance</h2>
-        <div className="theme-options">
-          <button type="button" className={theme === "ember-glass" ? "active" : ""} onClick={() => setTheme("ember-glass")}><span className="theme-swatch ember" /><strong>Ember Glass</strong><small>Warm liquid glass over glowing embers.</small></button>
-          <button type="button" className={theme === "nightdesk" ? "active" : ""} onClick={() => setTheme("nightdesk")}><span className="theme-swatch night" /><strong>Nightdesk</strong><small>Cold liquid glass for late study.</small></button>
-          <button type="button" className={theme === "forge-brutalist" ? "active" : ""} onClick={() => setTheme("forge-brutalist")}><span className="theme-swatch paper" /><strong>Paper</strong><small>Hard edges and warm print tones.</small></button>
-        </div>
-        {theme !== "forge-brutalist" && (
-          <div className="appearance-controls">
-            <div>
-              <label>Glass &amp; motion<small>Auto checks this device once and remembers.</small></label>
-              <div className="effects-options">
-                <button type="button" className={glassMode === "auto" ? "active" : ""} onClick={() => setGlassMode("auto")}>Auto</button>
-                <button type="button" className={glassMode === "on" ? "active" : ""} onClick={() => setGlassMode("on")}>On</button>
-                <button type="button" className={glassMode === "off" ? "active" : ""} onClick={() => setGlassMode("off")}>Off</button>
-              </div>
-            </div>
-            <div className="background-control">
-              <label>Background<small>Use the theme artwork, your own image, a flat color or a quiet pattern.</small></label>
-              <div className="effects-options background-mode-options" role="group" aria-label="Background style">
-                {(["theme", "image", "solid", "pattern"] as const).map((mode) => <button type="button" key={mode} className={background.mode === mode ? "active" : ""} aria-pressed={background.mode === mode} onClick={() => { setBackgroundError(""); setBackgroundMode(mode); }}>{mode === "theme" ? "Theme" : mode === "image" ? "Image" : mode === "solid" ? "Color" : "Pattern"}</button>)}
-              </div>
-              {background.mode === "image" && <div className="background-detail">
-                <input type="file" accept="image/*" aria-label="Choose a custom background image" onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (!file) return;
-                  setBackgroundError("");
-                  void setBackgroundImage(file).catch((error: unknown) => setBackgroundError(error instanceof Error ? error.message : "Background image could not be saved."));
-                  event.currentTarget.value = "";
-                }} />
-                {background.imageName && <><small title={background.imageName}>{background.imageName}</small><button type="button" className="forge-button text" onClick={() => void clearBackgroundImage().catch(() => setBackgroundError("Background image could not be removed."))}>Remove image</button></>}
-              </div>}
-              {(background.mode === "solid" || background.mode === "pattern") && <div className="background-detail compact">
-                <label className="background-color">Base color<input type="color" value={background.color} onChange={(event) => setBackgroundColor(event.target.value)} /></label>
-                {background.mode === "pattern" && <label>Pattern<select value={background.pattern} onChange={(event) => setBackgroundPattern(event.target.value as "grid" | "dots" | "diagonal")}><option value="grid">Grid</option><option value="dots">Dots</option><option value="diagonal">Diagonal</option></select></label>}
-              </div>}
-              {backgroundError && <p className="form-error" role="alert">{backgroundError}</p>}
-            </div>
-          </div>
-        )}
-      </section>
-      <section className="forge-panel settings-panel danger-zone"><h2>Local data</h2><p>Clear this account's notes, documents, reference files, background image and widget layout from this device.</p>{confirmReset ? <div className="panel-actions"><button type="button" className="forge-button danger-confirm" onClick={() => { onReset(); setDraft(""); setConfirmReset(false); }}>Clear everything</button><button type="button" className="forge-button secondary" onClick={() => setConfirmReset(false)}>Cancel</button></div> : <button type="button" className="forge-button secondary" onClick={() => setConfirmReset(true)}>Clear workspace…</button>}</section></div>
       <AppUpdater appName="Cinder Student" />
+      <section className="forge-panel settings-panel danger-zone"><h2>Local data</h2><p>Clear this account's notes, documents, reference files, background image and widget layout from this device.</p>{confirmReset ? <div className="panel-actions"><button type="button" className="forge-button danger-confirm" onClick={() => { onReset(); setDraft(""); setConfirmReset(false); }}>Clear everything</button><button type="button" className="forge-button secondary" onClick={() => setConfirmReset(false)}>Cancel</button></div> : <button type="button" className="forge-button secondary" onClick={() => setConfirmReset(true)}>Clear workspace…</button>}</section></div>
     </div>
   );
 }

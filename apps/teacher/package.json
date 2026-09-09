@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@cinder/ui": "0.9.11",
+    "@fontsource/ubuntu": "^5.3.0",
     "@tauri-apps/api": "^2.8.0",
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "@univerjs/core": "0.25.1",

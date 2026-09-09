@@ -2,7 +2,6 @@ import type { ButtonHTMLAttributes, FormEvent, ReactNode } from "react";
 import { useState } from "react";
 
 import { BrandMark, Icon, type IconName } from "./icons";
-import { ThemeToggle } from "./theme";
 import type { Role, User } from "./types";
 
 export type NavigationItem<T extends string> = {
@@ -36,11 +35,13 @@ export function AppShell<T extends string>({
   children: ReactNode;
 }) {
   const activeItem = items.find((item) => item.id === active);
+  const isTeacher = roleLabel === "Teacher";
   return (
-    <div className="app-frame">
+    <div className={`app-frame${isTeacher ? " teacher-shell" : ""}`}>
       <aside className="nav-rail">
         <div className="rail-brand">
           <BrandMark size={38} />
+          {isTeacher ? <strong className="rail-brand-copy">Cinder Teacher</strong> : null}
         </div>
         <nav className="rail-nav" aria-label={`${roleLabel} navigation`}>
           {items.map((item) => (
@@ -54,6 +55,7 @@ export function AppShell<T extends string>({
               aria-current={active === item.id ? "page" : undefined}
             >
               <Icon name={item.icon} />
+              {isTeacher ? <span className="rail-label">{item.label}</span> : null}
               {item.badge ? (
                 <span className="rail-badge">{item.badge}</span>
               ) : null}
@@ -67,6 +69,7 @@ export function AppShell<T extends string>({
           title="Sign out"
         >
           <Icon name="logout" />
+          {isTeacher ? <span className="rail-label">Sign out</span> : null}
         </button>
       </aside>
 
@@ -78,7 +81,6 @@ export function AppShell<T extends string>({
             <span className="section-name">{activeItem?.label}</span>
           </div>
           <div className="topbar-actions">
-            <ThemeToggle className="topbar-theme" />
             {onRefresh ? (
               <button
                 className={`topbar-refresh ${refreshing ? "is-refreshing" : ""}`}
@@ -302,7 +304,6 @@ export function LoginScreen({
   offlineHint,
   rememberedUsernames = [],
   onCreateAccount,
-  showThemeToggle = true,
 }: {
   role: Role;
   subtitle: string;
@@ -311,7 +312,6 @@ export function LoginScreen({
   offlineHint?: string;
   rememberedUsernames?: string[];
   onCreateAccount?: () => void;
-  showThemeToggle?: boolean;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -333,7 +333,6 @@ export function LoginScreen({
 
   return (
     <div className="auth-screen">
-      {showThemeToggle ? <ThemeToggle className="auth-theme-toggle" /> : null}
       <div className="auth-visual">
         <BrandMark size={64} />
         <p className="eyebrow">Learning, clearly organised</p>
