@@ -1,0 +1,4 @@
+.audit-list { max-height: 280px; overflow: auto; }
+.audit-list > div { display: flex; justify-content: space-between; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.audit-list span { display: grid; }
+.audit-list small, .audit-list time { color: var(--muted); font-size: 12px; }

@@ -1,0 +1,35 @@
+[package]
+name = "cinder-host-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Cinder Host — local school server administration"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+cinder-core.workspace = true
+cinder-host.workspace = true
+cinder-ai.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-process = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+rusqlite.workspace = true
+chrono.workspace = true
+rand.workspace = true
+sha2 = "0.10"
+hex = "0.4"
+tempfile = "3"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

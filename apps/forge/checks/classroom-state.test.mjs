@@ -5,6 +5,7 @@ import {
   belongsToClassroomScope,
   classroomCacheKey,
   classroomScope,
+  liveSessionClock,
   shouldRetryOutboxFailure,
   submissionOutboxKey,
 } from "../src/classrooms/classroomState.ts";
@@ -27,4 +28,15 @@ test("offline and temporary submission failures retry, permanent rejections do n
   assert.equal(shouldRetryOutboxFailure(503, false), true);
   assert.equal(shouldRetryOutboxFailure(403, false), false);
   assert.equal(shouldRetryOutboxFailure(409, false), false);
+});
+
+test("ended and expired live classes cannot retain time on the student banner", () => {
+  assert.deepEqual(
+    liveSessionClock({ ends_at: "2099-01-01T00:00:00Z", ended_at: "2026-09-10T12:00:00Z" }, Date.now()),
+    { state: "ended", remainingSeconds: 0 },
+  );
+  assert.deepEqual(
+    liveSessionClock({ ends_at: "2026-09-10T12:00:00Z", ended_at: null }, Date.parse("2026-09-10T12:00:01Z")),
+    { state: "expired", remainingSeconds: 0 },
+  );
 });

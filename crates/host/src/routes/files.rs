@@ -244,7 +244,8 @@ async fn download(
                 .query_row(
                     "SELECT f.sha256, f.orig_name, f.bytes, f.mime, n.owner_id, n.classroom_id
                        FROM files f JOIN nodes n ON n.id = f.node_id
-                      WHERE f.node_id = ?1",
+                      WHERE f.node_id = ?1
+                        AND NOT EXISTS (SELECT 1 FROM trashed_files t WHERE t.node_id = f.node_id)",
                     [id.to_string()],
                     |r| {
                         Ok((

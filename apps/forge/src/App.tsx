@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppUpdater, BrandMark } from "@cinder/ui";
+import { AppUpdater, BrandMark, ThemePicker } from "@cinder/ui";
 import {
   ArrowLeft,
   ArrowRight,
   Books,
+  Broadcast,
   ChalkboardTeacher,
   CaretLeft,
   CaretRight,
@@ -38,12 +39,13 @@ import { StudentClassrooms } from "./classrooms/StudentClassrooms";
 import { LiveSessionBar, useStudentLiveSession } from "./classrooms/LiveSession";
 import "./studio/documents.css";
 
-type PrimaryPage = "home" | "classrooms" | "library" | "studio";
+type PrimaryPage = "home" | "classrooms" | "live" | "library" | "studio";
 type Page = PrimaryPage | "settings";
 
 const NAV_ITEMS = [
   { id: "home", label: "Home", icon: House },
   { id: "classrooms", label: "Classrooms", icon: ChalkboardTeacher },
+  { id: "live", label: "Live Classroom", icon: Broadcast },
   { id: "library", label: "Library", icon: Books },
   { id: "studio", label: "Notes", icon: NotePencil },
 ] as const;
@@ -90,6 +92,12 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
   function selectPage(nextPage: Page) {
     setPage(nextPage);
     setSearch(null);
+  }
+
+  function openLiveTask() {
+    if (live.session?.current_task?.kind === "instruction") setPage("live");
+    else setPage("classrooms");
+    void live.acknowledgeTask(live.session?.current_task?.kind === "instruction" ? "opened" : "in_progress");
   }
 
   async function clearWorkspace() {
@@ -178,7 +186,7 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
       <section className="forge-workspace">
         <Topbar profileName={session.user.display_name} online={session.online} onSearch={handleSearch} onSwitchAccount={() => void session.switchAccount()} onOpenConnection={session.openConnection} />
         <main className="forge-main">
-          <LiveSessionBar live={live} onOpen={() => undefined} />
+          <LiveSessionBar live={live} online={session.online} onOpen={openLiveTask} />
           {forge.saveError && <p role="alert" className="form-error">{forge.saveError}</p>}
           {page === "home" && (
             <HomePage
@@ -187,7 +195,8 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
               onNavigate={selectPage}
             />
           )}
-          {page === "classrooms" && <StudentClassrooms accountId={session.user.id} api={session.api} baseUrl={session.baseUrl} token={session.token} online={session.online} notes={forge.data.studioNotes} onJoinLiveSession={async (code) => { await live.join(code); }} />}
+          {page === "classrooms" && <StudentClassrooms accountId={session.user.id} api={session.api} baseUrl={session.baseUrl} token={session.token} online={session.online} notes={forge.data.studioNotes} liveTask={live.session?.current_task ?? null} onLiveTaskState={live.acknowledgeTask} />}
+          {page === "live" && <StudentLiveClassroom live={live} online={session.online} onOpenTask={openLiveTask} />}
           {page === "library" && <LibraryPage data={forge.data} onAddFile={addReferenceFile} onRemoveFile={removeReferenceFile} />}
           {page === "studio" && (
             <StudioPage
@@ -201,7 +210,7 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
               onRemoveNote={forge.removeStudioNote}
             />
           )}
-          {page === "settings" && <SettingsPage name={forge.data.profileName} onSaveName={forge.setProfileName} onReset={clearWorkspace} />}
+          {page === "settings" && <SettingsPage name={session.user.display_name} onReset={clearWorkspace} />}
         </main>
       </section>
 
@@ -210,6 +219,20 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
       {toast && <div className="forge-toast" role="status">{toast}</div>}
     </div>
   );
+}
+
+function StudentLiveClassroom({ live, online, onOpenTask }: { live: ReturnType<typeof useStudentLiveSession>; online: boolean; onOpenTask: () => void }) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const task = live.session?.current_task;
+  return <div className="forge-page student-live-page">
+    <PageHeader kicker="Teaching now" title="Live Classroom" detail="Join your class and keep the current task in view." />
+    {!live.session || live.resultState === "ended" || live.resultState === "expired" ? <form className="classroom-join" onSubmit={async (event) => { event.preventDefault(); setError(""); try { await live.join(code); setCode(""); } catch (failure) { setError(failure instanceof Error ? failure.message : "Live class could not be joined."); } }}><label htmlFor="live-code">Live class code</label><input id="live-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase().slice(0, 10))} minLength={10} maxLength={10} required placeholder="10-character code" /><button className="forge-button primary" disabled={!online} type="submit">Join live class</button></form> : null}
+    {live.sessions.length > 1 ? <section className="forge-panel live-discovery"><h2>Live now</h2>{live.sessions.map((session) => <button className="classroom-row" type="button" key={session.id} onClick={() => live.selectSession(session.id)}><span><strong>{session.classroom_name}</strong><small>{session.current_task?.title ?? "Waiting for a task"}</small></span><span>{session.id === live.session?.id ? "Selected" : "Open"}</span></button>)}</section> : null}
+    {live.session && !live.joined ? <section className="forge-panel live-discovery"><h2>{live.session.classroom_name} is live</h2><p>Your teacher has started a session. Join without entering the code.</p><button className="forge-button primary" disabled={!online || live.resultState !== "active"} type="button" onClick={() => void live.joinDiscovered()}>Join live class</button></section> : null}
+    {live.session && live.joined ? <section className="forge-panel live-task-card"><span className="forge-kicker">Current task</span><h2>{task?.title ?? "Waiting for a task"}</h2><p>{task?.instructions || "Your teacher has not assigned a task yet."}</p>{task ? <div className="panel-actions"><button className="forge-button primary" disabled={live.resultState !== "active"} type="button" onClick={onOpenTask}>{task.kind === "instruction" ? "View task" : "Open task"}</button>{task.kind === "instruction" && live.session.student_task_state?.state !== "completed" ? <button className="forge-button secondary" disabled={!online || live.resultState !== "active"} type="button" onClick={() => void live.acknowledgeTask("completed")}>Mark complete</button> : null}</div> : null}</section> : null}
+    {error ? <p className="form-error" role="alert">{error}</p> : null}
+  </div>;
 }
 
 function HomePage({ data, timer, onNavigate }: { data: ForgeData; timer: Countdown; onNavigate: (page: Page) => void }) {
@@ -545,14 +568,14 @@ function StudioNotesTab({ accountId, openDocumentId, notes, files, onAdd, onUpda
 }
 
 
-function SettingsPage({ name, onSaveName, onReset }: { name: string; onSaveName: (name: string) => void; onReset: () => void }) {
-  const [draft, setDraft] = useState(name);
+function SettingsPage({ name, onReset }: { name: string; onReset: () => void }) {
   const [confirmReset, setConfirmReset] = useState(false);
   return (
     <div className="forge-page"><PageHeader kicker="This device" title="Settings" detail="Profile, updates and local data." />
-      <div className="settings-grid"><form className="forge-panel settings-panel" onSubmit={(event) => { event.preventDefault(); onSaveName(draft); }}><h2>Profile</h2><label>Name<input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Add your name" /></label><button type="submit" className="forge-button primary">Save name</button></form>
+      <div className="settings-grid"><section className="forge-panel settings-panel"><h2>Profile</h2><label>Name<input value={name} readOnly /></label><p>Your teacher or school administrator manages your name.</p></section>
+      <section className="forge-panel settings-panel"><h2>Appearance</h2><ThemePicker /></section>
       <AppUpdater appName="Cinder Student" />
-      <section className="forge-panel settings-panel danger-zone"><h2>Local data</h2><p>Clear this account's notes, documents, reference files, background image and widget layout from this device.</p>{confirmReset ? <div className="panel-actions"><button type="button" className="forge-button danger-confirm" onClick={() => { onReset(); setDraft(""); setConfirmReset(false); }}>Clear everything</button><button type="button" className="forge-button secondary" onClick={() => setConfirmReset(false)}>Cancel</button></div> : <button type="button" className="forge-button secondary" onClick={() => setConfirmReset(true)}>Clear workspace…</button>}</section></div>
+      <section className="forge-panel settings-panel danger-zone"><h2>Local data</h2><p>Clear this account's notes, documents, reference files, background image and widget layout from this device.</p>{confirmReset ? <div className="panel-actions"><button type="button" className="forge-button danger-confirm" onClick={() => { onReset(); setConfirmReset(false); }}>Clear everything</button><button type="button" className="forge-button secondary" onClick={() => setConfirmReset(false)}>Cancel</button></div> : <button type="button" className="forge-button secondary" onClick={() => setConfirmReset(true)}>Clear workspace…</button>}</section></div>
     </div>
   );
 }

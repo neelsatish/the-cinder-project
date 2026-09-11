@@ -36,6 +36,7 @@ import {
   queueOffline,
   removeOutbox,
   saveSessionValue,
+  ThemePicker,
   type Assignment,
   type Card,
   type Classroom,
@@ -1915,6 +1916,9 @@ function SettingsView({
               <dd>{user.roll_number || "Not set"}</dd>
             </div>
           </dl>
+        </Panel>
+        <Panel title="Appearance" eyebrow="Theme">
+          <ThemePicker />
         </Panel>
         <AppUpdater appName="Cinder Student" />
       </div>

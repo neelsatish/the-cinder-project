@@ -2,7 +2,14 @@ import type { ButtonHTMLAttributes, FormEvent, ReactNode } from "react";
 import { useState } from "react";
 
 import { BrandMark, Icon, type IconName } from "./icons";
+import { useTheme, type CinderTheme } from "./theme";
 import type { Role, User } from "./types";
+
+const THEME_OPTIONS: { id: CinderTheme; label: string; description: string }[] = [
+  { id: "light", label: "Light", description: "Clean and calm for everyday work." },
+  { id: "dark", label: "Dark", description: "Low glare with warm Cinder accents." },
+  { id: "paper", label: "Paper", description: "Printed texture, hard ink and bold colour." },
+];
 
 export type NavigationItem<T extends string> = {
   id: T;
@@ -206,6 +213,30 @@ export function Button({
       {icon ? <Icon name={icon} /> : null}
       {children}
     </button>
+  );
+}
+
+export function ThemePicker() {
+  const { theme, setTheme } = useTheme();
+  return (
+    <div className="theme-picker" role="radiogroup" aria-label="Colour theme">
+      {THEME_OPTIONS.map((option) => (
+        <button
+          className={theme === option.id ? "is-selected" : ""}
+          type="button"
+          role="radio"
+          aria-checked={theme === option.id}
+          key={option.id}
+          onClick={() => setTheme(option.id)}
+        >
+          <span className={`theme-preview theme-preview-${option.id}`} aria-hidden="true">
+            <i /><i /><i />
+          </span>
+          <strong>{option.label}</strong>
+          <small>{option.description}</small>
+        </button>
+      ))}
+    </div>
   );
 }
 

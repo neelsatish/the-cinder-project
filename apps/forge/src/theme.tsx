@@ -1,31 +1,9 @@
-import { createContext, useContext, useEffect, useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 import type { ReactNode } from "react";
 
 const ASSET_DB_NAME = "cinder-forge-appearance";
 const ASSET_STORE = "assets";
 const LEGACY_BACKGROUND_IMAGE_KEY = "custom-background";
-
-function applyPaperTheme() {
-  if (typeof document === "undefined") return;
-  const root = document.documentElement;
-  root.dataset.theme = "forge-brutalist";
-  root.style.colorScheme = "light";
-  root.removeAttribute("data-background");
-  root.removeAttribute("data-pattern");
-  root.removeAttribute("data-glass");
-  root.style.removeProperty("--forge-custom-background-color");
-  root.style.removeProperty("--forge-custom-background-image");
-  try {
-    localStorage.removeItem("cinder.forge.theme");
-    localStorage.removeItem("cinder.forge.background");
-    localStorage.removeItem("cinder.glassCapability");
-    localStorage.removeItem("cinder.effectsOverride");
-  } catch {
-    // Paper still applies when appearance preferences cannot be cleared.
-  }
-}
-
-applyPaperTheme();
 
 /* One blob store for every large binary the app owns. The historical name
    stays so existing PDFs remain available after this appearance cleanup. */
@@ -96,7 +74,6 @@ type ThemeContextValue = { clearBackgroundImage: () => Promise<void> };
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ForgeThemeProvider({ children }: { children: ReactNode }) {
-  useEffect(applyPaperTheme, []);
   const value = useMemo<ThemeContextValue>(() => ({
     clearBackgroundImage: () => writeAsset(LEGACY_BACKGROUND_IMAGE_KEY, null),
   }), []);

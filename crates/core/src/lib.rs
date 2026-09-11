@@ -8,12 +8,14 @@
 pub mod api;
 pub mod classroom;
 pub mod model;
+pub mod quiz;
 pub mod scheduler;
 pub mod secure_store;
 
 pub use api::*;
 pub use classroom::*;
 pub use model::*;
+pub use quiz::*;
 
 /// Default port for the host server. Chosen to be memorable and well outside the
 /// range anything else on a school LAN is likely to claim.

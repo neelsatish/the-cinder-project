@@ -11,6 +11,8 @@ import {
   type Assignment,
   type CinderApi,
   type Classroom,
+  type LiveSessionTask,
+  type LiveSessionTaskState,
   type StudyNode,
   type Submission,
   type SubmissionComment,
@@ -26,8 +28,9 @@ import {
   submissionOutboxKey,
 } from "./classroomState";
 import "./classrooms.css";
+import { StudentQuizzes } from "./StudentQuizzes";
 
-type ClassroomSection = "overview" | "work" | "materials" | "marks";
+type ClassroomSection = "overview" | "work" | "quizzes" | "materials" | "marks";
 type SubmissionPayload = {
   assignmentId: string;
   doc: Record<string, unknown>;
@@ -82,7 +85,8 @@ export function StudentClassrooms({
   token,
   online,
   notes,
-  onJoinLiveSession,
+  liveTask,
+  onLiveTaskState,
 }: {
   accountId: string;
   api: CinderApi;
@@ -90,7 +94,8 @@ export function StudentClassrooms({
   token: string;
   online: boolean;
   notes: StudioNote[];
-  onJoinLiveSession: (code: string) => Promise<void>;
+  liveTask: LiveSessionTask | null;
+  onLiveTaskState: (state: LiveSessionTaskState) => Promise<void>;
 }) {
   const scope = useMemo(() => classroomScope(baseUrl, accountId), [accountId, baseUrl]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
@@ -105,6 +110,14 @@ export function StudentClassrooms({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const generation = useRef(0);
+
+  useEffect(() => {
+    if (liveTask?.kind !== "quiz" || !liveTask.target_id) return;
+    void api.quizDeliveries().then((items) => {
+      const delivery = items.find((item) => item.id === liveTask.target_id);
+      if (delivery) { setSelectedClassroomId(delivery.classroom_id); setSection("quizzes"); }
+    });
+  }, [api, liveTask?.kind, liveTask?.target_id]);
 
   const readQueued = useCallback(async () => {
     const entries = await outboxEntries();
@@ -189,6 +202,21 @@ export function StudentClassrooms({
     };
   }, [load]);
 
+  useEffect(() => {
+    if (!liveTask?.target_id || loading) return;
+    if (liveTask.kind === "assignment") {
+      const assignment = assignments.find((item) => item.id === liveTask.target_id);
+      if (assignment) { setSelectedClassroomId(assignment.classroom_id); setSelectedAssignmentId(assignment.id); }
+    } else if (liveTask.kind === "material") {
+      const material = nodes.find((item) => item.id === liveTask.target_id);
+      if (material) void openMaterial(api, baseUrl, token, material)
+        .then(() => onLiveTaskState("completed"))
+        .catch(async (failure) => { setMessage(errorMessage(failure)); await onLiveTaskState("failed").catch(() => undefined); });
+    } else if (liveTask.kind === "quiz") {
+      setSection("quizzes");
+    }
+  }, [api, assignments, baseUrl, liveTask?.id, loading, nodes, token]);
+
   const selectedClassroom = classrooms.find((room) => room.id === selectedClassroomId) ?? null;
   const selectedAssignment = assignments.find((item) => item.id === selectedAssignmentId) ?? null;
 
@@ -212,24 +240,6 @@ export function StudentClassrooms({
     }
   }
 
-  async function joinLiveSession(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    const code = String(form.get("session-code") ?? "").trim();
-    if (!code || !online) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      await onJoinLiveSession(code);
-      formElement.reset();
-    } catch (failure) {
-      setMessage(errorMessage(failure));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (selectedAssignment) {
     return (
       <AssignmentDetail
@@ -244,6 +254,8 @@ export function StudentClassrooms({
         onBack={() => setSelectedAssignmentId(null)}
         onChanged={load}
         onQueued={readQueued}
+        liveTask={liveTask}
+        onLiveTaskState={onLiveTaskState}
       />
     );
   }
@@ -260,7 +272,7 @@ export function StudentClassrooms({
           <p>{selectedClassroom.description || `Managed by ${selectedClassroom.owner_teacher_name}`}</p>
         </header>
         <nav className="classroom-sections" aria-label="Classroom sections">
-          {(["overview", "work", "materials", "marks"] as ClassroomSection[]).map((item) => (
+          {(["overview", "work", "quizzes", "materials", "marks"] as ClassroomSection[]).map((item) => (
             <button className={section === item ? "active" : ""} key={item} type="button" onClick={() => setSection(item)}>{item}</button>
           ))}
         </nav>
@@ -283,6 +295,7 @@ export function StudentClassrooms({
             ))}
           </ClassroomList>
         ) : null}
+        {section === "quizzes" ? <StudentQuizzes api={api} classroomId={selectedClassroom.id} online={online} focusDeliveryId={liveTask?.kind === "quiz" ? liveTask.target_id : null} /> : null}
         {section === "materials" ? (
           <ClassroomList title="Materials" empty="No materials have been shared.">
             {materials.map((material) => <MaterialButton key={material.id} material={material} onOpen={() => openMaterial(api, baseUrl, token, material)} />)}
@@ -311,12 +324,6 @@ export function StudentClassrooms({
         <input id="classroom-code" name="code" inputMode="text" autoComplete="off" placeholder="Enter the code from your teacher" maxLength={32} required />
         <button className="forge-button primary" disabled={!online || busy} type="submit">{busy ? "Joining…" : "Join classroom"}</button>
         {!online ? <small>Connect to the Host to join a new classroom.</small> : null}
-      </form>
-      <form className="classroom-join" onSubmit={joinLiveSession}>
-        <label htmlFor="live-session-code">Live class code</label>
-        <input id="live-session-code" name="session-code" inputMode="text" autoComplete="off" placeholder="Enter the 10-character session code" minLength={10} maxLength={10} required />
-        <button className="forge-button primary" disabled={!online || busy} type="submit">{busy ? "Joining…" : "Join live class"}</button>
-        {!online ? <small>Connect to the Host to join a live class.</small> : null}
       </form>
       {message ? <p className="form-error" role="alert">{message}</p> : null}
       {loading ? <p className="classroom-muted">Loading classrooms…</p> : null}
@@ -370,7 +377,7 @@ function MaterialButton({ material, onOpen }: { material: StudyNode; onOpen: () 
   );
 }
 
-function AssignmentDetail({ api, assignment, current, queued, notes, online, syncing, scope, onBack, onChanged, onQueued }: {
+function AssignmentDetail({ api, assignment, current, queued, notes, online, syncing, scope, onBack, onChanged, onQueued, liveTask, onLiveTaskState }: {
   api: CinderApi;
   assignment: Assignment;
   current: Submission | null | undefined;
@@ -382,6 +389,8 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
   onBack: () => void;
   onChanged: () => Promise<void>;
   onQueued: () => Promise<void>;
+  liveTask: LiveSessionTask | null;
+  onLiveTaskState: (state: LiveSessionTaskState) => Promise<void>;
 }) {
   const availableNotes = notes.filter((note) => !note.deletedAt);
   const [noteId, setNoteId] = useState(availableNotes[0]?.id ?? "");
@@ -424,6 +433,7 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
           return;
         }
         setMessage("Work submitted. This saved version will not change when you edit the note.");
+        if (liveTask?.kind === "assignment" && liveTask.target_id === assignment.id) await onLiveTaskState("completed").catch(() => undefined);
         await onChanged();
       } else {
         await queueOffline({
@@ -436,6 +446,7 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
       }
     } catch (failure) {
       setMessage(errorMessage(failure));
+      if (liveTask?.kind === "assignment" && liveTask.target_id === assignment.id) await onLiveTaskState("failed").catch(() => undefined);
     } finally {
       setBusy(false);
     }

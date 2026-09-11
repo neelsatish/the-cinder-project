@@ -37,6 +37,22 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0007_live_module_sessions",
         include_str!("../migrations/0007_live_module_sessions.sql"),
     ),
+    (
+        "0008_host_administration",
+        include_str!("../migrations/0008_host_administration.sql"),
+    ),
+    (
+        "0009_live_classroom_tasks",
+        include_str!("../migrations/0009_live_classroom_tasks.sql"),
+    ),
+    (
+        "0010_quizzes",
+        include_str!("../migrations/0010_quizzes.sql"),
+    ),
+    (
+        "0011_quiz_delivery_snapshots",
+        include_str!("../migrations/0011_quiz_delivery_snapshots.sql"),
+    ),
 ];
 
 /// Opens (creating if needed) the database at `path` and brings it up to date.

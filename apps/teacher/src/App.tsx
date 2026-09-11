@@ -34,6 +34,7 @@ import {
   probeHost,
   saveSessionValue,
   openExternalUrl,
+  ThemePicker,
   type Assignment,
   type AttendanceDay,
   type AttendanceStatus,
@@ -57,6 +58,7 @@ import type {
   WorkbookCellValue,
 } from "./UniverGradebook";
 import { LiveSessionControls } from "./LiveSessionControls";
+import { QuizManager } from "./QuizManager";
 import {
   buildGradebookCellMap,
   normalizeCellAddress,
@@ -127,9 +129,6 @@ const DEV_HOST = "http://127.0.0.1:7373";
 const navigation: NavigationItem<TeacherTab>[] = [
   { id: "dashboard", label: "Overview", icon: "dashboard" },
   { id: "classrooms", label: "Classrooms", icon: "classrooms" },
-  { id: "students", label: "Students", icon: "students" },
-  { id: "attendance", label: "Attendance", icon: "attendance" },
-  { id: "assignments", label: "Assignments", icon: "assignments" },
   { id: "gradebook", label: "Gradebook", icon: "spreadsheet" },
   { id: "settings", label: "Settings", icon: "settings" },
 ];
@@ -654,7 +653,7 @@ export function App() {
       user={user!}
       items={items}
       active={tab}
-      onNavigate={setTab}
+      onNavigate={(next) => setTab(["students", "attendance", "assignments"].includes(next) ? "classrooms" : next)}
       onLogout={() => void logout()}
       online={online}
       onRefresh={() => void loadWorkspace(api)}
@@ -665,7 +664,7 @@ export function App() {
           stats={stats}
           assignments={assignments}
           classrooms={classrooms}
-          onNavigate={setTab}
+          onNavigate={(next) => setTab(["students", "attendance", "assignments"].includes(next) ? "classrooms" : next)}
         />
       ) : null}
       {tab === "students" ? (
@@ -1270,6 +1269,21 @@ type StudentInput = {
 };
 
 type CreateStudentInput = StudentInput & { classroom_id: string };
+type StudentCredentials = {
+  user: User;
+  temporary_password: string;
+  recovery_code: string;
+};
+
+function StudentCredentialsModal({ credentials, onClose }: { credentials: StudentCredentials; onClose: () => void }) {
+  return <Modal title="Give these details to the student" description="The temporary PIN and recovery code are only shown now." onClose={onClose}>
+    <div className="modal-content"><div className="credential-box">
+      <span>Username</span><code className="credential-code">{credentials.user.username}</code>
+      <span>Temporary PIN</span><code className="credential-code">{credentials.temporary_password}</code>
+      <span>Recovery code</span><code className="credential-code recovery-code">{credentials.recovery_code}</code>
+    </div><p className="form-hint">The student must replace the temporary PIN at first sign-in. Store the recovery code separately.</p></div>
+  </Modal>;
+}
 
 function CreateStudentModal({
   classrooms,
@@ -1479,6 +1493,7 @@ function ClassroomsView({
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [manageId, setManageId] = useState<string | null>(null);
+  if (manageId) return <ClassroomWorkspace key={manageId} api={api} user={user} classroomId={manageId} students={students} assignments={assignments.filter((item) => item.classroom_id === manageId)} onClose={() => setManageId(null)} onDeleted={() => setManageId(null)} onUpdated={onUpdated} />;
   return (
     <div className="page">
       <PageHeader
@@ -1502,6 +1517,9 @@ function ClassroomsView({
               className="subject-card"
               style={{ "--subject-color": room.color } as CSSProperties}
               key={room.id}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setManageId(room.id); } }}
               onClick={() => setManageId(room.id)}
             >
               <Badge tone="accent">{room.subject_code || "Subject"}</Badge>
@@ -1541,17 +1559,6 @@ function ClassroomsView({
             setCreateOpen(false);
             await onUpdated();
           }}
-        />
-      ) : null}
-      {manageId ? (
-        <RosterModal
-          api={api}
-          user={user}
-          classroomId={manageId}
-          students={students}
-          onClose={() => setManageId(null)}
-          onDeleted={() => setManageId(null)}
-          onUpdated={onUpdated}
         />
       ) : null}
     </div>
@@ -1649,11 +1656,12 @@ function ClassroomFormModal({
   );
 }
 
-function RosterModal({
+function ClassroomWorkspace({
   api,
   user,
   classroomId,
   students,
+  assignments,
   onClose,
   onDeleted,
   onUpdated,
@@ -1662,11 +1670,17 @@ function RosterModal({
   user: User;
   classroomId: string;
   students: User[];
+  assignments: Assignment[];
   onClose: () => void;
   onDeleted: () => void;
   onUpdated: () => Promise<void>;
 }) {
   const [roster, setRoster] = useState<ClassroomRoster | null>(null);
+  const [section, setSection] = useState("overview");
+  const [addingStudents, setAddingStudents] = useState(false);
+  const [creatingStudent, setCreatingStudent] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<User | null>(null);
+  const [credentials, setCredentials] = useState<StudentCredentials | null>(null);
   const [classroomTeachers, setClassroomTeachers] =
     useState<ClassroomTeachers | null>(null);
   const [teacherAccounts, setTeacherAccounts] = useState<User[]>([]);
@@ -1723,12 +1737,16 @@ function RosterModal({
   );
   return (
     <>
-      <Modal
-        title={roster?.classroom.name ?? "Classroom roster"}
-        description="Manage the classroom, roster and shared materials."
-        onClose={onClose}
-      >
-        <div className="modal-content classroom-manager">
+      <div className="page classroom-workspace">
+        <PageHeader title={roster?.classroom.name ?? "Classroom"} description="Manage this classroom’s students, work and live sessions." action={<Button onClick={onClose}>All classrooms</Button>} />
+        <nav className="classroom-tabs" aria-label="Classroom sections">
+          {["overview", "students", "materials", "assignments", "quizzes", "attendance", "live", "teachers"].map((item) => <Button key={item} variant={section === item ? "primary" : "ghost"} aria-current={section === item ? "page" : undefined} onClick={() => setSection(item)}>{item === "live" ? "Live classroom" : item[0].toUpperCase() + item.slice(1)}</Button>)}
+        </nav>
+        {roster && section === "assignments" ? <AssignmentsView api={api} classrooms={[roster.classroom]} assignments={assignments} onUpdated={onUpdated} /> : null}
+        {roster && section === "quizzes" ? <QuizManager api={api} classrooms={[roster.classroom]} /> : null}
+        {roster && section === "attendance" ? <AttendanceView api={api} classrooms={[roster.classroom]} onUpdated={onUpdated} /> : null}
+        {section === "live" ? <LiveSessionControls api={api} classroomId={classroomId} assignments={assignments} /> : null}
+        <div className="classroom-manager">
           {error ? <p className="form-error">{error}</p> : null}
           {loadingRoster && !roster ? (
             <p className="muted">Loading classroom…</p>
@@ -1741,7 +1759,7 @@ function RosterModal({
               </Button>
             </div>
           ) : null}
-          <section>
+          <section hidden={section !== "overview"}>
             <div className="manager-heading">
               <div>
                 <p className="eyebrow">Classroom</p>
@@ -1796,8 +1814,7 @@ function RosterModal({
               </dl>
             ) : null}
           </section>
-          <LiveSessionControls api={api} classroomId={classroomId} />
-          <section>
+          <section hidden={section !== "teachers"}>
             <div className="manager-heading">
               <div>
                 <p className="eyebrow">Teaching team</p>
@@ -1893,15 +1910,16 @@ function RosterModal({
               </div>
             ) : null}
           </section>
-          <section>
+          <section hidden={section !== "students"}>
             <div className="manager-heading">
               <div>
                 <p className="eyebrow">Roster</p>
                 <h3>Students</h3>
               </div>
+              <div className="list-actions"><Button variant="primary" icon="plus" onClick={() => setCreatingStudent(true)}>New student</Button><Button onClick={() => setAddingStudents(!addingStudents)}>{addingStudents ? "Show enrolled students" : "Add existing students"}</Button></div>
             </div>
             <div className="roster-list">
-              {students.map((student) => {
+              {(addingStudents ? students.filter((student) => !enrolled.has(student.id)) : roster?.students ?? []).map((student) => {
                 const hasStudent = enrolled.has(student.id);
                 return (
                   <div className="list-item" key={student.id}>
@@ -1909,10 +1927,9 @@ function RosterModal({
                       <strong>{student.display_name}</strong>
                       <span>{student.username}</span>
                     </span>
-                    <Button
-                      variant={hasStudent ? "ghost" : "secondary"}
-                      disabled={busyId === student.id}
-                      onClick={async () => {
+                    <div className="list-actions">
+                      {hasStudent ? <Button variant="ghost" icon="edit" onClick={() => setEditingStudent(student)}>Edit</Button> : null}
+                      <Button variant={hasStudent ? "ghost" : "secondary"} disabled={busyId === student.id} onClick={async () => {
                         setBusyId(student.id);
                         setError("");
                         try {
@@ -1930,22 +1947,21 @@ function RosterModal({
                           setBusyId("");
                         }
                       }}
-                    >
-                      {hasStudent ? "Remove" : "Add"}
-                    </Button>
+                      >{hasStudent ? "Remove from classroom" : "Add"}</Button>
+                    </div>
                   </div>
                 );
               })}
-              {!students.length ? (
+              {(addingStudents ? students.filter((student) => !enrolled.has(student.id)).length === 0 : !roster?.students.length) ? (
                 <EmptyState
                   icon="students"
-                  title="No student accounts"
-                  description="Create student accounts first."
+                  title={addingStudents ? "No other student accounts" : "No students enrolled"}
+                  description={addingStudents ? "Every active student is already in this classroom." : "Create a student or add an existing account."}
                 />
               ) : null}
             </div>
           </section>
-          <section>
+          <section hidden={section !== "materials"}>
             <div className="manager-heading">
               <div>
                 <p className="eyebrow">Class library</p>
@@ -2044,7 +2060,7 @@ function RosterModal({
             )}
           </section>
         </div>
-      </Modal>
+      </div>
       {editing && roster ? (
         <ClassroomFormModal
           classroom={roster.classroom}
@@ -2056,6 +2072,9 @@ function RosterModal({
           }}
         />
       ) : null}
+      {creatingStudent && roster ? <CreateStudentModal classrooms={[roster.classroom]} onClose={() => setCreatingStudent(false)} onCreate={async (input) => { const result = await api.createStudent(input); setCreatingStudent(false); setCredentials(result); await Promise.all([load(), onUpdated()]); }} /> : null}
+      {editingStudent ? <EditStudentModal student={editingStudent} onClose={() => setEditingStudent(null)} onSave={async (input) => { await api.updateStudent(editingStudent.id, input); setEditingStudent(null); await Promise.all([load(), onUpdated()]); }} /> : null}
+      {credentials ? <StudentCredentialsModal credentials={credentials} onClose={() => setCredentials(null)} /> : null}
     </>
   );
 }
@@ -5635,6 +5654,9 @@ function SettingsView({
             </Button>
             <Button onClick={onOpenConnection}>Switch Cinder Host</Button>
           </div>
+        </Panel>
+        <Panel title="Appearance" eyebrow="Theme">
+          <ThemePicker />
         </Panel>
         <Panel title="Teacher accounts" eyebrow="Security">
           <div className="teacher-account-list">

@@ -40,7 +40,8 @@ async fn get_tree(
             let sql = if teacher {
                 "SELECT id, owner_id, parent_id, classroom_id, name, kind, position, icon, created_at, updated_at
                    FROM nodes n
-                  WHERE n.owner_id = ?1
+                  WHERE NOT EXISTS (SELECT 1 FROM trashed_files t WHERE t.node_id = n.id)
+                    AND (n.owner_id = ?1
                      OR (n.owner_id IS NULL AND (
                          n.classroom_id IS NULL OR EXISTS(
                            SELECT 1 FROM classrooms c
@@ -50,12 +51,13 @@ async fn get_tree(
                                    WHERE ct.classroom_id = c.id AND ct.teacher_id = ?1
                               ))
                          )
-                     ))
+                     )))
                   ORDER BY position, lower(name)"
             } else {
                 "SELECT id, owner_id, parent_id, classroom_id, name, kind, position, icon, created_at, updated_at
                    FROM nodes n
-                  WHERE n.owner_id = ?1
+                  WHERE NOT EXISTS (SELECT 1 FROM trashed_files t WHERE t.node_id = n.id)
+                    AND (n.owner_id = ?1
                      OR (n.owner_id IS NULL AND (
                          n.classroom_id IS NULL OR EXISTS(
                            SELECT 1
@@ -65,7 +67,7 @@ async fn get_tree(
                               AND e.student_id = ?1
                               AND c.archived_at IS NULL
                          )
-                     ))
+                     )))
                   ORDER BY position, lower(name)"
             };
             let mut stmt = conn.prepare(sql)?;

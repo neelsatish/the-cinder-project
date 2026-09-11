@@ -634,7 +634,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-ai"
-version = "0.9.11"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "cinder-core",
@@ -647,7 +647,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-core"
-version = "0.9.11"
+version = "0.10.0"
 dependencies = [
  "aes-gcm",
  "chrono",
@@ -662,7 +662,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-forge"
-version = "0.9.11"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "cinder-core",
@@ -683,7 +683,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-host"
-version = "0.9.11"
+version = "0.10.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -713,8 +713,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "cinder-host-app"
+version = "0.10.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "cinder-ai",
+ "cinder-core",
+ "cinder-host",
+ "hex",
+ "rand 0.8.7",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "tauri-plugin-process",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "cinder-student"
-version = "0.9.11"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "cinder-core",
@@ -737,7 +763,7 @@ dependencies = [
 
 [[package]]
 name = "cinder-teacher"
-version = "0.9.11"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "cinder-core",

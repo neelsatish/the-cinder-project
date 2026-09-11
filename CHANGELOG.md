@@ -6,6 +6,17 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.10.0
+
+- Added the Cinder Host desktop app for school setup, server control, account management, files, backups and updates.
+- Opened classrooms as full workspaces with classroom-specific Overview, Students, Materials, Assignments, Attendance and Live tabs.
+- Added live-class task delivery, student progress tracking and classroom quizzes.
+- Fixed the Student live-class banner so it disappears when the session is offline, ended or expired.
+- Made student names read-only so only teachers or school administrators can change them.
+- Added shared Light, Dark and Paper themes to Teacher, Student and Host, with each app remembering its selection.
+- Fixed update status handling so failed update checks are not reported as “latest”.
+- Added signed Host installers and a Host updater feed to the cross-platform release pipeline.
+
 ## 0.9.11
 
 - Replaced the legacy Student release target with the current Cinder Student app.

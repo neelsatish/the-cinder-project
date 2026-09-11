@@ -9,4 +9,5 @@ pub mod files;
 pub mod health;
 pub mod live_sessions;
 pub mod notes;
+pub mod quizzes;
 pub mod tree;

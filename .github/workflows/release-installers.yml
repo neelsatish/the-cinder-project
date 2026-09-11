@@ -80,15 +80,20 @@ jobs:
           cp "$teacher_appimage" artifacts/Cinder-Teacher-Linux-x86_64.AppImage
           cp "$teacher_appimage.sig" artifacts/Cinder-Teacher-Linux-x86_64.AppImage.sig
 
-      - name: Build Linux classroom host
+      - name: Build Host Linux installers
         run: |
-          cargo build -p cinder-host --release --locked
-          cp target/release/cinder-host artifacts/Cinder-Host-Linux-x86_64
+          npm run bundle:host
+          host_appimage="$(find target/release/bundle/appimage -maxdepth 1 -type f -name 'Cinder Host_*.AppImage' | head -n 1)"
+          test -n "$host_appimage"
+          test -f "$host_appimage.sig"
+          cp target/release/bundle/deb/Cinder\ Host_*.deb artifacts/Cinder-Host-Linux-x86_64.deb
+          cp "$host_appimage" artifacts/Cinder-Host-Linux-x86_64.AppImage
+          cp "$host_appimage.sig" artifacts/Cinder-Host-Linux-x86_64.AppImage.sig
 
       - name: Verify Linux installer set
         run: |
-          test "$(find artifacts -maxdepth 1 -type f \( -name '*.deb' -o -name '*.AppImage' \) | wc -l)" -eq 4
-          test "$(find artifacts -maxdepth 1 -type f -name '*.sig' | wc -l)" -eq 2
+          test "$(find artifacts -maxdepth 1 -type f \( -name '*.deb' -o -name '*.AppImage' \) | wc -l)" -eq 6
+          test "$(find artifacts -maxdepth 1 -type f -name '*.sig' | wc -l)" -eq 3
           find artifacts -maxdepth 1 -type f -print
 
       - uses: actions/upload-artifact@v6
@@ -149,17 +154,20 @@ jobs:
           Copy-Item $setup.FullName artifacts\Cinder-Teacher-Windows-x86_64-Setup.exe
           Copy-Item "$($setup.FullName).sig" artifacts\Cinder-Teacher-Windows-x86_64-Setup.exe.sig
 
-      - name: Build Windows classroom host
+      - name: Build Host Windows installer
         shell: pwsh
         run: |
-          cargo build -p cinder-host --release --locked
-          Copy-Item target\release\cinder-host.exe artifacts\Cinder-Host-Windows-x86_64.exe
+          npm run bundle:windows:host
+          $setup = Get-ChildItem target\release\bundle\nsis -Filter 'Cinder Host_*-setup.exe' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $setup -or -not (Test-Path "$($setup.FullName).sig")) { throw 'Host NSIS artifacts are incomplete.' }
+          Copy-Item $setup.FullName artifacts\Cinder-Host-Windows-x86_64-Setup.exe
+          Copy-Item "$($setup.FullName).sig" artifacts\Cinder-Host-Windows-x86_64-Setup.exe.sig
 
       - name: Verify Windows installer set
         shell: pwsh
         run: |
-          if ((Get-ChildItem artifacts -Filter '*.exe').Count -ne 2) { throw 'Expected two Windows setup executables.' }
-          if ((Get-ChildItem artifacts -Filter '*.sig').Count -ne 2) { throw 'Expected two Windows updater signatures.' }
+          if ((Get-ChildItem artifacts -Filter '*.exe').Count -ne 3) { throw 'Expected three Windows setup executables.' }
+          if ((Get-ChildItem artifacts -Filter '*.sig').Count -ne 3) { throw 'Expected three Windows updater signatures.' }
           Get-ChildItem artifacts | Select-Object Name, Length
 
       - uses: actions/upload-artifact@v6
@@ -209,18 +217,30 @@ jobs:
             --arg windows_url "$RELEASE_BASE/Cinder-Teacher-Windows-x86_64-Setup.exe" \
             '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"linux-x86_64": {signature: $linux_signature, url: $linux_url}, "windows-x86_64": {signature: $windows_signature, url: $windows_url}}}' \
             > artifacts/teacher-latest.json
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pub_date "$PUBLISHED_AT" \
+            --arg notes "Cinder Host $VERSION" \
+            --arg linux_signature "$(cat artifacts/Cinder-Host-Linux-x86_64.AppImage.sig)" \
+            --arg linux_url "$RELEASE_BASE/Cinder-Host-Linux-x86_64.AppImage" \
+            --arg windows_signature "$(cat artifacts/Cinder-Host-Windows-x86_64-Setup.exe.sig)" \
+            --arg windows_url "$RELEASE_BASE/Cinder-Host-Windows-x86_64-Setup.exe" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"linux-x86_64": {signature: $linux_signature, url: $linux_url}, "windows-x86_64": {signature: $windows_signature, url: $windows_url}}}' \
+            > artifacts/host-latest.json
 
       - name: Verify release and create checksums
         run: |
-          test "$(find artifacts -maxdepth 1 -type f -name '*.exe' | wc -l)" -eq 2
-          test "$(find artifacts -maxdepth 1 -type f -name '*.deb' | wc -l)" -eq 2
-          test "$(find artifacts -maxdepth 1 -type f -name '*.AppImage' | wc -l)" -eq 2
-          test "$(find artifacts -maxdepth 1 -type f -name '*.AppImage.sig' | wc -l)" -eq 2
-          test "$(find artifacts -maxdepth 1 -type f -name '*.exe.sig' | wc -l)" -eq 2
+          test "$(find artifacts -maxdepth 1 -type f -name '*.exe' | wc -l)" -eq 3
+          test "$(find artifacts -maxdepth 1 -type f -name '*.deb' | wc -l)" -eq 3
+          test "$(find artifacts -maxdepth 1 -type f -name '*.AppImage' | wc -l)" -eq 3
+          test "$(find artifacts -maxdepth 1 -type f -name '*.AppImage.sig' | wc -l)" -eq 3
+          test "$(find artifacts -maxdepth 1 -type f -name '*.exe.sig' | wc -l)" -eq 3
           jq -e '.platforms["linux-x86_64"].signature | length > 0' artifacts/student-latest.json
           jq -e '.platforms["windows-x86_64"].signature | length > 0' artifacts/student-latest.json
           jq -e '.platforms["linux-x86_64"].signature | length > 0' artifacts/teacher-latest.json
           jq -e '.platforms["windows-x86_64"].signature | length > 0' artifacts/teacher-latest.json
+          jq -e '.platforms["linux-x86_64"].signature | length > 0' artifacts/host-latest.json
+          jq -e '.platforms["windows-x86_64"].signature | length > 0' artifacts/host-latest.json
           (cd artifacts && sha256sum Cinder-Student-* Cinder-Teacher-* Cinder-Host-* > SHA256SUMS.txt)
           find artifacts -maxdepth 1 -type f -print
 
@@ -283,11 +303,12 @@ jobs:
           }
           publish_feed student-latest.json
           publish_feed teacher-latest.json
+          publish_feed host-latest.json
 
       - name: Verify public updater feeds
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          for feed in student-latest.json teacher-latest.json; do
+          for feed in student-latest.json teacher-latest.json host-latest.json; do
             raw_url="https://raw.githubusercontent.com/${{ github.repository }}/updater-feed/$feed?version=$VERSION"
             release_url="https://github.com/${{ github.repository }}/releases/download/matchbox-v$VERSION/$feed"
             curl --fail --location --retry 8 --retry-all-errors --retry-delay 3 --output "/tmp/raw-$feed" "$raw_url"

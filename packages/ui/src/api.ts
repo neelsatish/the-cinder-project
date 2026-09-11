@@ -14,8 +14,20 @@ import type {
   LoginResponse,
   LiveSession,
   LiveSessionDetails,
+  LiveSessionHistoryItem,
   LiveSessionResult,
+  LiveSessionTask,
+  LiveSessionTaskAcknowledgement,
+  LiveSessionTaskKind,
+  LiveSessionTaskState,
   NoteBody,
+  Quiz,
+  QuizAttempt,
+  QuizDelivery,
+  QuizDeliveryKind,
+  QuizQuestionInput,
+  QuizResponse,
+  QuizStatistics,
   Role,
   StudyNode,
   Submission,
@@ -397,11 +409,43 @@ export class CinderApi {
     return this.request<LiveSession | null>(`/api/classrooms/${classroomId}/live-session`);
   }
 
+  activeStudentLiveSessions() {
+    return this.request<LiveSession[]>("/api/live-sessions/active");
+  }
+
   joinLiveSession(code: string) {
     return this.request<LiveSession>("/api/live-sessions/join", {
       method: "POST",
       body: JSON.stringify({ code }),
     });
+  }
+
+
+  joinLiveSessionById(id: string) {
+    return this.request<LiveSession>(`/api/live-sessions/${id}/join`, { method: "POST" });
+  }
+
+  assignLiveSessionTask(id: string, input: {
+    kind: LiveSessionTaskKind;
+    target_id: string | null;
+    title: string;
+    instructions: string;
+  }) {
+    return this.request<LiveSessionTask>(`/api/live-sessions/${id}/task`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  acknowledgeLiveSessionTask(id: string, revision: number, state: LiveSessionTaskState) {
+    return this.request<LiveSessionTaskAcknowledgement>(`/api/live-sessions/${id}/task-ack`, {
+      method: "POST",
+      body: JSON.stringify({ revision, state }),
+    });
+  }
+
+  liveSessionHistory(classroomId: string) {
+    return this.request<LiveSessionHistoryItem[]>(`/api/classrooms/${classroomId}/live-sessions`);
   }
 
   liveSessionDetails(id: string) {
@@ -418,6 +462,34 @@ export class CinderApi {
   endLiveSession(id: string) {
     return this.request<LiveSession>(`/api/live-sessions/${id}/end`, { method: "POST" });
   }
+
+  quizzes(classroomId?: string) {
+    const query = classroomId ? `?classroom_id=${encodeURIComponent(classroomId)}` : "";
+    return this.request<Quiz[]>(`/api/quizzes${query}`);
+  }
+
+  createQuiz(input: { classroom_id: string; title: string; instructions: string; time_limit_minutes: number | null; questions: QuizQuestionInput[] }) {
+    return this.request<Quiz>("/api/quizzes", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  updateQuiz(id: string, input: { classroom_id: string; title: string; instructions: string; time_limit_minutes: number | null; questions: QuizQuestionInput[] }) {
+    return this.request<Quiz>(`/api/quizzes/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+  }
+
+  duplicateQuiz(id: string) { return this.request<Quiz>(`/api/quizzes/${id}/duplicate`, { method: "POST" }); }
+  publishQuiz(id: string) { return this.request<Quiz>(`/api/quizzes/${id}/publish`, { method: "POST" }); }
+  archiveQuiz(id: string) { return this.request<{ ok: true }>(`/api/quizzes/${id}`, { method: "DELETE" }); }
+  deliverQuiz(id: string, input: { kind: QuizDeliveryKind; live_session_id?: string | null; opens_at?: string | null; due_at?: string | null }) { return this.request<QuizDelivery>(`/api/quizzes/${id}/deliver`, { method: "POST", body: JSON.stringify(input) }); }
+  quizDeliveries(classroomId?: string) { const query = classroomId ? `?classroom_id=${encodeURIComponent(classroomId)}` : ""; return this.request<QuizDelivery[]>(`/api/quiz-deliveries${query}`); }
+  startQuizAttempt(deliveryId: string) { return this.request<QuizAttempt>(`/api/quiz-deliveries/${deliveryId}/start`, { method: "POST" }); }
+  quizAttempt(id: string) { return this.request<QuizAttempt>(`/api/quiz-attempts/${id}`); }
+  quizAttempts(deliveryId: string) { return this.request<QuizAttempt[]>(`/api/quiz-deliveries/${deliveryId}/attempts`); }
+  saveQuizResponse(id: string, questionId: string, answer: unknown) { return this.request<QuizResponse>(`/api/quiz-attempts/${id}/responses/${questionId}`, { method: "PUT", body: JSON.stringify({ answer }) }); }
+  submitQuizAttempt(id: string) { return this.request<QuizAttempt>(`/api/quiz-attempts/${id}/submit`, { method: "POST" }); }
+  reopenQuizAttempt(id: string) { return this.request<QuizAttempt>(`/api/quiz-attempts/${id}/reopen`, { method: "POST" }); }
+  gradeQuizResponse(id: string, questionId: string, points: number, feedback = "") { return this.request<QuizAttempt>(`/api/quiz-attempts/${id}/responses/${questionId}/grade`, { method: "PUT", body: JSON.stringify({ points, feedback }) }); }
+  releaseQuizResults(deliveryId: string) { return this.request<QuizDelivery>(`/api/quiz-deliveries/${deliveryId}/release`, { method: "POST" }); }
+  quizStatistics(deliveryId: string) { return this.request<QuizStatistics>(`/api/quiz-deliveries/${deliveryId}/stats`); }
 
   assignments(classroomId?: string) {
     const query = classroomId

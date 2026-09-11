@@ -1,45 +1,129 @@
 :root {
   color-scheme: light;
-  --paper: #f7f1e7;
-  --ground: #221309;
-  --ash: #2e160a;
-  --char: #6e3216;
-  --spark: #d9631f;
-  --tallow: #f3e3c6;
-  --background: #f7f1e7;
-  --surface-lowest: #fffaf2;
-  --surface: #fffaf2;
-  --surface-raised: #eee4d6;
-  --surface-high: #e5d9c9;
-  --border: #2e160a;
-  --border-strong: #2e160a;
-  --text: #2e160a;
-  --text-soft: #5c4132;
-  --muted: #806c5c;
-  --primary: #b24e17;
-  --primary-strong: #923b0d;
-  --primary-ink: #fffaf4;
-  --ember: #b24e17;
-  --warm: #dd8b36;
-  --warning: #e9a65a;
-  --danger: #b42318;
-  --success: #527a42;
-  --panel-background: #fffaf2;
-  --topbar-background: #fffaf2;
-  --accent-wash: rgba(217, 99, 31, 0.11);
-  --accent-wash-soft: rgba(217, 99, 31, 0.055);
-  --workspace-dot: rgba(217, 99, 31, 0.07);
-  --document-chrome: #eee9e2;
-  --document-canvas: #ddd6ce;
-  --scrollbar-track: #eee3d8;
-  --scrollbar-thumb: #c4a995;
-  --radius-sm: 0;
-  --radius: 0;
-  --radius-lg: 0;
+  --paper: #f4f6f2;
+  --ground: #17211d;
+  --ash: #22302a;
+  --char: #52605a;
+  --spark: #d85b32;
+  --tallow: #f5f1e8;
+  --background: #f4f6f2;
+  --surface-lowest: #ffffff;
+  --surface-low: #f8faf7;
+  --surface: #ffffff;
+  --surface-raised: #edf1ec;
+  --surface-high: #e3e9e2;
+  --border: #cbd5cd;
+  --border-strong: #839188;
+  --text: #17211d;
+  --text-soft: #46534d;
+  --muted: #6a776f;
+  --primary: #17463e;
+  --primary-strong: #0e352f;
+  --primary-ink: #ffffff;
+  --ember: #d85b32;
+  --warm: #31795f;
+  --warning: #b85c28;
+  --danger: #b83a30;
+  --success: #31795f;
+  --panel-background: #ffffff;
+  --topbar-background: #f8faf7;
+  --accent-wash: rgba(23, 70, 62, 0.1);
+  --accent-wash-soft: rgba(23, 70, 62, 0.05);
+  --workspace-dot: rgba(23, 70, 62, 0.045);
+  --document-chrome: #edf0ec;
+  --document-canvas: #dde2dd;
+  --scrollbar-track: #e9eeea;
+  --scrollbar-thumb: #acb8b0;
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius: 12px;
+  --radius-lg: 16px;
   --accent-ink: var(--primary);
   font-family: Ubuntu, "Segoe UI", Cantarell, system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0e1210;
+  --ground: #f3eee4;
+  --ash: #e3ddd2;
+  --char: #a8b0aa;
+  --spark: #df6c3e;
+  --tallow: #242c27;
+  --background: #0e1210;
+  --surface-lowest: #121815;
+  --surface-low: #151c18;
+  --surface: #171e1a;
+  --surface-raised: #1e2822;
+  --surface-high: #28342d;
+  --border: #344139;
+  --border-strong: #5b6b61;
+  --text: #f3eee4;
+  --text-soft: #c6cec8;
+  --muted: #929f97;
+  --primary: #df6c3e;
+  --primary-strong: #ef7d4e;
+  --primary-ink: #140c08;
+  --ember: #df6c3e;
+  --warm: #78b391;
+  --warning: #e6a15e;
+  --danger: #f07a70;
+  --success: #78b391;
+  --panel-background: #171e1a;
+  --topbar-background: #111613;
+  --accent-wash: rgba(223, 108, 62, 0.14);
+  --accent-wash-soft: rgba(223, 108, 62, 0.07);
+  --workspace-dot: rgba(223, 108, 62, 0.055);
+  --document-chrome: #202823;
+  --document-canvas: #0a0d0b;
+  --scrollbar-track: #111713;
+  --scrollbar-thumb: #46554c;
+  --accent-ink: var(--primary);
+}
+
+:root[data-theme="paper"] {
+  color-scheme: light;
+  --paper: #f1eee7;
+  --ground: #151716;
+  --ash: #1b1d1b;
+  --char: #62665f;
+  --spark: #ec6338;
+  --tallow: #f1c84c;
+  --background: #f1eee7;
+  --surface-lowest: #fffdf8;
+  --surface-low: #f8f4ec;
+  --surface: #fffdf8;
+  --surface-raised: #e7e2d8;
+  --surface-high: #ddd7cb;
+  --border: #1b1d1b;
+  --border-strong: #1b1d1b;
+  --text: #151716;
+  --text-soft: #565b55;
+  --muted: #6d7069;
+  --primary: #ec6338;
+  --primary-strong: #b84224;
+  --primary-ink: #fffdf8;
+  --ember: #ec6338;
+  --warm: #34785e;
+  --warning: #b84224;
+  --danger: #a92d25;
+  --success: #34785e;
+  --panel-background: #fffdf8;
+  --topbar-background: #f1eee7;
+  --accent-wash: rgba(236, 99, 56, 0.12);
+  --accent-wash-soft: rgba(236, 99, 56, 0.055);
+  --workspace-dot: rgba(21, 23, 22, 0.09);
+  --document-chrome: #e7e2d8;
+  --document-canvas: #d8d2c7;
+  --scrollbar-track: #e7e2d8;
+  --scrollbar-thumb: #aaa399;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius: 0;
+  --radius-lg: 0;
+  --accent-ink: var(--primary);
 }
 
 * {
@@ -473,6 +557,72 @@ select:focus-visible {
   background: transparent;
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.theme-picker > button {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-lowest);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.theme-picker > button:hover {
+  border-color: var(--primary);
+}
+.theme-picker > button.is-selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--accent-wash);
+}
+.theme-picker strong {
+  font-size: 13px;
+}
+.theme-picker small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+.theme-preview {
+  height: 54px;
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  grid-template-rows: 14px 1fr;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.theme-preview i {
+  display: block;
+}
+.theme-preview i:first-child {
+  grid-row: 1 / 3;
+}
+.theme-preview i:nth-child(2),
+.theme-preview i:nth-child(3) {
+  grid-column: 2;
+}
+.theme-preview-light { background: #f4f6f2; }
+.theme-preview-light i:first-child { background: #ffffff; }
+.theme-preview-light i:nth-child(2) { background: #17463e; }
+.theme-preview-light i:nth-child(3) { background: #ffffff; }
+.theme-preview-dark { background: #0e1210; }
+.theme-preview-dark i:first-child { background: #121815; }
+.theme-preview-dark i:nth-child(2) { background: #df6c3e; }
+.theme-preview-dark i:nth-child(3) { background: #171e1a; }
+.theme-preview-paper { background: #f1eee7; }
+.theme-preview-paper i:first-child { background: #fffdf8; }
+.theme-preview-paper i:nth-child(2) { background: #ec6338; }
+.theme-preview-paper i:nth-child(3) { background: #173b35; }
+@media (max-width: 760px) {
+  .theme-picker { grid-template-columns: 1fr; }
 }
 .icon-button {
   width: 36px;

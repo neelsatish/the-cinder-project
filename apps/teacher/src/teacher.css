@@ -1268,8 +1268,8 @@
   width: 222px;
   flex-basis: 222px;
   align-items: stretch;
-  border-right: 2px solid var(--border);
-  background: var(--background);
+  border-right: 1px solid var(--border);
+  background: var(--surface-lowest);
 }
 .teacher-shell .rail-brand {
   height: 72px;
@@ -1311,10 +1311,10 @@
   transform: translateX(2px);
 }
 .teacher-shell .rail-button.is-active {
-  border: 2px solid var(--border);
+  border: 1px solid var(--primary);
   background: var(--primary);
   color: var(--primary-ink);
-  box-shadow: 3px 3px 0 var(--border);
+  box-shadow: none;
 }
 .teacher-shell .rail-label {
   overflow: hidden;
@@ -1344,13 +1344,34 @@
 .teacher-shell .panel,
 .teacher-shell .metric-card,
 .teacher-shell .subject-card {
-  border-width: 2px;
+  border-width: 1px;
 }
 .teacher-shell .button {
-  border-width: 2px;
-  box-shadow: 2px 2px 0 var(--border);
+  border-width: 1px;
+  box-shadow: none;
 }
 .teacher-shell .button:active {
-  box-shadow: none;
-  transform: translate(2px, 2px);
+  transform: translateY(1px);
 }
+.live-classroom-page,
+.live-classroom-stack { display: grid; gap: 16px; }
+.live-status-panel { display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)) auto; align-items: end; gap: 20px; }
+.live-status-panel p { margin: 0 0 6px; }
+.live-status-panel strong { font-size: 24px; }
+.live-code,
+.live-countdown { font-family: "Cascadia Mono", Consolas, monospace; letter-spacing: .08em; }
+.live-current-task { display: grid; gap: 6px; margin-bottom: 18px; padding: 14px; border: 2px solid var(--border); background: var(--surface-raised); }
+.live-current-task span,
+.live-current-task p { margin: 0; color: var(--text-soft); }
+@media (max-width: 900px) { .live-status-panel { grid-template-columns: 1fr 1fr; } }
+.classroom-tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--border, #ddd); padding-bottom: 12px; }
+.classroom-workspace .classroom-manager { width: 100%; max-width: none; }
+.classroom-workspace [hidden] { display: none !important; }
+:root[data-theme="paper"] .teacher-shell .nav-rail { border-right-width: 2px; }
+:root[data-theme="paper"] .teacher-shell .rail-button.is-active { border: 2px solid var(--border); box-shadow: 3px 3px 0 var(--border); }
+:root[data-theme="paper"] .teacher-shell .workspace { background-size: 5px 5px; }
+:root[data-theme="paper"] .teacher-shell .panel,
+:root[data-theme="paper"] .teacher-shell .metric-card,
+:root[data-theme="paper"] .teacher-shell .subject-card { border-width: 2px; box-shadow: 4px 4px 0 color-mix(in srgb, var(--border) 14%, transparent); }
+:root[data-theme="paper"] .teacher-shell .button { border-width: 2px; box-shadow: 2px 2px 0 var(--border); }
+:root[data-theme="paper"] .teacher-shell .button:active { box-shadow: none; transform: translate(2px, 2px); }

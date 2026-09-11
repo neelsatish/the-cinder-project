@@ -391,6 +391,117 @@ pub struct SubmitLiveSessionResultRequest {
     pub elapsed_seconds: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum LiveSessionTaskKind {
+    Instruction,
+    Assignment,
+    Material,
+    Quiz,
+}
+
+impl LiveSessionTaskKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Instruction => "instruction",
+            Self::Assignment => "assignment",
+            Self::Material => "material",
+            Self::Quiz => "quiz",
+        }
+    }
+}
+
+impl std::str::FromStr for LiveSessionTaskKind {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "instruction" => Ok(Self::Instruction),
+            "assignment" => Ok(Self::Assignment),
+            "material" => Ok(Self::Material),
+            "quiz" => Ok(Self::Quiz),
+            other => Err(format!("unknown live task kind: {other}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum LiveSessionTaskState {
+    Opened,
+    InProgress,
+    Completed,
+    Failed,
+}
+
+impl LiveSessionTaskState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Opened => "opened",
+            Self::InProgress => "in_progress",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+impl std::str::FromStr for LiveSessionTaskState {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "opened" => Ok(Self::Opened),
+            "in_progress" => Ok(Self::InProgress),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            other => Err(format!("unknown live task state: {other}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionTask {
+    #[ts(type = "string")]
+    pub id: Uuid,
+    pub revision: u32,
+    pub kind: LiveSessionTaskKind,
+    #[ts(type = "string | null")]
+    pub target_id: Option<Uuid>,
+    pub title: String,
+    pub instructions: String,
+    #[ts(type = "string")]
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AssignLiveSessionTaskRequest {
+    pub kind: LiveSessionTaskKind,
+    #[ts(type = "string | null")]
+    pub target_id: Option<Uuid>,
+    pub title: String,
+    pub instructions: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AcknowledgeLiveSessionTaskRequest {
+    pub revision: u32,
+    pub state: LiveSessionTaskState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionTaskAcknowledgement {
+    pub revision: u32,
+    pub state: LiveSessionTaskState,
+    #[ts(type = "string")]
+    pub updated_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct LiveSession {
@@ -409,6 +520,11 @@ pub struct LiveSession {
     pub ends_at: DateTime<Utc>,
     #[ts(type = "string | null")]
     pub ended_at: Option<DateTime<Utc>>,
+    #[ts(type = "string")]
+    pub server_now: DateTime<Utc>,
+    pub current_task: Option<LiveSessionTask>,
+    pub student_task_state: Option<LiveSessionTaskAcknowledgement>,
+    pub student_joined: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -416,6 +532,7 @@ pub struct LiveSession {
 pub struct LiveSessionResult {
     pub score: f64,
     pub elapsed_seconds: u32,
+    pub task_revision: Option<u32>,
     #[ts(type = "string")]
     pub submitted_at: DateTime<Utc>,
 }
@@ -428,7 +545,10 @@ pub struct LiveSessionParticipant {
     pub student_name: String,
     #[ts(type = "string")]
     pub joined_at: DateTime<Utc>,
+    #[ts(type = "string")]
+    pub last_seen_at: DateTime<Utc>,
     pub result: Option<LiveSessionResult>,
+    pub task_state: Option<LiveSessionTaskAcknowledgement>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -436,6 +556,33 @@ pub struct LiveSessionParticipant {
 pub struct LiveSessionDetails {
     pub session: LiveSession,
     pub participants: Vec<LiveSessionParticipant>,
+    pub tasks: Vec<LiveSessionTask>,
+    pub task_progress: Vec<LiveSessionTaskProgress>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionTaskParticipantProgress {
+    #[ts(type = "string")]
+    pub student_id: Uuid,
+    pub student_name: String,
+    pub state: Option<LiveSessionTaskAcknowledgement>,
+    pub result: Option<LiveSessionResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionTaskProgress {
+    pub task: LiveSessionTask,
+    pub participants: Vec<LiveSessionTaskParticipantProgress>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionHistoryItem {
+    pub session: LiveSession,
+    pub participant_count: u32,
+    pub completed_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
