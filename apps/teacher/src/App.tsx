@@ -15,6 +15,7 @@ import {
 import {
   AppShell,
   AppUpdater,
+  ApiError,
   Badge,
   BrandMark,
   Button,
@@ -30,22 +31,24 @@ import {
   Modal,
   PageHeader,
   Panel,
+  probeHost,
   saveSessionValue,
   openExternalUrl,
-  useTheme,
-  type AiSettings,
+  ThemePicker,
   type Assignment,
   type AttendanceDay,
   type AttendanceStatus,
   type ChatMessage,
   type Classroom,
   type ClassroomRoster,
+  type ClassroomTeachers,
   type DashboardStats,
   type GradeChange,
   type NavigationItem,
   type Submission,
   type SubmissionComment,
   type StudyNode,
+  type TeacherInvitePin,
   type User,
 } from "@cinder/ui";
 import type {
@@ -54,6 +57,8 @@ import type {
   UniverGradebookHandle,
   WorkbookCellValue,
 } from "./UniverGradebook";
+import { LiveSessionControls } from "./LiveSessionControls";
+import { QuizManager } from "./QuizManager";
 import {
   buildGradebookCellMap,
   normalizeCellAddress,
@@ -92,6 +97,15 @@ import {
   type PaperSourceCitation,
   type SavedQuestionPaper,
 } from "./paperLibrary";
+import {
+  isCurrentTeacherWorkspaceGeneration,
+  normalizeTeacherHostAddress,
+  parseStoredTeacherSession,
+  resetTeacherWorkspaceState,
+  teacherReconnectDelay,
+  teacherStartupView,
+  type StoredTeacherSession,
+} from "./teacherSession";
 
 const UniverGradebook = lazy(() =>
   import("./UniverGradebook").then((module) => ({ default: module.UniverGradebook })),
@@ -104,10 +118,8 @@ type TeacherTab =
   | "assignments"
   | "attendance"
   | "gradebook"
-  | "assistant"
   | "settings";
-type StoredSession = { token: string; user: User };
-type HostInfo = { base_url: string; port: number };
+type TeacherConfig = { host_url: string | null; device_label: string | null };
 
 const SESSION_KEY = "cinder.teacher.session";
 const KNOWN_ACCOUNTS_KEY = "cinder.teacher.known-accounts";
@@ -117,11 +129,7 @@ const DEV_HOST = "http://127.0.0.1:7373";
 const navigation: NavigationItem<TeacherTab>[] = [
   { id: "dashboard", label: "Overview", icon: "dashboard" },
   { id: "classrooms", label: "Classrooms", icon: "classrooms" },
-  { id: "students", label: "Students", icon: "students" },
-  { id: "attendance", label: "Attendance", icon: "attendance" },
-  { id: "assignments", label: "Assignments", icon: "assignments" },
   { id: "gradebook", label: "Gradebook", icon: "spreadsheet" },
-  { id: "assistant", label: "AI assistant", icon: "assistant" },
   { id: "settings", label: "Settings", icon: "settings" },
 ];
 
@@ -181,31 +189,33 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-async function storedSession(): Promise<StoredSession | null> {
+async function storedSession(
+  fallbackBaseUrl: string,
+): Promise<StoredTeacherSession<User> | null> {
   const raw = await loadSessionValue(SESSION_KEYS);
   if (!raw) return null;
-  try {
-    const session = JSON.parse(raw) as Partial<StoredSession>;
-    if (
-      typeof session.token !== "string" ||
-      !session.user ||
-      session.user.role !== "teacher"
-    ) {
-      throw new Error("Invalid saved session");
-    }
-    return session as StoredSession;
-  } catch {
+  const session = parseStoredTeacherSession<User>(raw, fallbackBaseUrl);
+  if (!session) {
     await clearSessionValue(SESSION_KEYS);
-    return null;
   }
+  return session;
+}
+
+async function normalizeHostAddress(value: string) {
+  const trimmed = normalizeTeacherHostAddress(value);
+  return isTauri()
+    ? invoke<string>("validate_host_address", { baseUrl: trimmed })
+    : trimmed;
 }
 
 export function App() {
   const [loading, setLoading] = useState(true);
-  const [needsSetup, setNeedsSetup] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [baseUrl, setBaseUrl] = useState(DEV_HOST);
+  const [deviceLabel, setDeviceLabel] = useState("Teacher computer");
   const [api, setApi] = useState(() => new CinderApi(DEV_HOST));
   const [user, setUser] = useState<User | null>(null);
+  const [online, setOnline] = useState(false);
   const [tab, setTab] = useState<TeacherTab>("dashboard");
   const [stats, setStats] = useState<DashboardStats>({
     students: 0,
@@ -218,8 +228,12 @@ export function App() {
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const workspaceGeneration = useRef(0);
+  const workspaceLoadInFlight = useRef<number | null>(null);
+  const reconnectInFlight = useRef<number | null>(null);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
+  const [connectionOpen, setConnectionOpen] = useState(false);
   const [knownAccounts, setKnownAccounts] = useState<string[]>(() => {
     try {
       const value = JSON.parse(
@@ -252,7 +266,33 @@ export function App() {
     });
   }, []);
 
-  const loadWorkspace = useCallback(async (activeApi: CinderApi) => {
+  const resetWorkspace = useCallback(() => {
+    const reset = resetTeacherWorkspaceState(workspaceGeneration.current);
+    workspaceGeneration.current = reset.generation;
+    workspaceLoadInFlight.current = null;
+    reconnectInFlight.current = null;
+    setStats(reset.stats);
+    setStudents(reset.students);
+    setClassrooms(reset.classrooms);
+    setAssignments(reset.assignments);
+    setRefreshing(false);
+    setTab("dashboard");
+    return reset.generation;
+  }, []);
+
+  const loadWorkspace = useCallback(async (
+    activeApi: CinderApi,
+    generation = workspaceGeneration.current,
+  ) => {
+    if (
+      !isCurrentTeacherWorkspaceGeneration(
+        generation,
+        workspaceGeneration.current,
+      )
+    )
+      return;
+    if (workspaceLoadInFlight.current === generation) return;
+    workspaceLoadInFlight.current = generation;
     setRefreshing(true);
     try {
       const [nextStats, nextStudents, nextClassrooms, nextAssignments] =
@@ -262,124 +302,341 @@ export function App() {
           activeApi.classrooms(),
           activeApi.assignments(),
         ]);
+      if (
+        !isCurrentTeacherWorkspaceGeneration(
+          generation,
+          workspaceGeneration.current,
+        )
+      )
+        return;
       setStats(nextStats);
       setStudents(nextStudents);
       setClassrooms(nextClassrooms);
       setAssignments(nextAssignments);
+      setOnline(true);
+    } catch {
+      if (
+        isCurrentTeacherWorkspaceGeneration(
+          generation,
+          workspaceGeneration.current,
+        )
+      )
+        setOnline(false);
     } finally {
-      setRefreshing(false);
+      if (
+        isCurrentTeacherWorkspaceGeneration(
+          generation,
+          workspaceGeneration.current,
+        )
+      ) {
+        workspaceLoadInFlight.current = null;
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    let generation = resetWorkspace();
+    const isCurrent = () =>
+      !cancelled &&
+      isCurrentTeacherWorkspaceGeneration(
+        generation,
+        workspaceGeneration.current,
+      );
     void (async () => {
       try {
-        let host = DEV_HOST;
-        if (isTauri()) {
-          try {
-            host = (await invoke<HostInfo>("host_info")).base_url;
-          } catch {
-            /* dev fallback */
+        const config = isTauri()
+          ? await invoke<TeacherConfig>("load_config").catch(() => ({
+              host_url: null,
+              device_label: "Teacher computer",
+            }))
+          : { host_url: DEV_HOST, device_label: "Teacher computer" };
+        if (!isCurrent()) return;
+        let session = await storedSession(config.host_url ?? DEV_HOST);
+        if (!isCurrent()) return;
+        let host = session?.baseUrl ?? config.host_url ?? DEV_HOST;
+        try {
+          host = await normalizeHostAddress(host);
+        } catch {
+          if (!isCurrent()) return;
+          if (session) {
+            generation = resetWorkspace();
+            setUser(null);
+            await clearSessionValue(SESSION_KEYS);
+            if (!isCurrent()) return;
           }
+          session = null;
+          host = config.host_url ?? DEV_HOST;
         }
-        const activeApi = new CinderApi(host);
+        const activeApi = new CinderApi(host, session?.token ?? null);
+        if (!isCurrent()) return;
         setBaseUrl(host);
+        setDeviceLabel(config.device_label ?? "Teacher computer");
         setApi(activeApi);
-        for (let attempt = 0; attempt < 12; attempt += 1) {
-          try {
-            const status = await activeApi.authStatus();
-            setNeedsSetup(status.needs_setup);
-            break;
-          } catch {
-            await new Promise((resolve) => window.setTimeout(resolve, 250));
+        setConnectionOpen(isTauri() && !config.host_url && !session);
+        let hostNeedsSetup = false;
+        try {
+          const status = await activeApi.authStatus();
+          hostNeedsSetup = status.needs_setup;
+          if (!isCurrent()) return;
+          setNeedsSetup(status.needs_setup);
+          setOnline(true);
+        } catch {
+          if (isCurrent()) {
+            setOnline(false);
+            if (session) {
+              setUser(session.user);
+              rememberAccount(session.user.username);
+            }
           }
+          return;
         }
-        const session = await storedSession();
-        if (session) {
-          activeApi.setToken(session.token);
+        if (session && !hostNeedsSetup) {
           try {
             const current = await activeApi.me();
+            if (!isCurrent()) return;
             setUser(current);
             rememberAccount(current.username);
-            await saveSessionValue(
+            const saved = await saveSessionValue(
               SESSION_KEYS,
-              JSON.stringify({ token: session.token, user: current }),
+              JSON.stringify({
+                baseUrl: host,
+                token: session.token,
+                user: current,
+              }),
             );
-            await loadWorkspace(activeApi);
-          } catch {
-            await clearSessionValue(SESSION_KEYS);
-            activeApi.setToken(null);
+            if (!isCurrent()) return;
+            if (!saved)
+              throw new Error("Cinder could not secure this session on the device.");
+            await loadWorkspace(activeApi, generation);
+          } catch (failure) {
+            if (!isCurrent()) return;
+            if (!(failure instanceof ApiError) || !failure.offline) {
+              generation = resetWorkspace();
+              setUser(null);
+              activeApi.setToken(null);
+              await clearSessionValue(SESSION_KEYS);
+            } else {
+              setUser(session.user);
+              rememberAccount(session.user.username);
+              setOnline(false);
+            }
           }
         }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, [loadWorkspace]);
+    return () => {
+      cancelled = true;
+    };
+  }, [loadWorkspace, resetWorkspace]);
+
+  useEffect(() => {
+    const delay = teacherReconnectDelay(online, Boolean(user));
+    if (delay === null) return;
+    let cancelled = false;
+    const retry = async () => {
+      const generation = workspaceGeneration.current;
+      if (reconnectInFlight.current === generation) return;
+      reconnectInFlight.current = generation;
+      try {
+        const current = await api.me();
+        if (
+          cancelled ||
+          !isCurrentTeacherWorkspaceGeneration(
+            generation,
+            workspaceGeneration.current,
+          )
+        )
+          return;
+        setUser(current);
+        rememberAccount(current.username);
+        await loadWorkspace(api, generation);
+      } catch (failure) {
+        if (
+          cancelled ||
+          !isCurrentTeacherWorkspaceGeneration(
+            generation,
+            workspaceGeneration.current,
+          )
+        )
+          return;
+        setOnline(false);
+        if (!(failure instanceof ApiError) || !failure.offline) {
+          resetWorkspace();
+          api.setToken(null);
+          setUser(null);
+          await clearSessionValue(SESSION_KEYS);
+        }
+      } finally {
+        if (reconnectInFlight.current === generation)
+          reconnectInFlight.current = null;
+      }
+    };
+    const timer = window.setInterval(() => void retry(), delay);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [api, loadWorkspace, online, rememberAccount, resetWorkspace, user]);
 
   const login = async (username: string, password: string) => {
+    const generation = resetWorkspace();
     const result = await api.login(
       username,
       password,
       "teacher",
-      "Teacher computer",
+      deviceLabel,
     );
+    if (
+      !isCurrentTeacherWorkspaceGeneration(
+        generation,
+        workspaceGeneration.current,
+      )
+    )
+      throw new Error("The Cinder Host changed. Sign in again.");
+    const saved = await saveSessionValue(
+      SESSION_KEYS,
+      JSON.stringify({ baseUrl, token: result.token, user: result.user }),
+    );
+    if (
+      !isCurrentTeacherWorkspaceGeneration(
+        generation,
+        workspaceGeneration.current,
+      )
+    ) {
+      await clearSessionValue(SESSION_KEYS);
+      throw new Error("The Cinder Host changed. Sign in again.");
+    }
+    if (!saved)
+      throw new Error("Cinder could not secure this session on the device.");
     api.setToken(result.token);
     setUser(result.user);
+    setOnline(true);
     rememberAccount(result.user.username);
-    await saveSessionValue(
-      SESSION_KEYS,
-      JSON.stringify({ token: result.token, user: result.user }),
-    );
-    await loadWorkspace(api);
+    await loadWorkspace(api, generation);
   };
 
   const logout = async () => {
-    await api.logout().catch(() => undefined);
-    await clearSessionValue(SESSION_KEYS);
+    const remoteLogout = api.logout().catch(() => undefined);
+    resetWorkspace();
     api.setToken(null);
     setUser(null);
+    await Promise.all([remoteLogout, clearSessionValue(SESSION_KEYS)]);
   };
+
+  const saveConnection = async (nextUrl: string, nextLabel: string) => {
+    const normalized = await normalizeHostAddress(nextUrl);
+    if (!(await probeHost(normalized)))
+      throw new Error("No Cinder Host answered at that address.");
+    const nextApi = new CinderApi(normalized);
+    const status = await nextApi.authStatus();
+    const label = nextLabel.trim() || "Teacher computer";
+    if (isTauri())
+      await invoke("save_config", {
+        config: { host_url: normalized, device_label: label },
+      });
+    const changedServer = normalized !== baseUrl;
+    if (changedServer) {
+      const remoteLogout = user
+        ? api.logout().catch(() => undefined)
+        : Promise.resolve(undefined);
+      resetWorkspace();
+      api.setToken(null);
+      setUser(null);
+      await Promise.all([remoteLogout, clearSessionValue(SESSION_KEYS)]);
+    }
+    setBaseUrl(normalized);
+    setDeviceLabel(label);
+    setApi(changedServer ? nextApi : api);
+    setNeedsSetup(status.needs_setup);
+    setOnline(true);
+    setConnectionOpen(false);
+  };
+
+  const startupView = teacherStartupView(needsSetup, Boolean(user));
 
   if (loading)
     return (
       <div className="boot-screen">
         <BrandMark size={58} />
-        <span>Starting the classroom server…</span>
+        <span>Connecting to Cinder Host…</span>
       </div>
     );
-  if (needsSetup)
+  if (startupView === "create-school")
     return (
-      <BootstrapScreen api={api} onComplete={() => setNeedsSetup(false)} />
+      <>
+        <BootstrapScreen
+          key={baseUrl}
+          api={api}
+          onComplete={() => setNeedsSetup(false)}
+        />
+        <button
+          className="teacher-connection-button"
+          type="button"
+          onClick={() => setConnectionOpen(true)}
+        >
+          Change Cinder Host
+        </button>
+        {connectionOpen ? (
+          <HostConnectionModal
+            baseUrl={baseUrl}
+            deviceLabel={deviceLabel}
+            onClose={() => setConnectionOpen(false)}
+            onSave={saveConnection}
+          />
+        ) : null}
+      </>
     );
-  if (!user)
+  if (startupView === "sign-in")
     return (
       <>
         <LoginScreen
+          key={baseUrl}
           role="teacher"
           subtitle="Run the classroom, review work and support every learner from one uncluttered workspace."
           helper="Sign in with the school’s teacher account."
           onSubmit={login}
           rememberedUsernames={knownAccounts}
-          onCreateAccount={() => setCreateAccountOpen(true)}
+          offlineHint={
+            online
+              ? `Connected to ${baseUrl}`
+              : "Cinder Host is unreachable. Check the server connection."
+          }
         />
-        <button
-          className="teacher-recovery-button"
-          type="button"
-          onClick={() => setRecoveryOpen(true)}
-        >
-          Use recovery code
-        </button>
+        <div className="teacher-auth-actions">
+          <button type="button" onClick={() => setCreateAccountOpen(true)}>
+            Join an existing school
+          </button>
+          <button type="button" onClick={() => setRecoveryOpen(true)}>
+            Use recovery code
+          </button>
+          <button type="button" onClick={() => setConnectionOpen(true)}>
+            School connection
+          </button>
+        </div>
         {recoveryOpen ? (
           <TeacherRecoveryModal
+            key={baseUrl}
             api={api}
             onClose={() => setRecoveryOpen(false)}
           />
         ) : null}
         {createAccountOpen ? (
           <TeacherAccountModal
+            key={baseUrl}
             api={api}
             onClose={() => setCreateAccountOpen(false)}
+          />
+        ) : null}
+        {connectionOpen ? (
+          <HostConnectionModal
+            baseUrl={baseUrl}
+            deviceLabel={deviceLabel}
+            onClose={() => setConnectionOpen(false)}
+            onSave={saveConnection}
           />
         ) : null}
       </>
@@ -393,11 +650,12 @@ export function App() {
   return (
     <AppShell
       roleLabel="Teacher"
-      user={user}
+      user={user!}
       items={items}
       active={tab}
-      onNavigate={setTab}
+      onNavigate={(next) => setTab(["students", "attendance", "assignments"].includes(next) ? "classrooms" : next)}
       onLogout={() => void logout()}
+      online={online}
       onRefresh={() => void loadWorkspace(api)}
       refreshing={refreshing}
     >
@@ -406,19 +664,21 @@ export function App() {
           stats={stats}
           assignments={assignments}
           classrooms={classrooms}
-          onNavigate={setTab}
+          onNavigate={(next) => setTab(["students", "attendance", "assignments"].includes(next) ? "classrooms" : next)}
         />
       ) : null}
       {tab === "students" ? (
         <StudentsView
           api={api}
           students={students}
+          classrooms={classrooms}
           onUpdated={() => loadWorkspace(api)}
         />
       ) : null}
       {tab === "classrooms" ? (
         <ClassroomsView
           api={api}
+          user={user!}
           classrooms={classrooms}
           students={students}
           assignments={assignments}
@@ -434,7 +694,11 @@ export function App() {
         />
       ) : null}
       {tab === "attendance" ? (
-        <AttendanceView api={api} onUpdated={() => loadWorkspace(api)} />
+        <AttendanceView
+          api={api}
+          classrooms={classrooms}
+          onUpdated={() => loadWorkspace(api)}
+        />
       ) : null}
       {tab === "gradebook" ? (
         <GradebookView
@@ -444,26 +708,120 @@ export function App() {
           onUpdated={() => loadWorkspace(api)}
         />
       ) : null}
-      {tab === "assistant" ? (
-        <AssistantView
-          api={api}
-          classrooms={classrooms}
-          students={students}
-          assignments={assignments}
-        />
-      ) : null}
       {tab === "settings" ? (
         <SettingsView
           api={api}
           baseUrl={baseUrl}
-          user={user}
+          user={user!}
           refreshing={refreshing}
+          online={online}
           onRefresh={() => loadWorkspace(api)}
+          onOpenConnection={() => setConnectionOpen(true)}
           onCurrentDeleted={() => void logout()}
           onForgetAccount={forgetAccount}
         />
       ) : null}
+      {connectionOpen ? (
+        <HostConnectionModal
+          baseUrl={baseUrl}
+          deviceLabel={deviceLabel}
+          onClose={() => setConnectionOpen(false)}
+          onSave={saveConnection}
+        />
+      ) : null}
     </AppShell>
+  );
+}
+
+function HostConnectionModal({
+  baseUrl,
+  deviceLabel,
+  onClose,
+  onSave,
+}: {
+  baseUrl: string;
+  deviceLabel: string;
+  onClose: () => void;
+  onSave: (url: string, label: string) => Promise<void>;
+}) {
+  const [url, setUrl] = useState(baseUrl);
+  const [label, setLabel] = useState(deviceLabel);
+  const [found, setFound] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const discover = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const hosts = isTauri()
+        ? await invoke<string[]>("discover_hosts")
+        : [DEV_HOST];
+      setFound(hosts);
+      if (hosts[0]) setUrl(hosts[0]);
+      if (!hosts.length)
+        setError("No Cinder Host was found automatically. Enter its address below.");
+    } catch {
+      setError("Automatic discovery was unavailable. Enter the address manually.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Cinder Host connection"
+      description="Connect this Teacher app to the school Host computer."
+      onClose={onClose}
+    >
+      <form
+        className="form-stack"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setBusy(true);
+          setError("");
+          try {
+            await onSave(url, label);
+          } catch (failure) {
+            setError(
+              failure instanceof Error ? failure.message : "Connection failed.",
+            );
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Button type="button" onClick={() => void discover()} disabled={busy}>
+          Find Host on this network
+        </Button>
+        {found.length ? (
+          <div className="host-list">
+            {found.map((host) => (
+              <button type="button" key={host} onClick={() => setUrl(host)}>
+                {host}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <Field
+          label="Cinder Host address"
+          hint="Local example: http://192.168.1.20:7373. Remote connections must use HTTPS."
+        >
+          <input
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            autoComplete="url"
+          />
+        </Field>
+        <Field label="This computer name">
+          <input value={label} onChange={(event) => setLabel(event.target.value)} />
+        </Field>
+        {error ? <p className="form-error">{error}</p> : null}
+        <Button variant="primary" type="submit" disabled={busy || !url.trim()}>
+          {busy ? "Checking…" : "Save connection"}
+        </Button>
+      </form>
+    </Modal>
   );
 }
 
@@ -478,6 +836,7 @@ function BootstrapScreen({
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [setupPin, setSetupPin] = useState("");
   const [recovery, setRecovery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -517,6 +876,7 @@ function BootstrapScreen({
               username,
               displayName,
               password,
+              setupPin,
             );
             setRecovery(result.recovery_code);
           } catch (failure) {
@@ -528,18 +888,29 @@ function BootstrapScreen({
           }
         }}
       >
-        <Icon name="assistant" />
-        <p className="eyebrow">First run</p>
-        <h1>Set up Cinder Teacher</h1>
+        <Icon name="classrooms" />
+        <p className="eyebrow">First teacher</p>
+        <h1>Create a new school</h1>
         <p>
-          Create the school’s single teacher account. Student accounts are added
-          after sign-in.
+          Enter the eight-digit setup PIN shown on the Cinder Host computer,
+          then create the first teacher account.
         </p>
+        <Field label="School setup PIN" hint="Shown on the Cinder Host computer and valid for 15 minutes.">
+          <input
+            value={setupPin}
+            onChange={(event) =>
+              setSetupPin(event.target.value.replace(/\D/g, "").slice(0, 8))
+            }
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={8}
+            autoFocus
+          />
+        </Field>
         <Field label="Teacher name">
           <input
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
-            autoFocus
           />
         </Field>
         <Field label="Username">
@@ -568,9 +939,14 @@ function BootstrapScreen({
         <Button
           variant="primary"
           type="submit"
-          disabled={busy || !displayName.trim() || password.length < 8}
+          disabled={
+            busy ||
+            setupPin.length !== 8 ||
+            !displayName.trim() ||
+            password.length < 8
+          }
         >
-          {busy ? "Creating…" : "Create teacher account"}
+          {busy ? "Creating…" : "Create school and teacher account"}
         </Button>
       </form>
     </div>
@@ -688,10 +1064,12 @@ function DashboardView({
 function StudentsView({
   api,
   students,
+  classrooms,
   onUpdated,
 }: {
   api: CinderApi;
   students: User[];
+  classrooms: Classroom[];
   onUpdated: () => Promise<void>;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
@@ -701,6 +1079,7 @@ function StudentsView({
     temporary_password: string;
     recovery_code: string;
   } | null>(null);
+  const [actionError, setActionError] = useState("");
   return (
     <div className="page">
       <PageHeader
@@ -711,12 +1090,14 @@ function StudentsView({
             variant="primary"
             icon="plus"
             onClick={() => setCreateOpen(true)}
+            disabled={!classrooms.length}
           >
             Add student
           </Button>
         }
       />
       <Panel className="panel-flush">
+        {actionError ? <p className="form-error">{actionError}</p> : null}
         <div className="table-wrap">
           <table className="data-table">
             <thead>
@@ -767,10 +1148,19 @@ function StudentsView({
                             )
                           )
                             return;
-                          setCredentials(
-                            await api.resetStudentCredentials(student.id),
-                          );
-                          await onUpdated();
+                          setActionError("");
+                          try {
+                            setCredentials(
+                              await api.resetStudentCredentials(student.id),
+                            );
+                            await onUpdated();
+                          } catch (failure) {
+                            setActionError(
+                              failure instanceof Error
+                                ? failure.message
+                                : "Sign-in details could not be reset.",
+                            );
+                          }
                         }}
                       >
                         Reset PIN
@@ -785,8 +1175,17 @@ function StudentsView({
                             )
                           )
                             return;
-                          await api.deleteStudent(student.id);
-                          await onUpdated();
+                          setActionError("");
+                          try {
+                            await api.deleteStudent(student.id);
+                            await onUpdated();
+                          } catch (failure) {
+                            setActionError(
+                              failure instanceof Error
+                                ? failure.message
+                                : "The student account could not be removed.",
+                            );
+                          }
                         }}
                       >
                         Remove
@@ -808,6 +1207,7 @@ function StudentsView({
       </Panel>
       {createOpen ? (
         <CreateStudentModal
+          classrooms={classrooms}
           onClose={() => setCreateOpen(false)}
           onCreate={async (input) => {
             const result = await api.createStudent(input);
@@ -868,14 +1268,34 @@ type StudentInput = {
   roll_number: string | null;
 };
 
+type CreateStudentInput = StudentInput & { classroom_id: string };
+type StudentCredentials = {
+  user: User;
+  temporary_password: string;
+  recovery_code: string;
+};
+
+function StudentCredentialsModal({ credentials, onClose }: { credentials: StudentCredentials; onClose: () => void }) {
+  return <Modal title="Give these details to the student" description="The temporary PIN and recovery code are only shown now." onClose={onClose}>
+    <div className="modal-content"><div className="credential-box">
+      <span>Username</span><code className="credential-code">{credentials.user.username}</code>
+      <span>Temporary PIN</span><code className="credential-code">{credentials.temporary_password}</code>
+      <span>Recovery code</span><code className="credential-code recovery-code">{credentials.recovery_code}</code>
+    </div><p className="form-hint">The student must replace the temporary PIN at first sign-in. Store the recovery code separately.</p></div>
+  </Modal>;
+}
+
 function CreateStudentModal({
+  classrooms,
   onClose,
   onCreate,
 }: {
+  classrooms: Classroom[];
   onClose: () => void;
-  onCreate: (input: StudentInput) => Promise<void>;
+  onCreate: (input: CreateStudentInput) => Promise<void>;
 }) {
   const [form, setForm] = useState({
+    classroom_id: classrooms[0]?.id ?? "",
     username: "",
     display_name: "",
     grade_level: "",
@@ -903,6 +1323,7 @@ function CreateStudentModal({
           setError("");
           try {
             await onCreate({
+              classroom_id: form.classroom_id,
               username: form.username.trim(),
               display_name: form.display_name.trim(),
               grade_level: form.grade_level.trim() || null,
@@ -920,6 +1341,21 @@ function CreateStudentModal({
           }
         }}
       >
+        <Field label="Classroom" hint="The new account is enrolled immediately.">
+          <select
+            value={form.classroom_id}
+            onChange={(event) =>
+              setForm({ ...form, classroom_id: event.target.value })
+            }
+            required
+          >
+            {classrooms.map((classroom) => (
+              <option key={classroom.id} value={classroom.id}>
+                {classroom.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="Full name">
           <input {...field("display_name")} autoFocus />
         </Field>
@@ -1042,12 +1478,14 @@ function EditStudentModal({
 
 function ClassroomsView({
   api,
+  user,
   classrooms,
   students,
   assignments,
   onUpdated,
 }: {
   api: CinderApi;
+  user: User;
   classrooms: Classroom[];
   students: User[];
   assignments: Assignment[];
@@ -1055,6 +1493,7 @@ function ClassroomsView({
 }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [manageId, setManageId] = useState<string | null>(null);
+  if (manageId) return <ClassroomWorkspace key={manageId} api={api} user={user} classroomId={manageId} students={students} assignments={assignments.filter((item) => item.classroom_id === manageId)} onClose={() => setManageId(null)} onDeleted={() => setManageId(null)} onUpdated={onUpdated} />;
   return (
     <div className="page">
       <PageHeader
@@ -1078,11 +1517,20 @@ function ClassroomsView({
               className="subject-card"
               style={{ "--subject-color": room.color } as CSSProperties}
               key={room.id}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setManageId(room.id); } }}
               onClick={() => setManageId(room.id)}
             >
               <Badge tone="accent">{room.subject_code || "Subject"}</Badge>
+              <Badge tone={room.owner_teacher_id === user.id ? "good" : "neutral"}>
+                {room.owner_teacher_id === user.id ? "Owned" : "Co-taught"}
+              </Badge>
               <h3>{room.name}</h3>
               <p>{room.description || "No description added."}</p>
+              <small>
+                Owner: {room.owner_teacher_name} · Code: {room.enrolment_code}
+              </small>
               <footer>
                 {room.student_count} students ·{" "}
                 {
@@ -1111,16 +1559,6 @@ function ClassroomsView({
             setCreateOpen(false);
             await onUpdated();
           }}
-        />
-      ) : null}
-      {manageId ? (
-        <RosterModal
-          api={api}
-          classroomId={manageId}
-          students={students}
-          onClose={() => setManageId(null)}
-          onDeleted={() => setManageId(null)}
-          onUpdated={onUpdated}
         />
       ) : null}
     </div>
@@ -1218,56 +1656,110 @@ function ClassroomFormModal({
   );
 }
 
-function RosterModal({
+function ClassroomWorkspace({
   api,
+  user,
   classroomId,
   students,
+  assignments,
   onClose,
   onDeleted,
   onUpdated,
 }: {
   api: CinderApi;
+  user: User;
   classroomId: string;
   students: User[];
+  assignments: Assignment[];
   onClose: () => void;
   onDeleted: () => void;
   onUpdated: () => Promise<void>;
 }) {
   const [roster, setRoster] = useState<ClassroomRoster | null>(null);
+  const [section, setSection] = useState("overview");
+  const [addingStudents, setAddingStudents] = useState(false);
+  const [creatingStudent, setCreatingStudent] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<User | null>(null);
+  const [credentials, setCredentials] = useState<StudentCredentials | null>(null);
+  const [classroomTeachers, setClassroomTeachers] =
+    useState<ClassroomTeachers | null>(null);
+  const [teacherAccounts, setTeacherAccounts] = useState<User[]>([]);
+  const [teacherToAdd, setTeacherToAdd] = useState("");
   const [materials, setMaterials] = useState<StudyNode[]>([]);
   const [busyId, setBusyId] = useState("");
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [loadingRoster, setLoadingRoster] = useState(true);
   const load = useCallback(async () => {
-    const [nextRoster, tree] = await Promise.all([
-      api.classroomRoster(classroomId),
-      api.tree(),
-    ]);
-    setRoster(nextRoster);
-    setMaterials(
-      tree.nodes.filter(
-        (node) =>
-          !node.owner_id &&
-          node.classroom_id === classroomId &&
-          node.kind === "pdf",
-      ),
-    );
+    setLoadingRoster(true);
+    setLoadError("");
+    try {
+      const [nextRoster, tree, nextTeachers, nextAccounts] = await Promise.all([
+        api.classroomRoster(classroomId),
+        api.tree(),
+        api.classroomTeachers(classroomId),
+        api.teacherAccounts(),
+      ]);
+      setRoster(nextRoster);
+      setClassroomTeachers(nextTeachers);
+      setTeacherAccounts(nextAccounts);
+      setMaterials(
+        tree.nodes.filter(
+          (node) =>
+            !node.owner_id &&
+            node.classroom_id === classroomId &&
+            node.kind === "pdf",
+        ),
+      );
+    } catch (failure) {
+      setLoadError(
+        failure instanceof Error
+          ? failure.message
+          : "Classroom details could not be loaded.",
+      );
+    } finally {
+      setLoadingRoster(false);
+    }
   }, [api, classroomId]);
   useEffect(() => {
     void load();
   }, [load]);
   const enrolled = new Set(roster?.students.map((student) => student.id));
+  const isOwner = roster?.classroom.owner_teacher_id === user.id;
+  const assignedTeachers = new Set([
+    classroomTeachers?.owner.id,
+    ...(classroomTeachers?.co_teachers.map((teacher) => teacher.id) ?? []),
+  ]);
+  const availableTeachers = teacherAccounts.filter(
+    (teacher) => !assignedTeachers.has(teacher.id),
+  );
   return (
     <>
-      <Modal
-        title={roster?.classroom.name ?? "Classroom roster"}
-        description="Manage the classroom, roster and shared materials."
-        onClose={onClose}
-      >
-        <div className="modal-content classroom-manager">
+      <div className="page classroom-workspace">
+        <PageHeader title={roster?.classroom.name ?? "Classroom"} description="Manage this classroom’s students, work and live sessions." action={<Button onClick={onClose}>All classrooms</Button>} />
+        <nav className="classroom-tabs" aria-label="Classroom sections">
+          {["overview", "students", "materials", "assignments", "quizzes", "attendance", "live", "teachers"].map((item) => <Button key={item} variant={section === item ? "primary" : "ghost"} aria-current={section === item ? "page" : undefined} onClick={() => setSection(item)}>{item === "live" ? "Live classroom" : item[0].toUpperCase() + item.slice(1)}</Button>)}
+        </nav>
+        {roster && section === "assignments" ? <AssignmentsView api={api} classrooms={[roster.classroom]} assignments={assignments} onUpdated={onUpdated} /> : null}
+        {roster && section === "quizzes" ? <QuizManager api={api} classrooms={[roster.classroom]} /> : null}
+        {roster && section === "attendance" ? <AttendanceView api={api} classrooms={[roster.classroom]} onUpdated={onUpdated} /> : null}
+        {section === "live" ? <LiveSessionControls api={api} classroomId={classroomId} assignments={assignments} /> : null}
+        <div className="classroom-manager">
           {error ? <p className="form-error">{error}</p> : null}
-          <section>
+          {loadingRoster && !roster ? (
+            <p className="muted">Loading classroom…</p>
+          ) : null}
+          {loadError ? (
+            <div className="form-error">
+              <p>{loadError}</p>
+              <Button type="button" onClick={() => void load()}>
+                Retry
+              </Button>
+            </div>
+          ) : null}
+          <section hidden={section !== "overview"}>
             <div className="manager-heading">
               <div>
                 <p className="eyebrow">Classroom</p>
@@ -1281,24 +1773,26 @@ function RosterModal({
                 >
                   Edit
                 </Button>
-                <Button
-                  variant="danger"
-                  icon="trash"
-                  onClick={async () => {
-                    if (
-                      !roster ||
-                      !window.confirm(
-                        `Archive ${roster.classroom.name}? Students will lose access, but existing work and grades will be preserved.`,
+                {isOwner ? (
+                  <Button
+                    variant="danger"
+                    icon="trash"
+                    onClick={async () => {
+                      if (
+                        !roster ||
+                        !window.confirm(
+                          `Archive ${roster.classroom.name}? Students will lose access, but existing work and grades will be preserved.`,
+                        )
                       )
-                    )
-                      return;
-                    await api.deleteClassroom(classroomId);
-                    await onUpdated();
-                    onDeleted();
-                  }}
-                >
-                  Delete
-                </Button>
+                        return;
+                      await api.deleteClassroom(classroomId);
+                      await onUpdated();
+                      onDeleted();
+                    }}
+                  >
+                    Archive
+                  </Button>
+                ) : null}
               </div>
             </div>
             {roster ? (
@@ -1307,16 +1801,125 @@ function RosterModal({
                 {roster.classroom.subject_code || "No subject code"}
               </p>
             ) : null}
+            {roster ? (
+              <dl className="classroom-identity">
+                <div>
+                  <dt>Enrolment code</dt>
+                  <dd><code>{roster.classroom.enrolment_code}</code></dd>
+                </div>
+                <div>
+                  <dt>Owner</dt>
+                  <dd>{roster.classroom.owner_teacher_name}</dd>
+                </div>
+              </dl>
+            ) : null}
           </section>
-          <section>
+          <section hidden={section !== "teachers"}>
+            <div className="manager-heading">
+              <div>
+                <p className="eyebrow">Teaching team</p>
+                <h3>Teachers</h3>
+              </div>
+            </div>
+            {classroomTeachers ? (
+              <div className="teacher-account-list classroom-teacher-list">
+                <div className="list-item">
+                  <span className="account-avatar">
+                    {classroomTeachers.owner.display_name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="list-copy">
+                    <strong>{classroomTeachers.owner.display_name}</strong>
+                    <small>Owner · @{classroomTeachers.owner.username}</small>
+                  </span>
+                </div>
+                {classroomTeachers.co_teachers.map((teacher) => (
+                  <div className="list-item" key={teacher.id}>
+                    <span className="account-avatar">
+                      {teacher.display_name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="list-copy">
+                      <strong>{teacher.display_name}</strong>
+                      <small>Co-teacher · @{teacher.username}</small>
+                    </span>
+                    {isOwner ? (
+                      <Button
+                        variant="ghost"
+                        disabled={busyId === `teacher:${teacher.id}`}
+                        onClick={async () => {
+                          setBusyId(`teacher:${teacher.id}`);
+                          setError("");
+                          try {
+                            await api.removeClassroomTeacher(classroomId, teacher.id);
+                            await Promise.all([load(), onUpdated()]);
+                          } catch (failure) {
+                            setError(
+                              failure instanceof Error
+                                ? failure.message
+                                : "Co-teacher could not be removed.",
+                            );
+                          } finally {
+                            setBusyId("");
+                          }
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {isOwner && availableTeachers.length ? (
+              <div className="co-teacher-add">
+                <Field label="Add co-teacher">
+                  <select
+                    value={teacherToAdd}
+                    onChange={(event) => setTeacherToAdd(event.target.value)}
+                  >
+                    <option value="">Choose a teacher</option>
+                    {availableTeachers.map((teacher) => (
+                      <option value={teacher.id} key={teacher.id}>
+                        {teacher.display_name} (@{teacher.username})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Button
+                  variant="primary"
+                  disabled={!teacherToAdd || Boolean(busyId)}
+                  onClick={async () => {
+                    setBusyId(`teacher:${teacherToAdd}`);
+                    setError("");
+                    try {
+                      await api.addClassroomTeacher(classroomId, teacherToAdd);
+                      setTeacherToAdd("");
+                      await Promise.all([load(), onUpdated()]);
+                    } catch (failure) {
+                      setError(
+                        failure instanceof Error
+                          ? failure.message
+                          : "Co-teacher could not be added.",
+                      );
+                    } finally {
+                      setBusyId("");
+                    }
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            ) : null}
+          </section>
+          <section hidden={section !== "students"}>
             <div className="manager-heading">
               <div>
                 <p className="eyebrow">Roster</p>
                 <h3>Students</h3>
               </div>
+              <div className="list-actions"><Button variant="primary" icon="plus" onClick={() => setCreatingStudent(true)}>New student</Button><Button onClick={() => setAddingStudents(!addingStudents)}>{addingStudents ? "Show enrolled students" : "Add existing students"}</Button></div>
             </div>
             <div className="roster-list">
-              {students.map((student) => {
+              {(addingStudents ? students.filter((student) => !enrolled.has(student.id)) : roster?.students ?? []).map((student) => {
                 const hasStudent = enrolled.has(student.id);
                 return (
                   <div className="list-item" key={student.id}>
@@ -1324,10 +1927,9 @@ function RosterModal({
                       <strong>{student.display_name}</strong>
                       <span>{student.username}</span>
                     </span>
-                    <Button
-                      variant={hasStudent ? "ghost" : "secondary"}
-                      disabled={busyId === student.id}
-                      onClick={async () => {
+                    <div className="list-actions">
+                      {hasStudent ? <Button variant="ghost" icon="edit" onClick={() => setEditingStudent(student)}>Edit</Button> : null}
+                      <Button variant={hasStudent ? "ghost" : "secondary"} disabled={busyId === student.id} onClick={async () => {
                         setBusyId(student.id);
                         setError("");
                         try {
@@ -1345,22 +1947,21 @@ function RosterModal({
                           setBusyId("");
                         }
                       }}
-                    >
-                      {hasStudent ? "Remove" : "Add"}
-                    </Button>
+                      >{hasStudent ? "Remove from classroom" : "Add"}</Button>
+                    </div>
                   </div>
                 );
               })}
-              {!students.length ? (
+              {(addingStudents ? students.filter((student) => !enrolled.has(student.id)).length === 0 : !roster?.students.length) ? (
                 <EmptyState
                   icon="students"
-                  title="No student accounts"
-                  description="Create student accounts first."
+                  title={addingStudents ? "No other student accounts" : "No students enrolled"}
+                  description={addingStudents ? "Every active student is already in this classroom." : "Create a student or add an existing account."}
                 />
               ) : null}
             </div>
           </section>
-          <section>
+          <section hidden={section !== "materials"}>
             <div className="manager-heading">
               <div>
                 <p className="eyebrow">Class library</p>
@@ -1459,7 +2060,7 @@ function RosterModal({
             )}
           </section>
         </div>
-      </Modal>
+      </div>
       {editing && roster ? (
         <ClassroomFormModal
           classroom={roster.classroom}
@@ -1471,6 +2072,9 @@ function RosterModal({
           }}
         />
       ) : null}
+      {creatingStudent && roster ? <CreateStudentModal classrooms={[roster.classroom]} onClose={() => setCreatingStudent(false)} onCreate={async (input) => { const result = await api.createStudent(input); setCreatingStudent(false); setCredentials(result); await Promise.all([load(), onUpdated()]); }} /> : null}
+      {editingStudent ? <EditStudentModal student={editingStudent} onClose={() => setEditingStudent(null)} onSave={async (input) => { await api.updateStudent(editingStudent.id, input); setEditingStudent(null); await Promise.all([load(), onUpdated()]); }} /> : null}
+      {credentials ? <StudentCredentialsModal credentials={credentials} onClose={() => setCredentials(null)} /> : null}
     </>
   );
 }
@@ -2176,18 +2780,39 @@ function GradeModal({
 
 function AttendanceView({
   api,
+  classrooms,
   onUpdated,
 }: {
   api: CinderApi;
+  classrooms: Classroom[];
   onUpdated: () => Promise<void>;
 }) {
+  const [classroomId, setClassroomId] = useState(classrooms[0]?.id ?? "");
   const [day, setDay] = useState(today());
   const [sheet, setSheet] = useState<AttendanceDay | null>(null);
   const [error, setError] = useState("");
-  const load = useCallback(
-    () => api.attendance(day).then(setSheet),
-    [api, day],
-  );
+  useEffect(() => {
+    if (!classroomId && classrooms[0]) setClassroomId(classrooms[0].id);
+    if (classroomId && !classrooms.some((room) => room.id === classroomId))
+      setClassroomId(classrooms[0]?.id ?? "");
+  }, [classroomId, classrooms]);
+  const load = useCallback(async () => {
+    if (!classroomId) {
+      setSheet(null);
+      return;
+    }
+    setError("");
+    try {
+      setSheet(await api.attendance(classroomId, day));
+    } catch (failure) {
+      setSheet(null);
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Attendance could not be loaded.",
+      );
+    }
+  }, [api, classroomId, day]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -2198,6 +2823,23 @@ function AttendanceView({
         title="Attendance"
         action={
           <div className="list-actions">
+            <select
+              aria-label="Classroom"
+              value={classroomId}
+              onChange={(event) => {
+                setClassroomId(event.target.value);
+                setSheet(null);
+                setError("");
+              }}
+              disabled={!classrooms.length}
+            >
+              {!classrooms.length ? <option value="">No classrooms</option> : null}
+              {classrooms.map((classroom) => (
+                <option value={classroom.id} key={classroom.id}>
+                  {classroom.name}
+                </option>
+              ))}
+            </select>
             <Button icon="refresh" onClick={() => void load()}>
               Refresh
             </Button>
@@ -2226,6 +2868,7 @@ function AttendanceView({
                   setError("");
                   try {
                     await api.saveAttendance(
+                      classroomId,
                       day,
                       record.student_id,
                       status,
@@ -2244,11 +2887,17 @@ function AttendanceView({
               />
             ))}
           </div>
-        ) : (
+        ) : classrooms.length ? (
           <EmptyState
             icon="attendance"
             title="Loading attendance"
             description="Preparing this day’s register."
+          />
+        ) : (
+          <EmptyState
+            icon="classrooms"
+            title="No classroom selected"
+            description="Create or join a teaching team before taking attendance."
           />
         )}
       </Panel>
@@ -2338,7 +2987,6 @@ function GradebookView({
   const [pendingActions, setPendingActions] = useState<GradebookAction[]>([]);
   const [includeNames, setIncludeNames] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(false);
   const gradebookRef = useRef<UniverGradebookHandle>(null);
   const roomAssignments = useMemo(
     () =>
@@ -2790,13 +3438,6 @@ function GradebookView({
         </div>
         <div className="page-action">
           <div className="list-actions">
-            <Button
-              icon="assistant"
-              variant={assistantOpen ? "primary" : "secondary"}
-              onClick={() => setAssistantOpen((current) => !current)}
-            >
-              AI assistant
-            </Button>
             <Button icon="refresh" onClick={() => void load()}>
               Refresh
             </Button>
@@ -2849,71 +3490,6 @@ function GradebookView({
           )}
           <div className="sheet-status">{savingCell ? "Saving audited grade…" : status}</div>
         </Panel>
-        <div className={`gradebook-assistant-overlay${assistantOpen ? " is-open" : ""}`}>
-        <Panel title="AI gradebook assistant" eyebrow="Review required">
-          <div className="gradebook-ai">
-            <p>{aiMessage}</p>
-            <label className="check-field">
-              <input
-                type="checkbox"
-                checked={includeNames}
-                onChange={(event) => setIncludeNames(event.target.checked)}
-              />
-              <span>Include student names in cloud AI context</span>
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Try: set C2 to 18, change F1 to Story Writing / 20, or give Ayaan full marks."
-            />
-            <Button
-              variant="primary"
-              icon="send"
-              onClick={() => void askAi()}
-              disabled={aiBusy || !prompt.trim()}
-            >
-              {aiBusy ? "Thinking…" : "Ask AI"}
-            </Button>
-            {pendingActions.length ? (
-              <div className="suggestion-review">
-                <strong>
-                  {pendingActions.length} proposed spreadsheet change(s)
-                </strong>
-                <p>
-                  Review every proposal below. Assignment headings update the
-                  classroom, scores use Cinder's audited grade record, and
-                  custom workbook cells remain local to this computer.
-                </p>
-                <ul className="suggestion-list">
-                  {pendingActions.map((action, index) => (
-                    <li key={`${action.type}-${index}`}>
-                      {describeGradebookAction(action, roster, roomAssignments)}
-                    </li>
-                  ))}
-                </ul>
-                <div className="list-actions">
-                  <Button
-                    variant="primary"
-                    onClick={() => void applySuggestions()}
-                    disabled={aiBusy}
-                  >
-                    {aiBusy ? "Applying…" : "Apply reviewed suggestions"}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      gradebookRef.current?.clearPreview();
-                      setPendingActions([]);
-                    }}
-                  >
-                    Discard
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </Panel>
-        </div>
       </div>
       {resetOpen ? (
         <Modal
@@ -5007,102 +5583,14 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
   );
 }
 
-function AiSettingsPanel({
-  api,
-  settings,
-  onSettings,
-}: {
-  api: CinderApi;
-  settings: AiSettings | null;
-  onSettings: (settings: AiSettings) => void;
-}) {
-  const [baseUrl, setBaseUrl] = useState("");
-  const [model, setModel] = useState("");
-  const [key, setKey] = useState("");
-  const [message, setMessage] = useState("");
-  useEffect(() => {
-    if (settings) {
-      setBaseUrl(settings.base_url ?? "");
-      setModel(settings.model);
-    }
-  }, [settings]);
-  return (
-    <Panel title="AI connection" eyebrow="Teacher only">
-      <form
-        className="form-stack"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          setMessage("");
-          try {
-            const next = await api.saveAiSettings({
-              base_url: baseUrl.trim() || undefined,
-              model: model.trim(),
-              api_key: key || undefined,
-            });
-            onSettings(next);
-            setKey("");
-            setMessage("Settings saved.");
-          } catch (failure) {
-            setMessage(
-              failure instanceof Error
-                ? failure.message
-                : "Settings could not be saved.",
-            );
-          }
-        }}
-      >
-        <Field label="API base URL">
-          <input
-            value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
-            placeholder="https://api.openai.com/v1"
-          />
-        </Field>
-        <Field label="Model">
-          <input
-            value={model}
-            onChange={(event) => setModel(event.target.value)}
-            placeholder="Model name"
-          />
-        </Field>
-        <Field
-          label="API key"
-          hint={
-            settings?.has_key
-              ? "A key is already stored. Leave blank to keep it."
-              : "Stored on the teacher machine only."
-          }
-        >
-          <input
-            type="password"
-            value={key}
-            onChange={(event) => setKey(event.target.value)}
-            autoComplete="off"
-          />
-        </Field>
-        {message ? (
-          <p
-            className={
-              message === "Settings saved." ? "form-success" : "form-error"
-            }
-          >
-            {message}
-          </p>
-        ) : null}
-        <Button variant="primary" type="submit" disabled={!model.trim()}>
-          Save AI settings
-        </Button>
-      </form>
-    </Panel>
-  );
-}
-
 function SettingsView({
   api,
   baseUrl,
   user,
   refreshing,
+  online,
   onRefresh,
+  onOpenConnection,
   onCurrentDeleted,
   onForgetAccount,
 }: {
@@ -5110,21 +5598,19 @@ function SettingsView({
   baseUrl: string;
   user: User;
   refreshing: boolean;
+  online: boolean;
   onRefresh: () => Promise<void>;
+  onOpenConnection: () => void;
   onCurrentDeleted: () => void;
   onForgetAccount: (username: string) => void;
 }) {
-  const { glass, glassMode, setGlassMode, recheckGlass } = useTheme();
   const [teachers, setTeachers] = useState<User[]>([]);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [invite, setInvite] = useState<TeacherInvitePin | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
   const [deleting, setDeleting] = useState<User | null>(null);
   const [password, setPassword] = useState("");
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountError, setAccountError] = useState("");
-  const [aiSettings, setAiSettings] = useState<AiSettings | null>(null);
-  useEffect(() => {
-    void api.aiSettings().then(setAiSettings);
-  }, [api]);
   const loadTeachers = useCallback(async () => {
     try {
       setTeachers(await api.teacherAccounts());
@@ -5144,31 +5630,35 @@ function SettingsView({
     <div className="page">
       <PageHeader
         eyebrow="Settings"
-        title="School server"
+        title="Teacher settings"
       />
       <div className="grid grid-2">
-        <Panel title="Local network" eyebrow="Student access">
+        <Panel title="Cinder Host" eyebrow="School connection">
           <dl className="detail-list">
             <div>
-              <dt>Teacher service</dt>
+              <dt>Server address</dt>
               <dd>{baseUrl}</dd>
-            </div>
-            <div>
-              <dt>Port</dt>
-              <dd>7373</dd>
             </div>
             <div>
               <dt>Status</dt>
               <dd>
-                <Badge tone="good">Running</Badge>
+                <Badge tone={online ? "good" : "warning"}>
+                  {online ? "Connected" : "Reconnecting"}
+                </Badge>
               </dd>
             </div>
           </dl>
-          <Button onClick={() => void onRefresh()} disabled={refreshing}>
-            {refreshing ? "Refreshing…" : "Refresh data"}
-          </Button>
+          <div className="list-actions">
+            <Button onClick={() => void onRefresh()} disabled={refreshing}>
+              {refreshing ? "Refreshing…" : "Refresh data"}
+            </Button>
+            <Button onClick={onOpenConnection}>Switch Cinder Host</Button>
+          </div>
         </Panel>
-        <Panel title="Teacher account" eyebrow="Security">
+        <Panel title="Appearance" eyebrow="Theme">
+          <ThemePicker />
+        </Panel>
+        <Panel title="Teacher accounts" eyebrow="Security">
           <div className="teacher-account-list">
             {teachers.map((teacher) => (
               <div className="list-item" key={teacher.id}>
@@ -5182,71 +5672,63 @@ function SettingsView({
                     {teacher.id === user.id ? " · signed in" : ""}
                   </small>
                 </div>
-                <Button
-                  variant="danger"
-                  disabled={teachers.length <= 1}
-                  onClick={() => {
-                    setDeleting(teacher);
-                    setPassword("");
-                    setAccountError("");
-                  }}
-                >
-                  Delete
-                </Button>
+                {teacher.id === user.id ? (
+                  <Button
+                    variant="danger"
+                    onClick={() => {
+                      setDeleting(teacher);
+                      setPassword("");
+                      setAccountError("");
+                    }}
+                  >
+                    Delete my account
+                  </Button>
+                ) : null}
               </div>
             ))}
           </div>
           {accountError && !deleting ? (
             <p className="form-error">{accountError}</p>
           ) : null}
-          <Button variant="primary" onClick={() => setCreateOpen(true)}>
-            Create teacher account
+          {invite ? (
+            <div className="credential-box teacher-invite-box">
+              <span>Teacher invite PIN</span>
+              <code className="credential-code">{invite.invite_pin}</code>
+              <small>Expires {formatDate(invite.expires_at)}. It works once.</small>
+            </div>
+          ) : null}
+          <Button
+            variant="primary"
+            disabled={inviteBusy}
+            onClick={async () => {
+              setInviteBusy(true);
+              setAccountError("");
+              try {
+                setInvite(await api.generateTeacherInvite());
+              } catch (failure) {
+                setAccountError(
+                  failure instanceof Error
+                    ? failure.message
+                    : "An invite PIN could not be generated.",
+                );
+              } finally {
+                setInviteBusy(false);
+              }
+            }}
+          >
+            {inviteBusy
+              ? "Generating…"
+              : invite
+                ? "Rotate teacher invite PIN"
+                : "Generate teacher invite PIN"}
           </Button>
           <p className="form-hint">
-            A signed-in teacher can add another teacher without entering a
-            recovery code. Cinder will still create a new backup recovery code
-            for that account.
+            Give the eight-digit PIN to the new teacher. It expires after 15
+            minutes; generating another PIN retires the previous one.
           </p>
-        </Panel>
-        <AiSettingsPanel api={api} settings={aiSettings} onSettings={setAiSettings} />
-        <Panel title="Effects" eyebrow="Appearance">
-          <dl className="detail-list">
-            <div>
-              <dt>Glass rendering</dt>
-              <dd>
-                <Badge tone={glass === "on" ? "good" : "neutral"}>
-                  {glass === "on" ? "On" : "Flat (fallback)"}
-                </Badge>
-              </dd>
-            </div>
-          </dl>
-          <Field
-            label="Mode"
-            hint="Auto measures this computer's paint speed and picks the cheaper look automatically on slow hardware."
-          >
-            <select
-              value={glassMode}
-              onChange={(event) =>
-                setGlassMode(event.target.value as "auto" | "on" | "off")
-              }
-            >
-              <option value="auto">Auto</option>
-              <option value="on">On</option>
-              <option value="off">Off</option>
-            </select>
-          </Field>
-          <Button onClick={recheckGlass}>Re-check performance</Button>
         </Panel>
         <AppUpdater appName="Cinder Teacher" />
       </div>
-      {createOpen ? (
-        <TeacherAccountModal
-          api={api}
-          authenticated
-          onCreated={() => void loadTeachers()}
-          onClose={() => setCreateOpen(false)}
-        />
-      ) : null}
       {deleting ? (
         <Modal
           title={`Delete ${deleting.display_name}?`}
@@ -5307,19 +5789,15 @@ function SettingsView({
 function TeacherAccountModal({
   api,
   onClose,
-  authenticated = false,
-  onCreated,
 }: {
   api: CinderApi;
   onClose: () => void;
-  authenticated?: boolean;
-  onCreated?: () => void;
 }) {
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [schoolCode, setSchoolCode] = useState("");
+  const [invitePin, setInvitePin] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -5329,7 +5807,7 @@ function TeacherAccountModal({
       <Modal title="Teacher account created" description="Save this new teacher's recovery code now." onClose={onClose}>
         <div className="form-stack">
           <div className="credential-box"><span>Recovery code</span><code className="credential-code">{recoveryCode}</code></div>
-          <p className="form-hint">It is shown once and can reset this teacher's password or authorize another teacher account.</p>
+          <p className="form-hint">It is shown once and can reset this teacher's password.</p>
           <Button variant="primary" onClick={onClose}>Done</Button>
         </div>
       </Modal>
@@ -5337,12 +5815,8 @@ function TeacherAccountModal({
   }
   return (
     <Modal
-      title="Create teacher account"
-      description={
-        authenticated
-          ? "The signed-in teacher authorizes this new school account."
-          : "A current school recovery code is required so students cannot create teacher accounts."
-      }
+      title="Join an existing school"
+      description="Use the eight-digit invite PIN generated by a signed-in teacher."
       onClose={onClose}
     >
       <form className="form-stack" onSubmit={async (event) => {
@@ -5351,16 +5825,13 @@ function TeacherAccountModal({
         if (password !== confirm) return setError("The passwords do not match.");
         setBusy(true); setError("");
         try {
-          const result = authenticated
-            ? await api.createTeacher(username, displayName, password)
-            : await api.registerTeacher(
-                username,
-                displayName,
-                password,
-                schoolCode,
-              );
+          const result = await api.registerTeacher(
+            username,
+            displayName,
+            password,
+            invitePin,
+          );
           setRecoveryCode(result.recovery_code);
-          onCreated?.();
         } catch (failure) {
           setError(failure instanceof Error ? failure.message : "Account could not be created.");
         } finally { setBusy(false); }
@@ -5369,11 +5840,19 @@ function TeacherAccountModal({
         <Field label="Username"><input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" /></Field>
         <Field label="Password" hint="At least 8 characters"><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" /></Field>
         <Field label="Confirm password"><input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></Field>
-        {!authenticated ? (
-          <Field label="School recovery code" hint="Use any active teacher's saved recovery code."><input type="password" value={schoolCode} onChange={(e) => setSchoolCode(e.target.value)} /></Field>
-        ) : null}
+        <Field label="Teacher invite PIN" hint="Eight digits, valid for 15 minutes and one registration.">
+          <input
+            value={invitePin}
+            onChange={(event) =>
+              setInvitePin(event.target.value.replace(/\D/g, "").slice(0, 8))
+            }
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={8}
+          />
+        </Field>
         {error ? <p className="form-error">{error}</p> : null}
-        <Button variant="primary" type="submit" disabled={busy || !displayName.trim() || !username.trim() || !password || (!authenticated && !schoolCode.trim())}>{busy ? "Creating…" : "Create account"}</Button>
+        <Button variant="primary" type="submit" disabled={busy || !displayName.trim() || !username.trim() || !password || invitePin.length !== 8}>{busy ? "Creating…" : "Join school"}</Button>
       </form>
     </Modal>
   );

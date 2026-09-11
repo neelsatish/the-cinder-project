@@ -2,6 +2,8 @@ node_modules/
 target/
 tmp/
 apps/*/dist/
+/apps/forge/.edge-profile*/
+/apps/forge/.tauri-codex-dev.json
 *.log
 *.tsbuildinfo
 .env
@@ -9,3 +11,4 @@ apps/*/dist/
 !.env.example
 .tauri-signing/
 graphify-out/
+/artifacts/audio-build/

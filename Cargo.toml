@@ -6,10 +6,12 @@ members = [
     "crates/ai",
     "apps/student/src-tauri",
     "apps/teacher/src-tauri",
+    "apps/forge/src-tauri",
+    "apps/host/src-tauri",
 ]
 
 [workspace.package]
-version = "0.9.8"
+version = "0.10.0"
 edition = "2021"
 rust-version = "1.77"
 license = "Apache-2.0"
@@ -36,7 +38,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # `bundled` compiles SQLite from source with FTS5/JSON1 enabled. This is deliberate:
 # the Debian 12 system libsqlite3 on a recovered PC may lack FTS5, and we cannot
 # rely on internet access to fix that in the field.
-rusqlite = { version = "0.32", features = ["bundled", "chrono", "uuid"] }
+rusqlite = { version = "0.32", features = ["bundled", "chrono", "uuid", "backup"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.25"
 

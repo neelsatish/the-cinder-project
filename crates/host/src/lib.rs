@@ -108,7 +108,9 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::dashboard::router())
         .merge(routes::tree::router())
         .merge(routes::notes::router())
+        .merge(routes::quizzes::router())
         .merge(routes::files::router())
+        .merge(routes::live_sessions::router())
         .merge(routes::ai::router())
         // Uploads are capped in the handler, but the body limit has to be raised
         // here too or axum rejects a large scan before the handler ever runs.
@@ -169,6 +171,19 @@ pub fn bind(addr: SocketAddr) -> Result<std::net::TcpListener> {
 
 /// Serves on an already-bound listener until the process is asked to stop.
 pub async fn serve_on(state: AppState, listener: std::net::TcpListener) -> Result<()> {
+    serve_on_with_shutdown(state, listener, shutdown_signal()).await
+}
+
+/// Serves on an already-bound listener until the supplied shutdown future
+/// resolves. The desktop Host uses this; the standalone CLI keeps Ctrl+C.
+pub async fn serve_on_with_shutdown<F>(
+    state: AppState,
+    listener: std::net::TcpListener,
+    shutdown: F,
+) -> Result<()>
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
     let listener =
         tokio::net::TcpListener::from_std(listener).context("adopting the bound listener")?;
 
@@ -179,7 +194,7 @@ pub async fn serve_on(state: AppState, listener: std::net::TcpListener) -> Resul
         listener,
         router(state).into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .with_graceful_shutdown(shutdown_signal())
+    .with_graceful_shutdown(shutdown)
     .await
     .context("serving")?;
 

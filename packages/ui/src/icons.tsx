@@ -15,6 +15,8 @@ import {
   GearSix,
   House,
   MagnifyingGlass,
+  Microphone,
+  MicrophoneSlash,
   Moon,
   Note,
   PaperPlaneTilt,
@@ -64,7 +66,9 @@ export type IconName =
   | "download"
   | "moon"
   | "sun"
-  | "popout";
+  | "popout"
+  | "mic"
+  | "mic-off";
 
 const components: Record<IconName, PhosphorIcon> = {
   dashboard: SquaresFour,
@@ -97,6 +101,8 @@ const components: Record<IconName, PhosphorIcon> = {
   moon: Moon,
   sun: Sun,
   popout: ArrowSquareOut,
+  mic: Microphone,
+  "mic-off": MicrophoneSlash,
 };
 
 export function Icon({
@@ -107,12 +113,31 @@ export function Icon({
   return <Component weight="regular" color="currentColor" aria-hidden="true" {...props} />;
 }
 
-export function BrandMark({ size = 34 }: { size?: number }) {
+// Dark scheme (on Ground): Char/Warm/Spark tips, on an opaque Ground plate.
+// Light scheme (on Paper): Ash/Ember/Spark tips, no plate — see
+// design/brand/cinder-mark-ember-reduced-light.svg, which this mirrors exactly.
+const BRAND_MARK_STOPS = {
+  dark: {
+    outer: ["#A5602E", "#6E3216"],
+    mid: ["#F0A15C", "#DD8B36"],
+    core: ["#FFC78A", "#D9631F"],
+    dot: ["#FFB566", "#6E3216"],
+  },
+  light: {
+    outer: ["#8A3A16", "#2E160A"],
+    mid: ["#E8792E", "#B24E17"],
+    core: ["#FFB566", "#D9631F"],
+    dot: ["#FFA53D", "#2E160A"],
+  },
+} as const;
+
+export function BrandMark({ size = 34, scheme = "dark" }: { size?: number; scheme?: "light" | "dark" }) {
   const gradientId = useId();
   const outerGradient = `${gradientId}-outer`;
   const midGradient = `${gradientId}-mid`;
   const coreGradient = `${gradientId}-core`;
   const dotGradient = `${gradientId}-dot`;
+  const stops = BRAND_MARK_STOPS[scheme];
 
   return (
     <svg
@@ -124,23 +149,23 @@ export function BrandMark({ size = 34 }: { size?: number }) {
     >
       <defs>
         <linearGradient id={outerGradient} x1="0" y1="0" x2="20" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#A5602E" />
-          <stop offset="1" stopColor="#6E3216" />
+          <stop offset="0" stopColor={stops.outer[0]} />
+          <stop offset="1" stopColor={stops.outer[1]} />
         </linearGradient>
         <linearGradient id={midGradient} x1="0" y1="0" x2="26" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#F0A15C" />
-          <stop offset="1" stopColor="#DD8B36" />
+          <stop offset="0" stopColor={stops.mid[0]} />
+          <stop offset="1" stopColor={stops.mid[1]} />
         </linearGradient>
         <linearGradient id={coreGradient} x1="0" y1="0" x2="33" y2="0" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#FFC78A" />
-          <stop offset="1" stopColor="#D9631F" />
+          <stop offset="0" stopColor={stops.core[0]} />
+          <stop offset="1" stopColor={stops.core[1]} />
         </linearGradient>
         <radialGradient id={dotGradient} cx="0" cy="-2" r="5" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#FFB566" />
-          <stop offset="1" stopColor="#6E3216" />
+          <stop offset="0" stopColor={stops.dot[0]} />
+          <stop offset="1" stopColor={stops.dot[1]} />
         </radialGradient>
       </defs>
-      <rect width="64" height="64" rx="14" fill="#221309" />
+      {scheme === "dark" && <rect width="64" height="64" rx="14" fill="#221309" />}
       <g transform="translate(32 49)">
         <g fill={`url(#${outerGradient})`}>
           <path d="M0 0 Q6.4 -6.9 20 0 Q10 3 0 0 Z" transform="rotate(-161)" />

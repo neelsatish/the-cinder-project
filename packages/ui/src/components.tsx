@@ -2,8 +2,14 @@ import type { ButtonHTMLAttributes, FormEvent, ReactNode } from "react";
 import { useState } from "react";
 
 import { BrandMark, Icon, type IconName } from "./icons";
-import { ThemeToggle } from "./theme";
+import { useTheme, type CinderTheme } from "./theme";
 import type { Role, User } from "./types";
+
+const THEME_OPTIONS: { id: CinderTheme; label: string; description: string }[] = [
+  { id: "light", label: "Light", description: "Clean and calm for everyday work." },
+  { id: "dark", label: "Dark", description: "Low glare with warm Cinder accents." },
+  { id: "paper", label: "Paper", description: "Printed texture, hard ink and bold colour." },
+];
 
 export type NavigationItem<T extends string> = {
   id: T;
@@ -36,11 +42,13 @@ export function AppShell<T extends string>({
   children: ReactNode;
 }) {
   const activeItem = items.find((item) => item.id === active);
+  const isTeacher = roleLabel === "Teacher";
   return (
-    <div className="app-frame">
+    <div className={`app-frame${isTeacher ? " teacher-shell" : ""}`}>
       <aside className="nav-rail">
         <div className="rail-brand">
           <BrandMark size={38} />
+          {isTeacher ? <strong className="rail-brand-copy">Cinder Teacher</strong> : null}
         </div>
         <nav className="rail-nav" aria-label={`${roleLabel} navigation`}>
           {items.map((item) => (
@@ -54,6 +62,7 @@ export function AppShell<T extends string>({
               aria-current={active === item.id ? "page" : undefined}
             >
               <Icon name={item.icon} />
+              {isTeacher ? <span className="rail-label">{item.label}</span> : null}
               {item.badge ? (
                 <span className="rail-badge">{item.badge}</span>
               ) : null}
@@ -67,6 +76,7 @@ export function AppShell<T extends string>({
           title="Sign out"
         >
           <Icon name="logout" />
+          {isTeacher ? <span className="rail-label">Sign out</span> : null}
         </button>
       </aside>
 
@@ -78,7 +88,6 @@ export function AppShell<T extends string>({
             <span className="section-name">{activeItem?.label}</span>
           </div>
           <div className="topbar-actions">
-            <ThemeToggle className="topbar-theme" />
             {onRefresh ? (
               <button
                 className={`topbar-refresh ${refreshing ? "is-refreshing" : ""}`}
@@ -207,6 +216,30 @@ export function Button({
   );
 }
 
+export function ThemePicker() {
+  const { theme, setTheme } = useTheme();
+  return (
+    <div className="theme-picker" role="radiogroup" aria-label="Colour theme">
+      {THEME_OPTIONS.map((option) => (
+        <button
+          className={theme === option.id ? "is-selected" : ""}
+          type="button"
+          role="radio"
+          aria-checked={theme === option.id}
+          key={option.id}
+          onClick={() => setTheme(option.id)}
+        >
+          <span className={`theme-preview theme-preview-${option.id}`} aria-hidden="true">
+            <i /><i /><i />
+          </span>
+          <strong>{option.label}</strong>
+          <small>{option.description}</small>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Field({
   label,
   hint,
@@ -331,7 +364,6 @@ export function LoginScreen({
 
   return (
     <div className="auth-screen">
-      <ThemeToggle className="auth-theme-toggle" />
       <div className="auth-visual">
         <BrandMark size={64} />
         <p className="eyebrow">Learning, clearly organised</p>

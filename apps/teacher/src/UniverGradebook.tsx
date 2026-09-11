@@ -279,7 +279,7 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
       if (!containerRef.current) return;
       const { univer, univerAPI } = createSheetUniver(
         containerRef.current,
-        theme !== "light",
+        theme === "dark",
       );
       setDarkModeRef.current = (darkMode) => univerAPI.toggleDarkMode(darkMode);
       const workbook = univerAPI.createWorkbook(workbookData(propsRef.current));
@@ -780,7 +780,7 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
     }, [props.classroomId]);
 
     useEffect(() => {
-      setDarkModeRef.current(theme !== "light");
+      setDarkModeRef.current(theme === "dark");
     }, [theme]);
 
     useEffect(() => {

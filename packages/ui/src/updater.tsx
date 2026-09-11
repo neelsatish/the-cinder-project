@@ -61,7 +61,7 @@ export function AppUpdater({ appName }: { appName: string }) {
       setStatus(
         next
           ? `${appName} ${next.version} is ready to install.`
-          : "You have the latest version.",
+          : "No newer signed release was found.",
       );
     } catch (failure) {
       const detail = failure instanceof Error

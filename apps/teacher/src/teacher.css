@@ -10,14 +10,48 @@
   width: 58px;
   height: 58px;
 }
-.teacher-recovery-button {
+.teacher-connection-button {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  border: 0;
-  background: transparent;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--muted);
   cursor: pointer;
+}
+.teacher-auth-actions {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.teacher-auth-actions button,
+.host-list button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.teacher-auth-actions button:hover,
+.host-list button:hover {
+  border-color: var(--primary);
+  color: var(--text);
+}
+.host-list {
+  display: grid;
+  gap: 7px;
+}
+.host-list button {
+  width: 100%;
+  text-align: left;
 }
 .setup-screen {
   width: 100%;
@@ -113,6 +147,62 @@
 .manager-heading h3 {
   margin: 4px 0 0;
   font-size: 15px;
+}
+.subject-card > .badge {
+  align-self: flex-start;
+}
+.subject-card > .badge + .badge {
+  margin-top: 6px;
+}
+.subject-card > small {
+  display: block;
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.classroom-identity {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0 0;
+}
+.classroom-identity > div {
+  display: grid;
+  gap: 4px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-lowest);
+}
+.classroom-identity dt,
+.classroom-identity dd {
+  margin: 0;
+}
+.classroom-identity dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+.classroom-identity code {
+  color: var(--primary);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.classroom-teacher-list {
+  margin-bottom: 12px;
+}
+.co-teacher-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+.teacher-invite-box {
+  margin-bottom: 12px;
+}
+.teacher-invite-box small {
+  display: block;
+  color: var(--muted);
 }
 .upload-button {
   position: relative;
@@ -1057,6 +1147,20 @@
   .paper-editor-panel { min-height: 720px !important; }
 }
 
+@media (max-width: 720px) {
+  .teacher-auth-actions {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .classroom-identity,
+  .co-teacher-add {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media print {
   @page {
     size: A4;
@@ -1160,3 +1264,114 @@
     height: 13pt;
   }
 }
+.teacher-shell .nav-rail {
+  width: 222px;
+  flex-basis: 222px;
+  align-items: stretch;
+  border-right: 1px solid var(--border);
+  background: var(--surface-lowest);
+}
+.teacher-shell .rail-brand {
+  height: 72px;
+  display: flex;
+  justify-content: flex-start;
+  gap: 11px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+}
+.teacher-shell .rail-brand-copy {
+  font-size: 14px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.teacher-shell .rail-nav {
+  align-items: stretch;
+  gap: 5px;
+  padding: 38px 16px 24px;
+}
+.teacher-shell .rail-button {
+  width: 100%;
+  height: 43px;
+  display: flex;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 500;
+}
+.teacher-shell .rail-button svg {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+}
+.teacher-shell .rail-button:hover {
+  background: var(--surface-raised);
+  transform: translateX(2px);
+}
+.teacher-shell .rail-button.is-active {
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--primary-ink);
+  box-shadow: none;
+}
+.teacher-shell .rail-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.teacher-shell .rail-badge {
+  right: 8px;
+  top: 5px;
+}
+.teacher-shell .rail-logout {
+  width: calc(100% - 32px);
+  margin: auto 16px 16px;
+}
+.teacher-shell .topbar {
+  height: 72px;
+  flex-basis: 72px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  backdrop-filter: none;
+}
+.teacher-shell .workspace {
+  padding: 24px;
+  background: var(--background);
+}
+.teacher-shell .panel,
+.teacher-shell .metric-card,
+.teacher-shell .subject-card {
+  border-width: 1px;
+}
+.teacher-shell .button {
+  border-width: 1px;
+  box-shadow: none;
+}
+.teacher-shell .button:active {
+  transform: translateY(1px);
+}
+.live-classroom-page,
+.live-classroom-stack { display: grid; gap: 16px; }
+.live-status-panel { display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)) auto; align-items: end; gap: 20px; }
+.live-status-panel p { margin: 0 0 6px; }
+.live-status-panel strong { font-size: 24px; }
+.live-code,
+.live-countdown { font-family: "Cascadia Mono", Consolas, monospace; letter-spacing: .08em; }
+.live-current-task { display: grid; gap: 6px; margin-bottom: 18px; padding: 14px; border: 2px solid var(--border); background: var(--surface-raised); }
+.live-current-task span,
+.live-current-task p { margin: 0; color: var(--text-soft); }
+@media (max-width: 900px) { .live-status-panel { grid-template-columns: 1fr 1fr; } }
+.classroom-tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--border, #ddd); padding-bottom: 12px; }
+.classroom-workspace .classroom-manager { width: 100%; max-width: none; }
+.classroom-workspace [hidden] { display: none !important; }
+:root[data-theme="paper"] .teacher-shell .nav-rail { border-right-width: 2px; }
+:root[data-theme="paper"] .teacher-shell .rail-button.is-active { border: 2px solid var(--border); box-shadow: 3px 3px 0 var(--border); }
+:root[data-theme="paper"] .teacher-shell .workspace { background-size: 5px 5px; }
+:root[data-theme="paper"] .teacher-shell .panel,
+:root[data-theme="paper"] .teacher-shell .metric-card,
+:root[data-theme="paper"] .teacher-shell .subject-card { border-width: 2px; box-shadow: 4px 4px 0 color-mix(in srgb, var(--border) 14%, transparent); }
+:root[data-theme="paper"] .teacher-shell .button { border-width: 2px; box-shadow: 2px 2px 0 var(--border); }
+:root[data-theme="paper"] .teacher-shell .button:active { box-shadow: none; transform: translate(2px, 2px); }

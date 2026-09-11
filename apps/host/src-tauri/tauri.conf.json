@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Cinder Host",
+  "version": "0.10.0",
+  "identifier": "org.cinder.host",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5175",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{
+      "title": "Cinder Host", "width": 1280, "height": 820,
+      "minWidth": 960, "minHeight": 640, "resizable": true
+    }],
+    "security": { "csp": "default-src 'self'; img-src 'self' data: blob:; frame-src blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost https:;" }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "category": "Education",
+    "publisher": "The Cinder Project",
+    "copyright": "Copyright 2026 The Cinder Project. Licensed under Apache-2.0.",
+    "homepage": "https://github.com/neelsatish/the-cinder-project",
+    "licenseFile": "../../../LICENSE",
+    "shortDescription": "Run and manage a Cinder school server",
+    "longDescription": "Run the local Cinder school server, manage accounts and stored files, and create verified backups.",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png", "icons/icon.ico"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkwNTMxQUYzMTkwM0VBNUEKUldSYTZnTVo4eHBUa0lia0tkaGxCcllYa0N5U3JQNnduSzlXQ1YyaEtLUkZzVC9paS9XZGhrV0QK",
+      "endpoints": [
+        "https://raw.githubusercontent.com/neelsatish/the-cinder-project/updater-feed/host-latest.json?installed={{current_version}}",
+        "https://github.com/neelsatish/the-cinder-project/releases/latest/download/host-latest.json"
+      ]
+    }
+  }
+}

@@ -1,7 +1,7 @@
 //! Assignments, versioned submissions, comments, and auditable grades.
 
 use axum::extract::{Path, Query, State};
-use axum::routing::{get, post, put};
+use axum::routing::{get, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use cinder_core::{
@@ -15,7 +15,11 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::error::{HostError, HostResult};
+use crate::routes::classrooms::require_teacher_access;
 use crate::AppState;
+
+const MAX_SUBMISSION_DOCUMENT_BYTES: usize = 2 * 1024 * 1024;
+const MAX_SUBMISSION_PLAINTEXT_BYTES: usize = 1024 * 1024;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -65,9 +69,15 @@ async fn list_assignments(
                    FROM assignments a JOIN classrooms c ON c.id = a.classroom_id",
             );
             if teacher {
-                sql.push_str(" WHERE a.archived_at IS NULL AND c.archived_at IS NULL");
+                sql.push_str(
+                    " WHERE a.archived_at IS NULL AND c.archived_at IS NULL
+                      AND (c.owner_teacher_id = ?1 OR EXISTS(
+                          SELECT 1 FROM classroom_teachers ct
+                           WHERE ct.classroom_id = c.id AND ct.teacher_id = ?1
+                      ))",
+                );
                 if query.classroom_id.is_some() {
-                    sql.push_str(" AND a.classroom_id = ?1");
+                    sql.push_str(" AND a.classroom_id = ?2");
                 }
             } else {
                 sql.push_str(
@@ -84,10 +94,10 @@ async fn list_assignments(
             let mut stmt = conn.prepare(&sql)?;
             let rows = match (teacher, query.classroom_id) {
                 (true, Some(id)) => stmt
-                    .query_map([id.to_string()], assignment_row)?
+                    .query_map(rusqlite::params![user_id, id.to_string()], assignment_row)?
                     .collect::<Result<Vec<_>, _>>()?,
                 (true, None) => stmt
-                    .query_map([], assignment_row)?
+                    .query_map([user_id], assignment_row)?
                     .collect::<Result<Vec<_>, _>>()?,
                 (false, Some(id)) => stmt
                     .query_map(rusqlite::params![user_id, id.to_string()], assignment_row)?
@@ -108,6 +118,7 @@ async fn create_assignment(
     Json(req): Json<CreateAssignmentRequest>,
 ) -> HostResult<Json<Assignment>> {
     teacher.require_teacher()?;
+    let teacher_id = teacher.id();
     state
         .db(move |conn| {
             if req.title.trim().is_empty() {
@@ -120,6 +131,7 @@ async fn create_assignment(
                     "Maximum points must be zero or greater.".into(),
                 ));
             }
+            require_teacher_access(conn, req.classroom_id, teacher_id)?;
             let classroom_name: String = conn
                 .query_row(
                     "SELECT name FROM classrooms WHERE id = ?1 AND archived_at IS NULL",
@@ -193,9 +205,26 @@ async fn update_assignment(
     Json(req): Json<UpdateAssignmentRequest>,
 ) -> HostResult<Json<Assignment>> {
     teacher.require_teacher()?;
+    let teacher_id = teacher.id();
     state
         .db(move |conn| {
-            load_assignment(conn, id)?;
+            let existing = load_assignment(conn, id)?;
+            require_teacher_access(conn, existing.classroom_id, teacher_id)?;
+            let has_submissions = if req.classroom_id == existing.classroom_id {
+                false
+            } else {
+                conn.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM submissions WHERE assignment_id = ?1)",
+                    [id.to_string()],
+                    |row| row.get(0),
+                )?
+            };
+            validate_classroom_change(
+                existing.classroom_id,
+                existing.status,
+                req.classroom_id,
+                has_submissions,
+            )?;
             if req.title.trim().is_empty() {
                 return Err(HostError::BadRequest(
                     "Assignment title is required.".into(),
@@ -226,6 +255,7 @@ async fn update_assignment(
             if !classroom_exists {
                 return Err(HostError::NotFound("classroom"));
             }
+            require_teacher_access(conn, req.classroom_id, teacher_id)?;
             let grading_json = serde_json::to_string(&req.grading_scheme).map_err(|error| {
                 HostError::BadRequest(format!("Invalid grading scheme: {error}"))
             })?;
@@ -257,9 +287,11 @@ async fn delete_assignment(
     Path(id): Path<Uuid>,
 ) -> HostResult<Json<serde_json::Value>> {
     teacher.require_teacher()?;
+    let teacher_id = teacher.id();
     state
         .db(move |conn| {
-            load_assignment(conn, id)?;
+            let assignment = load_assignment(conn, id)?;
+            require_teacher_access(conn, assignment.classroom_id, teacher_id)?;
             let changed = conn.execute(
                 "UPDATE assignments
                     SET archived_at = ?2, status = 'closed', updated_at = ?2
@@ -283,6 +315,7 @@ async fn submit_work(
     if student.0.role.is_teacher() {
         return Err(HostError::Forbidden);
     }
+    let doc_json = validate_submission_payload(&req)?;
     let student_id = student.id();
     state
         .db(move |conn| {
@@ -316,9 +349,6 @@ async fn submit_work(
                 |row| row.get(0),
             )?;
             let version_id = Uuid::new_v4();
-            let doc_json = serde_json::to_string(&req.doc_json)
-                .map_err(|error| HostError::BadRequest(format!("Invalid document: {error}")))?;
-
             let tx = conn.transaction()?;
             tx.execute(
                 "INSERT INTO submissions
@@ -432,7 +462,8 @@ async fn list_submissions(
     teacher.require_teacher()?;
     state
         .db(move |conn| {
-            load_assignment(conn, assignment_id)?;
+            let assignment = load_assignment(conn, assignment_id)?;
+            assert_assignment_visible(conn, &teacher, &assignment)?;
             let mut stmt = conn.prepare(
                 "SELECT id FROM submissions
                   WHERE assignment_id = ?1 AND status <> 'withdrawn'
@@ -470,6 +501,7 @@ async fn save_grade(
     let teacher_id = teacher.id();
     state
         .db(move |conn| {
+            assert_submission_visible(conn, submission_id, &teacher)?;
             let assignment_max: f64 = conn
                 .query_row(
                     "SELECT a.max_points
@@ -695,6 +727,7 @@ async fn grade_history(
     teacher.require_teacher()?;
     state
         .db(move |conn| {
+            assert_submission_visible(conn, submission_id, &teacher)?;
             let mut stmt = conn.prepare(
                 "SELECT h.id, h.previous_json, h.current_json, h.changed_at
                    FROM grade_changes h JOIN grades g ON g.id = h.grade_id
@@ -778,7 +811,7 @@ fn assert_assignment_visible(
     assignment: &Assignment,
 ) -> HostResult<()> {
     if user.0.role.is_teacher() {
-        return Ok(());
+        return require_teacher_access(conn, assignment.classroom_id, user.id());
     }
     if assignment.status == AssignmentStatus::Draft {
         return Err(HostError::Forbidden);
@@ -786,7 +819,11 @@ fn assert_assignment_visible(
     assert_enrolled(conn, assignment.classroom_id, user.id())
 }
 
-fn assert_enrolled(conn: &rusqlite::Connection, classroom: Uuid, student: Uuid) -> HostResult<()> {
+pub(crate) fn assert_enrolled(
+    conn: &rusqlite::Connection,
+    classroom: Uuid,
+    student: Uuid,
+) -> HostResult<()> {
     let enrolled: bool = conn.query_row(
         "SELECT EXISTS(
             SELECT 1 FROM classroom_enrolments WHERE classroom_id = ?1 AND student_id = ?2
@@ -807,16 +844,17 @@ fn assert_submission_visible(
     user: &CurrentUser,
 ) -> HostResult<()> {
     if user.0.role.is_teacher() {
-        let exists: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM submissions WHERE id = ?1)",
-            [submission_id.to_string()],
-            |row| row.get(0),
-        )?;
-        return if exists {
-            Ok(())
-        } else {
-            Err(HostError::NotFound("submission"))
-        };
+        let classroom_id = conn
+            .query_row(
+                "SELECT a.classroom_id
+               FROM submissions s JOIN assignments a ON a.id = s.assignment_id
+              WHERE s.id = ?1",
+                [submission_id.to_string()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .ok_or(HostError::NotFound("submission"))?;
+        return require_teacher_access(conn, parse_uuid(&classroom_id, "classroom")?, user.id());
     }
     let owner: Option<String> = conn
         .query_row(
@@ -963,4 +1001,123 @@ fn parse_time(value: &str) -> HostResult<DateTime<Utc>> {
     value
         .parse()
         .map_err(|error| HostError::Other(anyhow::anyhow!("bad timestamp: {error}")))
+}
+
+fn validate_submission_payload(req: &SubmitWorkRequest) -> HostResult<String> {
+    if req.plaintext.len() > MAX_SUBMISSION_PLAINTEXT_BYTES {
+        return Err(HostError::BadRequest(
+            "The submission text is too large.".into(),
+        ));
+    }
+    let doc_json = serde_json::to_string(&req.doc_json)
+        .map_err(|error| HostError::BadRequest(format!("Invalid document: {error}")))?;
+    if doc_json.len() > MAX_SUBMISSION_DOCUMENT_BYTES {
+        return Err(HostError::BadRequest(
+            "The submission document is too large.".into(),
+        ));
+    }
+    let Some(document) = req.doc_json.as_object() else {
+        return Err(HostError::BadRequest(
+            "The submission document must be a ProseMirror document.".into(),
+        ));
+    };
+    if document.get("type").and_then(serde_json::Value::as_str) != Some("doc")
+        || !document
+            .get("content")
+            .is_some_and(serde_json::Value::is_array)
+    {
+        return Err(HostError::BadRequest(
+            "The submission document must contain a doc root and content array.".into(),
+        ));
+    }
+    Ok(doc_json)
+}
+
+fn validate_classroom_change(
+    current: Uuid,
+    status: AssignmentStatus,
+    requested: Uuid,
+    has_submissions: bool,
+) -> HostResult<()> {
+    if requested != current && (status != AssignmentStatus::Draft || has_submissions) {
+        Err(HostError::BadRequest(
+            "A published or submitted assignment cannot move to another classroom.".into(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        validate_classroom_change, validate_submission_payload, MAX_SUBMISSION_DOCUMENT_BYTES,
+        MAX_SUBMISSION_PLAINTEXT_BYTES,
+    };
+    use cinder_core::{AssignmentStatus, SubmitWorkRequest};
+    use serde_json::json;
+    use uuid::Uuid;
+
+    #[test]
+    fn only_unsubmitted_drafts_can_move_between_classrooms() {
+        let first = Uuid::new_v4();
+        let second = Uuid::new_v4();
+        assert!(validate_classroom_change(first, AssignmentStatus::Draft, second, false).is_ok());
+        assert!(
+            validate_classroom_change(first, AssignmentStatus::Published, second, false).is_err()
+        );
+        assert!(validate_classroom_change(first, AssignmentStatus::Draft, second, true).is_err());
+        assert!(
+            validate_classroom_change(first, AssignmentStatus::Published, first, true).is_ok(),
+            "editing in place must remain available"
+        );
+    }
+
+    #[test]
+    fn submission_payload_rejects_malformed_and_oversized_documents() {
+        let valid = SubmitWorkRequest {
+            doc_json: json!({
+                "type": "doc",
+                "content": [{ "type": "paragraph", "content": [] }]
+            }),
+            plaintext: "A valid answer.".into(),
+            change_note: None,
+        };
+        assert!(validate_submission_payload(&valid).is_ok());
+
+        for doc_json in [
+            json!(null),
+            json!({ "type": "paragraph", "content": [] }),
+            json!({ "type": "doc" }),
+        ] {
+            assert!(validate_submission_payload(&SubmitWorkRequest {
+                doc_json,
+                plaintext: String::new(),
+                change_note: None,
+            })
+            .is_err());
+        }
+
+        let oversized_text = SubmitWorkRequest {
+            plaintext: "x".repeat(MAX_SUBMISSION_PLAINTEXT_BYTES + 1),
+            ..valid.clone()
+        };
+        assert!(validate_submission_payload(&oversized_text).is_err());
+
+        let oversized_document = SubmitWorkRequest {
+            doc_json: json!({
+                "type": "doc",
+                "content": [{
+                    "type": "paragraph",
+                    "content": [{
+                        "type": "text",
+                        "text": "x".repeat(MAX_SUBMISSION_DOCUMENT_BYTES)
+                    }]
+                }]
+            }),
+            plaintext: String::new(),
+            change_note: None,
+        };
+        assert!(validate_submission_payload(&oversized_document).is_err());
+    }
 }

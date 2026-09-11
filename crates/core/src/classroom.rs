@@ -16,6 +16,11 @@ pub struct Classroom {
     pub subject_code: Option<String>,
     pub description: String,
     pub color: String,
+    #[ts(type = "string")]
+    pub owner_teacher_id: Uuid,
+    pub owner_teacher_name: String,
+    pub enrolment_code: String,
+    #[ts(type = "number")]
     pub student_count: i64,
     #[ts(type = "string")]
     pub created_at: DateTime<Utc>,
@@ -44,6 +49,26 @@ pub struct UpdateClassroomRequest {
 pub struct EnrolStudentRequest {
     #[ts(type = "string")]
     pub student_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct JoinClassroomRequest {
+    pub code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AddCoTeacherRequest {
+    #[ts(type = "string")]
+    pub teacher_id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ClassroomTeachers {
+    pub owner: User,
+    pub co_teachers: Vec<User>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -328,6 +353,8 @@ pub struct AttendanceRecord {
 #[ts(export)]
 pub struct AttendanceDay {
     #[ts(type = "string")]
+    pub classroom_id: Uuid,
+    #[ts(type = "string")]
     pub day: NaiveDate,
     pub records: Vec<AttendanceRecord>,
 }
@@ -343,10 +370,229 @@ pub struct SaveAttendanceRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
+pub struct StartLiveSessionRequest {
+    #[ts(type = "string")]
+    pub classroom_id: Uuid,
+    pub module_id: String,
+    pub module_name: String,
+    pub duration_minutes: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct JoinLiveSessionRequest {
+    pub code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct SubmitLiveSessionResultRequest {
+    pub score: f64,
+    pub elapsed_seconds: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum LiveSessionTaskKind {
+    Instruction,
+    Assignment,
+    Material,
+    Quiz,
+}
+
+impl LiveSessionTaskKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Instruction => "instruction",
+            Self::Assignment => "assignment",
+            Self::Material => "material",
+            Self::Quiz => "quiz",
+        }
+    }
+}
+
+impl std::str::FromStr for LiveSessionTaskKind {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "instruction" => Ok(Self::Instruction),
+            "assignment" => Ok(Self::Assignment),
+            "material" => Ok(Self::Material),
+            "quiz" => Ok(Self::Quiz),
+            other => Err(format!("unknown live task kind: {other}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum LiveSessionTaskState {
+    Opened,
+    InProgress,
+    Completed,
+    Failed,
+}
+
+impl LiveSessionTaskState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Opened => "opened",
+            Self::InProgress => "in_progress",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+impl std::str::FromStr for LiveSessionTaskState {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "opened" => Ok(Self::Opened),
+            "in_progress" => Ok(Self::InProgress),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            other => Err(format!("unknown live task state: {other}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionTask {
+    #[ts(type = "string")]
+    pub id: Uuid,
+    pub revision: u32,
+    pub kind: LiveSessionTaskKind,
+    #[ts(type = "string | null")]
+    pub target_id: Option<Uuid>,
+    pub title: String,
+    pub instructions: String,
+    #[ts(type = "string")]
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AssignLiveSessionTaskRequest {
+    pub kind: LiveSessionTaskKind,
+    #[ts(type = "string | null")]
+    pub target_id: Option<Uuid>,
+    pub title: String,
+    pub instructions: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct AcknowledgeLiveSessionTaskRequest {
+    pub revision: u32,
+    pub state: LiveSessionTaskState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionTaskAcknowledgement {
+    pub revision: u32,
+    pub state: LiveSessionTaskState,
+    #[ts(type = "string")]
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSession {
+    #[ts(type = "string")]
+    pub id: Uuid,
+    #[ts(type = "string")]
+    pub classroom_id: Uuid,
+    pub classroom_name: String,
+    pub module_id: String,
+    pub module_name: String,
+    pub duration_minutes: u8,
+    pub join_code: String,
+    #[ts(type = "string")]
+    pub starts_at: DateTime<Utc>,
+    #[ts(type = "string")]
+    pub ends_at: DateTime<Utc>,
+    #[ts(type = "string | null")]
+    pub ended_at: Option<DateTime<Utc>>,
+    #[ts(type = "string")]
+    pub server_now: DateTime<Utc>,
+    pub current_task: Option<LiveSessionTask>,
+    pub student_task_state: Option<LiveSessionTaskAcknowledgement>,
+    pub student_joined: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionResult {
+    pub score: f64,
+    pub elapsed_seconds: u32,
+    pub task_revision: Option<u32>,
+    #[ts(type = "string")]
+    pub submitted_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionParticipant {
+    #[ts(type = "string")]
+    pub student_id: Uuid,
+    pub student_name: String,
+    #[ts(type = "string")]
+    pub joined_at: DateTime<Utc>,
+    #[ts(type = "string")]
+    pub last_seen_at: DateTime<Utc>,
+    pub result: Option<LiveSessionResult>,
+    pub task_state: Option<LiveSessionTaskAcknowledgement>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionDetails {
+    pub session: LiveSession,
+    pub participants: Vec<LiveSessionParticipant>,
+    pub tasks: Vec<LiveSessionTask>,
+    pub task_progress: Vec<LiveSessionTaskProgress>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionTaskParticipantProgress {
+    #[ts(type = "string")]
+    pub student_id: Uuid,
+    pub student_name: String,
+    pub state: Option<LiveSessionTaskAcknowledgement>,
+    pub result: Option<LiveSessionResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionTaskProgress {
+    pub task: LiveSessionTask,
+    pub participants: Vec<LiveSessionTaskParticipantProgress>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct LiveSessionHistoryItem {
+    pub session: LiveSession,
+    pub participant_count: u32,
+    pub completed_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct BootstrapTeacherRequest {
     pub username: String,
     pub display_name: String,
     pub password: String,
+    /// Eight-digit setup PIN printed by the host while no active teacher exists.
+    pub bootstrap_pin: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -360,6 +606,8 @@ pub struct BootstrapTeacherResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct CreateStudentRequest {
+    #[ts(type = "string")]
+    pub classroom_id: Uuid,
     pub username: String,
     pub display_name: String,
     pub grade_level: Option<String>,
@@ -373,16 +621,17 @@ pub struct RegisterTeacherRequest {
     pub username: String,
     pub display_name: String,
     pub password: String,
-    /// A current teacher recovery code acts as the school's authorization code.
-    pub school_recovery_code: String,
+    /// One-time PIN generated by an already signed-in teacher.
+    #[serde(alias = "school_recovery_code")]
+    pub invite_pin: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
-pub struct CreateTeacherRequest {
-    pub username: String,
-    pub display_name: String,
-    pub password: String,
+pub struct TeacherInvitePinResponse {
+    pub invite_pin: String,
+    #[ts(type = "string")]
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

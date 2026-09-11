@@ -22,6 +22,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::error::{HostError, HostResult};
+use crate::routes::classrooms::teacher_can_access;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -30,7 +31,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/files/{id}", get(download))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 struct UploadQuery {
     parent_id: Option<Uuid>,
     classroom_id: Option<Uuid>,
@@ -88,9 +89,15 @@ async fn upload(
     })?;
     debug_assert!(ALLOWED_UPLOAD_MIMES.contains(&mime));
 
+    let authorization_user = user.clone();
+    state
+        .db(move |conn| authorize_upload(conn, &authorization_user, query))
+        .await?;
+
     let digest = hex::encode(Sha256::digest(&bytes));
     let path = blob_path(&state.files_dir, &digest);
-    if !path.exists() {
+    let created_blob = !path.exists();
+    if created_blob {
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
@@ -104,47 +111,11 @@ async fn upload(
     let owner = user.id();
     let size = bytes.len() as i64;
     let display_name = tidy_name(&original_name);
+    let stored_digest = digest.clone();
 
-    state
+    let result = state
         .db(move |conn| {
-            if let Some(parent_id) = query.parent_id {
-                let parent: (String, Option<String>, Option<String>) = conn
-                    .query_row(
-                        "SELECT kind, owner_id, classroom_id FROM nodes WHERE id = ?1",
-                        [parent_id.to_string()],
-                        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-                    )
-                    .optional()?
-                    .ok_or(HostError::NotFound("folder"))?;
-                if parent.0 != "folder" {
-                    return Err(HostError::BadRequest(
-                        "Material can only go inside a folder.".into(),
-                    ));
-                }
-                let expected_owner = if query.shared { None } else { Some(owner.to_string()) };
-                if parent.1 != expected_owner || parent.2 != query.classroom_id.map(|id| id.to_string()) {
-                    return Err(HostError::Forbidden);
-                }
-            }
-
-            if let Some(classroom_id) = query.classroom_id {
-                let allowed: bool = if user.0.role.is_teacher() {
-                    conn.query_row(
-                        "SELECT EXISTS(SELECT 1 FROM classrooms WHERE id = ?1 AND archived_at IS NULL)",
-                        [classroom_id.to_string()],
-                        |row| row.get(0),
-                    )?
-                } else {
-                    conn.query_row(
-                        "SELECT EXISTS(SELECT 1 FROM classroom_enrolments WHERE classroom_id = ?1 AND student_id = ?2)",
-                        rusqlite::params![classroom_id.to_string(), owner.to_string()],
-                        |row| row.get(0),
-                    )?
-                };
-                if !allowed {
-                    return Err(HostError::Forbidden);
-                }
-            }
+            authorize_upload(conn, &user, query)?;
 
             let id = Uuid::new_v4();
             let now = Utc::now();
@@ -174,7 +145,7 @@ async fn upload(
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 rusqlite::params![
                     id.to_string(),
-                    digest,
+                    stored_digest,
                     original_name,
                     size,
                     mime,
@@ -198,7 +169,66 @@ async fn upload(
                 updated_at: now,
             }))
         })
-        .await
+        .await;
+
+    if result.is_err() && created_blob {
+        cleanup_unreferenced_blob(&state, digest, &path).await;
+    }
+
+    result
+}
+
+fn authorize_upload(
+    conn: &rusqlite::Connection,
+    user: &CurrentUser,
+    query: UploadQuery,
+) -> HostResult<()> {
+    let owner = user.id();
+    if query.shared {
+        user.require_teacher()?;
+    }
+
+    if let Some(classroom_id) = query.classroom_id {
+        let allowed = if user.0.role.is_teacher() {
+            teacher_can_access(conn, classroom_id, owner)?
+        } else {
+            conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM classroom_enrolments
+                  WHERE classroom_id = ?1 AND student_id = ?2)",
+                rusqlite::params![classroom_id.to_string(), owner.to_string()],
+                |row| row.get(0),
+            )?
+        };
+        if !allowed {
+            return Err(HostError::Forbidden);
+        }
+    }
+
+    if let Some(parent_id) = query.parent_id {
+        let parent: (String, Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT kind, owner_id, classroom_id FROM nodes WHERE id = ?1",
+                [parent_id.to_string()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?
+            .ok_or(HostError::NotFound("folder"))?;
+        if parent.0 != "folder" {
+            return Err(HostError::BadRequest(
+                "Material can only go inside a folder.".into(),
+            ));
+        }
+        let expected_owner = if query.shared {
+            None
+        } else {
+            Some(owner.to_string())
+        };
+        if parent.1 != expected_owner || parent.2 != query.classroom_id.map(|id| id.to_string()) {
+            return Err(HostError::Forbidden);
+        }
+    }
+
+    Ok(())
 }
 
 async fn download(
@@ -214,7 +244,8 @@ async fn download(
                 .query_row(
                     "SELECT f.sha256, f.orig_name, f.bytes, f.mime, n.owner_id, n.classroom_id
                        FROM files f JOIN nodes n ON n.id = f.node_id
-                      WHERE f.node_id = ?1",
+                      WHERE f.node_id = ?1
+                        AND NOT EXISTS (SELECT 1 FROM trashed_files t WHERE t.node_id = f.node_id)",
                     [id.to_string()],
                     |r| {
                         Ok((
@@ -232,11 +263,27 @@ async fn download(
 
             let (sha, orig_name, bytes, mime, owner_id, classroom_id) = row;
             match owner_id {
-                None if user.0.role.is_teacher() => {}
+                None if user.0.role.is_teacher() => {
+                    if let Some(classroom_id) = classroom_id {
+                        let classroom_id = classroom_id.parse().map_err(|error| {
+                            HostError::Other(anyhow::anyhow!("bad classroom id: {error}"))
+                        })?;
+                        if !teacher_can_access(conn, classroom_id, owner)? {
+                            return Err(HostError::Forbidden);
+                        }
+                    }
+                }
                 None => {
                     if let Some(classroom_id) = classroom_id {
                         let enrolled: bool = conn.query_row(
-                            "SELECT EXISTS(SELECT 1 FROM classroom_enrolments WHERE classroom_id = ?1 AND student_id = ?2)",
+                            "SELECT EXISTS(
+                                SELECT 1
+                                  FROM classroom_enrolments e
+                                  JOIN classrooms c ON c.id = e.classroom_id
+                                 WHERE e.classroom_id = ?1
+                                   AND e.student_id = ?2
+                                   AND c.archived_at IS NULL
+                            )",
                             rusqlite::params![classroom_id, owner.to_string()],
                             |row| row.get(0),
                         )?;
@@ -318,6 +365,22 @@ fn blob_path(root: &std::path::Path, digest: &str) -> PathBuf {
     root.join(&digest[0..2]).join(digest)
 }
 
+async fn cleanup_unreferenced_blob(state: &AppState, digest: String, path: &std::path::Path) {
+    let referenced = state
+        .db(move |conn| {
+            Ok(conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM files WHERE sha256 = ?1)",
+                [digest],
+                |row| row.get::<_, bool>(0),
+            )?)
+        })
+        .await
+        .unwrap_or(true);
+    if !referenced {
+        let _ = tokio::fs::remove_file(path).await;
+    }
+}
+
 /// Identifies a file from its leading bytes. Returns `None` for anything not on
 /// the allow-list.
 fn sniff(bytes: &[u8]) -> Option<&'static str> {
@@ -382,6 +445,12 @@ fn parse_range(header: &str, total: u64) -> Option<(u64, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::CurrentUser;
+    use chrono::Utc;
+    use cinder_ai::Ai;
+    use cinder_core::{Role, User};
+    use std::sync::Arc;
+    use uuid::Uuid;
 
     #[test]
     fn sniffs_allowed_types_from_bytes_not_names() {
@@ -430,5 +499,165 @@ mod tests {
         assert_eq!(tidy_name("optics_chapter-3.pdf"), "optics chapter 3");
         assert_eq!(tidy_name("scan.PNG"), "scan");
         assert_eq!(tidy_name(""), "Material");
+    }
+
+    #[test]
+    fn shared_upload_requires_classroom_access_before_storage() {
+        let pool = crate::db::open_in_memory().unwrap();
+        let owner = Uuid::new_v4();
+        let outsider = Uuid::new_v4();
+        let classroom = Uuid::new_v4();
+        let now = Utc::now();
+        let conn = pool.get().unwrap();
+        for (id, name) in [(owner, "owner"), (outsider, "outsider")] {
+            conn.execute(
+                "INSERT INTO users (id, username, display_name, pw_hash, role, created_at)
+                 VALUES (?1, ?2, ?2, 'hash', 'teacher', ?3)",
+                rusqlite::params![id.to_string(), name, now.to_rfc3339()],
+            )
+            .unwrap();
+        }
+        conn.execute(
+            "INSERT INTO classrooms
+                (id, name, description, color, created_at, owner_teacher_id, enrolment_code)
+             VALUES (?1, 'Science', '', '#BEC2FF', ?2, ?3, 'ABCDEFGH')",
+            rusqlite::params![classroom.to_string(), now.to_rfc3339(), owner.to_string()],
+        )
+        .unwrap();
+        let teacher = |id: Uuid, name: &str| {
+            CurrentUser(
+                User {
+                    id,
+                    username: name.into(),
+                    display_name: name.into(),
+                    role: Role::Teacher,
+                    grade_level: None,
+                    section: None,
+                    roll_number: None,
+                    must_change_password: false,
+                    created_at: now,
+                },
+                "token".into(),
+            )
+        };
+        let query = UploadQuery {
+            parent_id: None,
+            classroom_id: Some(classroom),
+            shared: true,
+        };
+        assert!(authorize_upload(&conn, &teacher(owner, "owner"), query).is_ok());
+        assert!(matches!(
+            authorize_upload(&conn, &teacher(outsider, "outsider"), query),
+            Err(HostError::Forbidden)
+        ));
+    }
+
+    #[tokio::test]
+    async fn late_upload_failure_removes_new_unreferenced_blob() {
+        let pool = crate::db::open_in_memory().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState {
+            pool,
+            files_dir: directory.path().to_owned(),
+            ai: Arc::new(Ai::disabled()),
+            ai_key_secret: [0; 32],
+        };
+        let digest = "a".repeat(64);
+        let path = blob_path(&state.files_dir, &digest);
+        tokio::fs::create_dir_all(path.parent().unwrap())
+            .await
+            .unwrap();
+        tokio::fs::write(&path, b"new upload").await.unwrap();
+
+        cleanup_unreferenced_blob(&state, digest, &path).await;
+
+        assert!(!path.exists());
+    }
+
+    #[tokio::test]
+    async fn archived_classroom_files_are_hidden_from_enrolled_students() {
+        let pool = crate::db::open_in_memory().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let teacher_id = Uuid::new_v4();
+        let student_id = Uuid::new_v4();
+        let classroom_id = Uuid::new_v4();
+        let node_id = Uuid::new_v4();
+        let now = Utc::now();
+        {
+            let conn = pool.get().unwrap();
+            for (id, username, role) in [
+                (teacher_id, "teacher", "teacher"),
+                (student_id, "student", "student"),
+            ] {
+                conn.execute(
+                    "INSERT INTO users (id, username, display_name, pw_hash, role, created_at)
+                     VALUES (?1, ?2, ?2, 'hash', ?3, ?4)",
+                    rusqlite::params![id.to_string(), username, role, now.to_rfc3339()],
+                )
+                .unwrap();
+            }
+            conn.execute(
+                "INSERT INTO classrooms
+                    (id, name, description, color, created_at, archived_at,
+                     owner_teacher_id, enrolment_code)
+                 VALUES (?1, 'Archived', '', '#BEC2FF', ?2, ?2, ?3, 'ARCHIVE1')",
+                rusqlite::params![
+                    classroom_id.to_string(),
+                    now.to_rfc3339(),
+                    teacher_id.to_string()
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO classroom_enrolments (classroom_id, student_id, created_at)
+                 VALUES (?1, ?2, ?3)",
+                rusqlite::params![
+                    classroom_id.to_string(),
+                    student_id.to_string(),
+                    now.to_rfc3339()
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO nodes
+                    (id, owner_id, classroom_id, name, kind, position, created_at, updated_at)
+                 VALUES (?1, NULL, ?2, 'Archived file', 'pdf', 1024, ?3, ?3)",
+                rusqlite::params![
+                    node_id.to_string(),
+                    classroom_id.to_string(),
+                    now.to_rfc3339()
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO files (node_id, sha256, orig_name, bytes, mime, created_at)
+                 VALUES (?1, ?2, 'archived.pdf', 8, 'application/pdf', ?3)",
+                rusqlite::params![node_id.to_string(), "b".repeat(64), now.to_rfc3339()],
+            )
+            .unwrap();
+        }
+        let state = AppState {
+            pool,
+            files_dir: directory.path().to_owned(),
+            ai: Arc::new(Ai::disabled()),
+            ai_key_secret: [0; 32],
+        };
+        let student = CurrentUser(
+            User {
+                id: student_id,
+                username: "student".into(),
+                display_name: "student".into(),
+                role: Role::Student,
+                grade_level: None,
+                section: None,
+                roll_number: None,
+                must_change_password: false,
+                created_at: now,
+            },
+            "token".into(),
+        );
+
+        let result = download(State(state), student, Path(node_id), HeaderMap::new()).await;
+        assert!(matches!(result, Err(HostError::Forbidden)));
     }
 }

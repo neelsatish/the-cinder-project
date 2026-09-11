@@ -24,8 +24,21 @@ export type Classroom = {
   subject_code: string | null;
   description: string;
   color: string;
+  owner_teacher_id: string;
+  owner_teacher_name: string;
+  enrolment_code: string;
   student_count: number;
   created_at: string;
+};
+
+export type ClassroomTeachers = {
+  owner: User;
+  co_teachers: User[];
+};
+
+export type TeacherInvitePin = {
+  invite_pin: string;
+  expires_at: string;
 };
 
 export type ClassroomRoster = {
@@ -107,9 +120,99 @@ export type AttendanceRecord = {
 };
 
 export type AttendanceDay = {
+  classroom_id: string;
   day: string;
   records: AttendanceRecord[];
 };
+
+export type LiveSession = {
+  id: string;
+  classroom_id: string;
+  classroom_name: string;
+  module_id: string;
+  module_name: string;
+  duration_minutes: number;
+  join_code: string;
+  starts_at: string;
+  ends_at: string;
+  ended_at: string | null;
+  server_now?: string;
+  current_task: LiveSessionTask | null;
+  student_task_state: LiveSessionTaskAcknowledgement | null;
+  student_joined?: boolean;
+};
+
+export type LiveSessionTaskKind = "instruction" | "assignment" | "material" | "quiz";
+export type LiveSessionTaskState = "opened" | "in_progress" | "completed" | "failed";
+
+export type LiveSessionTask = {
+  id: string;
+  revision: number;
+  kind: LiveSessionTaskKind;
+  target_id: string | null;
+  title: string;
+  instructions: string;
+  created_at: string;
+};
+
+export type LiveSessionTaskAcknowledgement = {
+  revision: number;
+  state: LiveSessionTaskState;
+  updated_at: string;
+};
+
+export type LiveSessionResult = {
+  score: number;
+  elapsed_seconds: number;
+  task_revision: number | null;
+  submitted_at: string;
+};
+
+export type LiveSessionParticipant = {
+  student_id: string;
+  student_name: string;
+  joined_at: string;
+  last_seen_at: string;
+  result: LiveSessionResult | null;
+  task_state: LiveSessionTaskAcknowledgement | null;
+};
+
+export type LiveSessionHistoryItem = {
+  session: LiveSession;
+  participant_count: number;
+  completed_count: number;
+};
+
+export type LiveSessionDetails = {
+  session: LiveSession;
+  participants: LiveSessionParticipant[];
+  tasks: LiveSessionTask[];
+  task_progress: LiveSessionTaskProgress[];
+};
+
+export type LiveSessionTaskParticipantProgress = {
+  student_id: string;
+  student_name: string;
+  state: LiveSessionTaskAcknowledgement | null;
+  result: LiveSessionResult | null;
+};
+
+export type LiveSessionTaskProgress = {
+  task: LiveSessionTask;
+  participants: LiveSessionTaskParticipantProgress[];
+};
+
+export type QuizQuestionKind = "single_choice" | "true_false" | "short_answer";
+export type QuizDeliveryKind = "homework" | "live";
+export type QuizQuestionInput = { id?: string | null; kind: QuizQuestionKind; prompt: string; options: string[]; canonical_answer: unknown; max_points: number; required: boolean };
+export type QuizQuestion = QuizQuestionInput & { id: string; position: number };
+export type StudentQuizQuestion = Omit<QuizQuestion, "canonical_answer">;
+export type Quiz = { id: string; classroom_id: string; classroom_name: string; title: string; instructions: string; time_limit_minutes: number | null; archived: boolean; published_version: number | null; questions: QuizQuestion[]; updated_at: string };
+export type QuizDelivery = { id: string; quiz_id: string; version_id: string; classroom_id: string; classroom_name: string; title: string; instructions: string; kind: QuizDeliveryKind; time_limit_minutes: number | null; total_points: number; opens_at: string | null; due_at: string | null; results_released_at: string | null; attempt_id: string | null; attempt_state: string | null };
+export type QuizResponse = { question_id: string; answer: unknown; points: number | null; feedback: string; correct: boolean | null; canonical_answer: unknown | null };
+export type QuizAttempt = { id: string; student_id: string; student_name: string; delivery: QuizDelivery; questions: StudentQuizQuestion[]; responses: QuizResponse[]; started_at: string; expires_at: string | null; submitted_at: string | null; score: number | null; max_points: number; manual_grading_complete: boolean; released: boolean; server_now: string };
+export type QuizQuestionStatistic = { question_id: string; prompt: string; graded_count: number; correct_percent: number; partial_percent: number };
+export type QuizStatistics = { assigned_count: number; started_count: number; submitted_count: number; graded_count: number; highest: number | null; lowest: number | null; mean: number | null; median: number | null; lower_quartile: number | null; upper_quartile: number | null; distribution: number[]; questions: QuizQuestionStatistic[]; most_correct_question_id: string | null; most_incorrect_question_id: string | null };
 
 export type DashboardStats = {
   students: number;

@@ -1,0 +1,21 @@
+.countdown-controls { display: grid; gap: 12px; color: var(--forge-text); }
+.countdown-controls output { font: 700 36px var(--forge-font-mono); font-variant-numeric: tabular-nums; }
+.countdown-controls label { display: grid; gap: 6px; font-size: 12px; }
+.countdown-controls select { color: var(--forge-text); background-color: var(--forge-bg); border-color: var(--forge-border-strong); }
+.countdown-controls option { color: var(--forge-text); background: var(--forge-bg); }
+.countdown-buttons { display: flex; gap: 8px; }
+.countdown-buttons button { display: flex; justify-content: center; align-items: center; gap: 6px; min-width: 36px; min-height: 36px; border: 1px solid var(--forge-border-strong); border-radius: 8px; background: var(--forge-surface-soft); color: var(--forge-text); cursor: pointer; }
+.countdown-buttons button:disabled { opacity: .45; cursor: default; }
+.countdown-controls.compact { gap: 8px; text-align: center; }
+.countdown-controls.compact output { font-size: 14px; }
+.countdown-controls.compact .countdown-buttons { flex-wrap: wrap; justify-content: center; }
+.floating-timer { position: fixed; z-index: 20; width: 220px; max-width: calc(100vw - 16px); padding: 12px; border: 1px solid var(--forge-border-strong); border-radius: 12px; background: var(--forge-bg); color: var(--forge-text); box-shadow: 0 8px 30px #0004; }
+.floating-timer select { min-width: 0; }
+.timer-drag { width: 100%; margin-bottom: 10px; padding: 6px; border: 0; background: transparent; color: inherit; text-align: left; cursor: grab; touch-action: none; }
+.timer-float-heading { display: flex; align-items: center; gap: 4px; }
+.timer-float-heading .timer-drag { margin-bottom: 6px; }
+.timer-close { display: grid; flex: 0 0 32px; width: 32px; height: 32px; place-items: center; border: 0; border-radius: 7px; color: inherit; background: transparent; cursor: pointer; }
+.timer-close:hover { background: var(--forge-surface-soft); }
+.floating-timer .countdown-controls output { font-size: 28px; }
+@media (min-width: 1101px) { :root .forge-frame[data-sidebar-collapsed="true"] { grid-template-columns: 78px minmax(0, 1fr); } .forge-frame[data-sidebar-collapsed="true"] .forge-nav { margin-top: 60px; } }
+

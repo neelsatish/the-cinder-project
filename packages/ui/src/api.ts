@@ -7,17 +7,35 @@ import type {
   Card,
   Classroom,
   ClassroomRoster,
+  ClassroomTeachers,
   DashboardStats,
   Grade,
   GradeChange,
   LoginResponse,
+  LiveSession,
+  LiveSessionDetails,
+  LiveSessionHistoryItem,
+  LiveSessionResult,
+  LiveSessionTask,
+  LiveSessionTaskAcknowledgement,
+  LiveSessionTaskKind,
+  LiveSessionTaskState,
   NoteBody,
+  Quiz,
+  QuizAttempt,
+  QuizDelivery,
+  QuizDeliveryKind,
+  QuizQuestionInput,
+  QuizResponse,
+  QuizStatistics,
   Role,
   StudyNode,
   Submission,
   SubmissionComment,
+  TeacherInvitePin,
   User,
 } from "./types";
+import { isCinderHealthResponse } from "./health";
 
 export class ApiError extends Error {
   constructor(
@@ -97,8 +115,16 @@ export class CinderApi {
     return (await response.json()) as T;
   }
 
-  health() {
-    return this.request<{ ok: boolean; version: string }>("/api/health");
+  async health(timeoutMs = 10_000) {
+    const health = await this.request<unknown>("/api/health", {}, timeoutMs);
+    if (!isCinderHealthResponse(health)) {
+      throw new ApiError(
+        "invalid_host",
+        "The server did not identify as Cinder Host.",
+        200,
+      );
+    }
+    return health;
   }
 
   authStatus() {
@@ -134,12 +160,22 @@ export class CinderApi {
     return this.request<{ ok: true }>("/api/auth/logout", { method: "POST" });
   }
 
-  bootstrapTeacher(username: string, displayName: string, password: string) {
+  bootstrapTeacher(
+    username: string,
+    displayName: string,
+    password: string,
+    bootstrapPin: string,
+  ) {
     return this.request<{ user: User; recovery_code: string }>(
       "/api/auth/bootstrap",
       {
         method: "POST",
-        body: JSON.stringify({ username, display_name: displayName, password }),
+        body: JSON.stringify({
+          username,
+          display_name: displayName,
+          password,
+          bootstrap_pin: bootstrapPin,
+        }),
       },
     );
   }
@@ -148,7 +184,7 @@ export class CinderApi {
     username: string,
     displayName: string,
     password: string,
-    schoolRecoveryCode: string,
+    invitePin: string,
   ) {
     return this.request<{ user: User; recovery_code: string }>(
       "/api/auth/register-teacher",
@@ -158,28 +194,20 @@ export class CinderApi {
           username,
           display_name: displayName,
           password,
-          school_recovery_code: schoolRecoveryCode,
+          invite_pin: invitePin,
         }),
       },
     );
+  }
+
+  generateTeacherInvite() {
+    return this.request<TeacherInvitePin>("/api/teacher/invite-pin", {
+      method: "POST",
+    });
   }
 
   teacherAccounts() {
     return this.request<User[]>("/api/teacher/accounts");
-  }
-
-  createTeacher(username: string, displayName: string, password: string) {
-    return this.request<{ user: User; recovery_code: string }>(
-      "/api/teacher/accounts",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          username,
-          display_name: displayName,
-          password,
-        }),
-      },
-    );
   }
 
   deleteTeacher(teacherId: string, currentPassword: string) {
@@ -221,6 +249,7 @@ export class CinderApi {
   }
 
   createStudent(input: {
+    classroom_id: string;
     username: string;
     display_name: string;
     grade_level?: string | null;
@@ -285,6 +314,31 @@ export class CinderApi {
     return this.request<Classroom[]>("/api/classrooms");
   }
 
+  joinClassroom(code: string) {
+    return this.request<Classroom>("/api/classrooms/join", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  classroomTeachers(id: string) {
+    return this.request<ClassroomTeachers>(`/api/classrooms/${id}/teachers`);
+  }
+
+  addClassroomTeacher(id: string, teacherId: string) {
+    return this.request<{ ok: true }>(`/api/classrooms/${id}/teachers`, {
+      method: "POST",
+      body: JSON.stringify({ teacher_id: teacherId }),
+    });
+  }
+
+  removeClassroomTeacher(id: string, teacherId: string) {
+    return this.request<{ ok: true }>(
+      `/api/classrooms/${id}/teachers/${teacherId}`,
+      { method: "DELETE" },
+    );
+  }
+
   createClassroom(input: {
     name: string;
     subject_code?: string | null;
@@ -338,6 +392,104 @@ export class CinderApi {
       { method: "DELETE" },
     );
   }
+
+  startLiveSession(input: {
+    classroom_id: string;
+    module_id: string;
+    module_name: string;
+    duration_minutes: number;
+  }) {
+    return this.request<LiveSession>("/api/live-sessions", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  activeLiveSession(classroomId: string) {
+    return this.request<LiveSession | null>(`/api/classrooms/${classroomId}/live-session`);
+  }
+
+  activeStudentLiveSessions() {
+    return this.request<LiveSession[]>("/api/live-sessions/active");
+  }
+
+  joinLiveSession(code: string) {
+    return this.request<LiveSession>("/api/live-sessions/join", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  }
+
+
+  joinLiveSessionById(id: string) {
+    return this.request<LiveSession>(`/api/live-sessions/${id}/join`, { method: "POST" });
+  }
+
+  assignLiveSessionTask(id: string, input: {
+    kind: LiveSessionTaskKind;
+    target_id: string | null;
+    title: string;
+    instructions: string;
+  }) {
+    return this.request<LiveSessionTask>(`/api/live-sessions/${id}/task`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  acknowledgeLiveSessionTask(id: string, revision: number, state: LiveSessionTaskState) {
+    return this.request<LiveSessionTaskAcknowledgement>(`/api/live-sessions/${id}/task-ack`, {
+      method: "POST",
+      body: JSON.stringify({ revision, state }),
+    });
+  }
+
+  liveSessionHistory(classroomId: string) {
+    return this.request<LiveSessionHistoryItem[]>(`/api/classrooms/${classroomId}/live-sessions`);
+  }
+
+  liveSessionDetails(id: string) {
+    return this.request<LiveSessionDetails>(`/api/live-sessions/${id}`);
+  }
+
+  submitLiveSessionResult(id: string, input: { score: number; elapsed_seconds: number }) {
+    return this.request<LiveSessionResult>(`/api/live-sessions/${id}/result`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  endLiveSession(id: string) {
+    return this.request<LiveSession>(`/api/live-sessions/${id}/end`, { method: "POST" });
+  }
+
+  quizzes(classroomId?: string) {
+    const query = classroomId ? `?classroom_id=${encodeURIComponent(classroomId)}` : "";
+    return this.request<Quiz[]>(`/api/quizzes${query}`);
+  }
+
+  createQuiz(input: { classroom_id: string; title: string; instructions: string; time_limit_minutes: number | null; questions: QuizQuestionInput[] }) {
+    return this.request<Quiz>("/api/quizzes", { method: "POST", body: JSON.stringify(input) });
+  }
+
+  updateQuiz(id: string, input: { classroom_id: string; title: string; instructions: string; time_limit_minutes: number | null; questions: QuizQuestionInput[] }) {
+    return this.request<Quiz>(`/api/quizzes/${id}`, { method: "PATCH", body: JSON.stringify(input) });
+  }
+
+  duplicateQuiz(id: string) { return this.request<Quiz>(`/api/quizzes/${id}/duplicate`, { method: "POST" }); }
+  publishQuiz(id: string) { return this.request<Quiz>(`/api/quizzes/${id}/publish`, { method: "POST" }); }
+  archiveQuiz(id: string) { return this.request<{ ok: true }>(`/api/quizzes/${id}`, { method: "DELETE" }); }
+  deliverQuiz(id: string, input: { kind: QuizDeliveryKind; live_session_id?: string | null; opens_at?: string | null; due_at?: string | null }) { return this.request<QuizDelivery>(`/api/quizzes/${id}/deliver`, { method: "POST", body: JSON.stringify(input) }); }
+  quizDeliveries(classroomId?: string) { const query = classroomId ? `?classroom_id=${encodeURIComponent(classroomId)}` : ""; return this.request<QuizDelivery[]>(`/api/quiz-deliveries${query}`); }
+  startQuizAttempt(deliveryId: string) { return this.request<QuizAttempt>(`/api/quiz-deliveries/${deliveryId}/start`, { method: "POST" }); }
+  quizAttempt(id: string) { return this.request<QuizAttempt>(`/api/quiz-attempts/${id}`); }
+  quizAttempts(deliveryId: string) { return this.request<QuizAttempt[]>(`/api/quiz-deliveries/${deliveryId}/attempts`); }
+  saveQuizResponse(id: string, questionId: string, answer: unknown) { return this.request<QuizResponse>(`/api/quiz-attempts/${id}/responses/${questionId}`, { method: "PUT", body: JSON.stringify({ answer }) }); }
+  submitQuizAttempt(id: string) { return this.request<QuizAttempt>(`/api/quiz-attempts/${id}/submit`, { method: "POST" }); }
+  reopenQuizAttempt(id: string) { return this.request<QuizAttempt>(`/api/quiz-attempts/${id}/reopen`, { method: "POST" }); }
+  gradeQuizResponse(id: string, questionId: string, points: number, feedback = "") { return this.request<QuizAttempt>(`/api/quiz-attempts/${id}/responses/${questionId}/grade`, { method: "PUT", body: JSON.stringify({ points, feedback }) }); }
+  releaseQuizResults(deliveryId: string) { return this.request<QuizDelivery>(`/api/quiz-deliveries/${deliveryId}/release`, { method: "POST" }); }
+  quizStatistics(deliveryId: string) { return this.request<QuizStatistics>(`/api/quiz-deliveries/${deliveryId}/stats`); }
 
   assignments(classroomId?: string) {
     const query = classroomId
@@ -462,18 +614,21 @@ export class CinderApi {
     );
   }
 
-  attendance(day: string) {
-    return this.request<AttendanceDay>(`/api/attendance/${day}`);
+  attendance(classroomId: string, day: string) {
+    return this.request<AttendanceDay>(
+      `/api/classrooms/${classroomId}/attendance/${day}`,
+    );
   }
 
   saveAttendance(
+    classroomId: string,
     day: string,
     studentId: string,
     status: AttendanceStatus,
     note = "",
   ) {
     return this.request<AttendanceDay["records"][number]>(
-      `/api/attendance/${day}`,
+      `/api/classrooms/${classroomId}/attendance/${day}`,
       {
         method: "PUT",
         body: JSON.stringify({ student_id: studentId, status, note }),
@@ -636,16 +791,10 @@ export class CinderApi {
 }
 
 export async function probeHost(baseUrl: string, timeoutMs = 2500) {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/health`, {
-      signal: controller.signal,
-    });
-    return response.ok;
+    await new CinderApi(baseUrl).health(timeoutMs);
+    return true;
   } catch {
     return false;
-  } finally {
-    window.clearTimeout(timeout);
   }
 }

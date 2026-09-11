@@ -1,121 +1,55 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { setTheme as setNativeTheme } from "@tauri-apps/api/app";
+import { normaliseCinderTheme, type CinderTheme } from "./themeState";
 
-import { Icon } from "./icons";
-import {
-  applyGlassAttribute,
-  clearGlassCache,
-  initialGlassState,
-  measureGlassCapability,
-  readGlassMode,
-  writeGlassMode,
-  type GlassMode,
-  type GlassState,
-} from "./glassProbe";
+export { normaliseCinderTheme } from "./themeState";
+export type { CinderTheme } from "./themeState";
 
-export type CinderTheme = "light" | "cinder" | "dark";
-export type { GlassMode, GlassState };
-
-const THEME_STORAGE_KEY = "cinder.appearance.theme";
-const THEME_COLORS: Record<CinderTheme, string> = {
-  light: "#F7F1E7",
-  cinder: "#221309",
-  dark: "#000000",
+const THEME_KEY = "cinder.appearance.theme";
+const THEME_COLOURS: Record<CinderTheme, string> = {
+  light: "#F4F6F2",
+  dark: "#0E1210",
+  paper: "#F1EEE7",
 };
 
-function storedTheme(): CinderTheme {
+function savedTheme() {
   try {
-    const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    return stored === "light" || stored === "cinder" || stored === "dark"
-      ? stored
-      : "cinder";
+    return normaliseCinderTheme(localStorage.getItem(THEME_KEY));
   } catch {
-    return "cinder";
+    return "light" as const;
   }
 }
 
-function applyDocumentTheme(theme: CinderTheme) {
+function applyTheme(theme: CinderTheme) {
   if (typeof document === "undefined") return;
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.style.colorScheme = theme === "light" ? "light" : "dark";
-  document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", THEME_COLORS[theme]);
+  const root = document.documentElement;
+  root.dataset.theme = theme;
+  root.style.colorScheme = theme === "dark" ? "dark" : "light";
+  root.removeAttribute("data-glass");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOURS[theme]);
 }
 
-const initialTheme = storedTheme();
-applyDocumentTheme(initialTheme);
+applyTheme(savedTheme());
 
-const initialGlassMode = readGlassMode();
-applyGlassAttribute(initialGlassState(initialGlassMode));
-
-type ThemeContextValue = {
-  theme: CinderTheme;
-  setTheme: (theme: CinderTheme) => void;
-  toggleTheme: () => void;
-  glass: GlassState;
-  glassMode: GlassMode;
-  setGlassMode: (mode: GlassMode) => void;
-  recheckGlass: () => void;
-};
-
+type ThemeContextValue = { theme: CinderTheme; setTheme: (theme: CinderTheme) => void };
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<CinderTheme>(initialTheme);
-  const [glassMode, setGlassModeState] = useState<GlassMode>(initialGlassMode);
-  const [glass, setGlass] = useState<GlassState>(() => initialGlassState(initialGlassMode));
-
+  const [theme, setThemeState] = useState<CinderTheme>(savedTheme);
+  const setTheme = useCallback((next: CinderTheme) => setThemeState(next), []);
   useEffect(() => {
-    applyDocumentTheme(theme);
+    applyTheme(theme);
     try {
-      localStorage.setItem(THEME_STORAGE_KEY, theme);
+      localStorage.setItem(THEME_KEY, theme);
+      localStorage.removeItem("cinder.glassCapability");
+      localStorage.removeItem("cinder.effectsOverride");
     } catch {
-      // A theme preference is optional; the interface still works without storage.
+      // The selected theme still applies for this session.
     }
-
-    if ("__TAURI_INTERNALS__" in window) {
-      void setNativeTheme(theme === "light" ? "light" : "dark").catch(() => undefined);
-    }
+    if ("__TAURI_INTERNALS__" in window) void setNativeTheme(theme === "dark" ? "dark" : "light").catch(() => undefined);
   }, [theme]);
-
-  useEffect(() => {
-    applyGlassAttribute(glass);
-  }, [glass]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void measureGlassCapability(glassMode).then((result) => {
-      if (!cancelled) setGlass(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [glassMode]);
-
-  const value = useMemo<ThemeContextValue>(
-    () => ({
-      theme,
-      setTheme,
-      toggleTheme: () =>
-        setTheme((current) =>
-          current === "light" ? "cinder" : current === "cinder" ? "dark" : "light",
-        ),
-      glass,
-      glassMode,
-      setGlassMode: (mode) => {
-        writeGlassMode(mode);
-        setGlassModeState(mode);
-      },
-      recheckGlass: () => {
-        clearGlassCache();
-        void measureGlassCapability(glassMode).then(setGlass);
-      },
-    }),
-    [theme, glass, glassMode],
-  );
-
+  const value = useMemo<ThemeContextValue>(() => ({ theme, setTheme }), [setTheme, theme]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
@@ -123,26 +57,4 @@ export function useTheme() {
   const context = useContext(ThemeContext);
   if (!context) throw new Error("useTheme must be used inside ThemeProvider.");
   return context;
-}
-
-export function ThemeToggle({ className = "" }: { className?: string }) {
-  const { theme, setTheme } = useTheme();
-
-  return (
-    <label
-      className={`theme-toggle ${className}`.trim()}
-      title="Appearance"
-    >
-      <Icon name={theme === "light" ? "sun" : "moon"} />
-      <select
-        value={theme}
-        onChange={(event) => setTheme(event.target.value as CinderTheme)}
-        aria-label="Appearance"
-      >
-        <option value="light">Light</option>
-        <option value="cinder">Ember</option>
-        <option value="dark">Black</option>
-      </select>
-    </label>
-  );
 }
