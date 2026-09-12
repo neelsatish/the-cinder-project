@@ -67,6 +67,7 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
   const { clearBackgroundImage } = useForgeTheme();
   const [page, setPage] = useState<Page>("home");
   const [toast, setToast] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
   const timer = useCountdown(session.user.id);
   const live = useStudentLiveSession({ api: session.api, baseUrl: session.baseUrl, accountId: session.user.id, online: session.online });
   const [search, setSearch] = useState<{ query: string; ids: string[] } | null>(null);
@@ -92,6 +93,16 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
   function selectPage(nextPage: Page) {
     setPage(nextPage);
     setSearch(null);
+  }
+
+  async function refreshWorkspace() {
+    const connected = await session.refresh();
+    if (!connected) {
+      setToast("Cinder Host is unavailable");
+      return;
+    }
+    setRefreshKey((value) => value + 1);
+    setToast("Student data refreshed");
   }
 
   function openLiveTask() {
@@ -184,7 +195,7 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
       </aside>
 
       <section className="forge-workspace">
-        <Topbar profileName={session.user.display_name} online={session.online} onSearch={handleSearch} onSwitchAccount={() => void session.switchAccount()} onOpenConnection={session.openConnection} />
+        <Topbar profileName={session.user.display_name} online={session.online} onSearch={handleSearch} onSwitchAccount={() => void session.switchAccount()} onOpenConnection={session.openConnection} onRefresh={refreshWorkspace} />
         <main className="forge-main">
           <LiveSessionBar live={live} online={session.online} onOpen={openLiveTask} />
           {forge.saveError && <p role="alert" className="form-error">{forge.saveError}</p>}
@@ -195,7 +206,7 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
               onNavigate={selectPage}
             />
           )}
-          {page === "classrooms" && <StudentClassrooms accountId={session.user.id} api={session.api} baseUrl={session.baseUrl} token={session.token} online={session.online} notes={forge.data.studioNotes} liveTask={live.session?.current_task ?? null} onLiveTaskState={live.acknowledgeTask} />}
+          {page === "classrooms" && <StudentClassrooms key={refreshKey} accountId={session.user.id} api={session.api} baseUrl={session.baseUrl} token={session.token} online={session.online} notes={forge.data.studioNotes} liveTask={live.session?.current_task ?? null} onLiveTaskState={live.acknowledgeTask} />}
           {page === "live" && <StudentLiveClassroom live={live} online={session.online} onOpenTask={openLiveTask} />}
           {page === "library" && <LibraryPage data={forge.data} onAddFile={addReferenceFile} onRemoveFile={removeReferenceFile} />}
           {page === "studio" && (

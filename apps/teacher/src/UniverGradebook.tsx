@@ -19,6 +19,7 @@ import { useTheme, type Assignment, type User } from "@cinder/ui";
 import {
   assignmentForHeader,
   findGradebookAssignmentColumn,
+  formatAssignmentHeader,
   resolveGradebookCellTarget,
 } from "./gradebookIntent";
 
@@ -195,7 +196,7 @@ function workbookData(props: Props): Partial<IWorkbookData> {
   };
   props.assignments.forEach((assignment, column) => {
     sheet.cellData![0]![column + 2] = {
-      v: `${assignment.title} / ${assignment.max_points}`,
+      v: formatAssignmentHeader(assignment),
       s: { bg: { rgb: "#f0e7de" }, bl: 1 },
     };
   });
@@ -426,7 +427,7 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         propsRef.current.assignments.forEach((assignment, column) => {
           gradeSheet
             .getRange(0, column + 2)
-            .setValue(`${assignment.title} / ${assignment.max_points}`)
+            .setValue(formatAssignmentHeader(assignment))
             .setBackgroundColor("#f0e7de")
             .setFontWeight("bold")
             .setWrap(true)

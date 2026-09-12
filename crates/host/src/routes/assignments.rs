@@ -338,7 +338,10 @@ async fn submit_work(
                 )
                 .optional()?;
             let (submission_id, status) = match existing {
-                Some((id, _)) => (parse_uuid(&id, "submission")?, SubmissionStatus::Resubmitted),
+                Some((id, existing_status)) => {
+                    require_submission_editable(&existing_status)?;
+                    (parse_uuid(&id, "submission")?, SubmissionStatus::Resubmitted)
+                }
                 None => (Uuid::new_v4(), SubmissionStatus::Submitted),
             };
             let next_version: i64 = conn.query_row(
@@ -437,6 +440,15 @@ async fn withdraw_work(
     let student_id = student.id();
     state
         .db(move |conn| {
+            let status: String = conn
+                .query_row(
+                    "SELECT status FROM submissions WHERE assignment_id = ?1 AND student_id = ?2",
+                    rusqlite::params![assignment_id.to_string(), student_id.to_string()],
+                    |row| row.get(0),
+                )
+                .optional()?
+                .ok_or(HostError::NotFound("submission"))?;
+            require_submission_editable(&status)?;
             let changed = conn.execute(
                 "UPDATE submissions SET status = 'withdrawn', updated_at = ?3
                   WHERE assignment_id = ?1 AND student_id = ?2 AND status <> 'withdrawn'",
@@ -1048,11 +1060,21 @@ fn validate_classroom_change(
     }
 }
 
+fn require_submission_editable(status: &str) -> HostResult<()> {
+    if status == SubmissionStatus::Graded.as_str() {
+        Err(HostError::BadRequest(
+            "Graded work cannot be taken back or resubmitted.".into(),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        validate_classroom_change, validate_submission_payload, MAX_SUBMISSION_DOCUMENT_BYTES,
-        MAX_SUBMISSION_PLAINTEXT_BYTES,
+        require_submission_editable, validate_classroom_change, validate_submission_payload,
+        MAX_SUBMISSION_DOCUMENT_BYTES, MAX_SUBMISSION_PLAINTEXT_BYTES,
     };
     use cinder_core::{AssignmentStatus, SubmitWorkRequest};
     use serde_json::json;
@@ -1071,6 +1093,13 @@ mod tests {
             validate_classroom_change(first, AssignmentStatus::Published, first, true).is_ok(),
             "editing in place must remain available"
         );
+    }
+
+    #[test]
+    fn graded_submissions_are_final_for_students() {
+        assert!(require_submission_editable("submitted").is_ok());
+        assert!(require_submission_editable("withdrawn").is_ok());
+        assert!(require_submission_editable("graded").is_err());
     }
 
     #[test]

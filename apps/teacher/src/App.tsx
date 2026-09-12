@@ -61,6 +61,7 @@ import { LiveSessionControls } from "./LiveSessionControls";
 import { QuizManager } from "./QuizManager";
 import {
   buildGradebookCellMap,
+  formatAssignmentHeader,
   normalizeCellAddress,
   resolveGradebookCellTarget,
   resolveGradebookIntent,
@@ -1686,6 +1687,11 @@ function ClassroomWorkspace({
   const [teacherAccounts, setTeacherAccounts] = useState<User[]>([]);
   const [teacherToAdd, setTeacherToAdd] = useState("");
   const [materials, setMaterials] = useState<StudyNode[]>([]);
+  const [materialPreview, setMaterialPreview] = useState<{
+    url: string;
+    mime: string;
+    name: string;
+  } | null>(null);
   const [busyId, setBusyId] = useState("");
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -1726,6 +1732,12 @@ function ClassroomWorkspace({
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(
+    () => () => {
+      if (materialPreview) URL.revokeObjectURL(materialPreview.url);
+    },
+    [materialPreview],
+  );
   const enrolled = new Set(roster?.students.map((student) => student.id));
   const isOwner = roster?.classroom.owner_teacher_id === user.id;
   const assignedTeachers = new Set([
@@ -2009,21 +2021,30 @@ function ClassroomWorkspace({
                     <div className="list-actions">
                       <Button
                         variant="ghost"
-                        icon="download"
+                        icon="document"
+                        disabled={busyId === material.id}
                         onClick={async () => {
-                          const blob = await api.materialBlob(material.id);
-                          const url = URL.createObjectURL(blob);
-                          const anchor = document.createElement("a");
-                          anchor.href = url;
-                          anchor.download = material.name;
-                          anchor.click();
-                          window.setTimeout(
-                            () => URL.revokeObjectURL(url),
-                            10_000,
-                          );
+                          setBusyId(material.id);
+                          setError("");
+                          try {
+                            const blob = await api.materialBlob(material.id);
+                            setMaterialPreview({
+                              url: URL.createObjectURL(blob),
+                              mime: blob.type,
+                              name: material.name,
+                            });
+                          } catch (failure) {
+                            setError(
+                              failure instanceof Error
+                                ? failure.message
+                                : "Material could not be opened.",
+                            );
+                          } finally {
+                            setBusyId("");
+                          }
                         }}
                       >
-                        Open
+                        {busyId === material.id ? "Opening…" : "Open"}
                       </Button>
                       <Button
                         variant="ghost"
@@ -2075,6 +2096,17 @@ function ClassroomWorkspace({
       {creatingStudent && roster ? <CreateStudentModal classrooms={[roster.classroom]} onClose={() => setCreatingStudent(false)} onCreate={async (input) => { const result = await api.createStudent(input); setCreatingStudent(false); setCredentials(result); await Promise.all([load(), onUpdated()]); }} /> : null}
       {editingStudent ? <EditStudentModal student={editingStudent} onClose={() => setEditingStudent(null)} onSave={async (input) => { await api.updateStudent(editingStudent.id, input); setEditingStudent(null); await Promise.all([load(), onUpdated()]); }} /> : null}
       {credentials ? <StudentCredentialsModal credentials={credentials} onClose={() => setCredentials(null)} /> : null}
+      {materialPreview ? (
+        <Modal title={materialPreview.name} onClose={() => setMaterialPreview(null)}>
+          <div className="classroom-material-preview">
+            {materialPreview.mime.startsWith("image/") ? (
+              <img src={materialPreview.url} alt={materialPreview.name} />
+            ) : (
+              <iframe title={materialPreview.name} src={materialPreview.url} />
+            )}
+          </div>
+        </Modal>
+      ) : null}
     </>
   );
 }
@@ -2930,6 +2962,11 @@ function AttendanceRow({
     <div className="attendance-row">
       <div>
         <strong>{record.student_name}</strong>
+        <small className="attendance-percentage">
+          {record.present_percentage === null
+            ? "No attendance recorded"
+            : `${record.present_percentage}% present`}
+        </small>
         {record.checked_in ? (
           <small className="checked-in">
             <span className="status-dot" /> Signed in today
@@ -3348,7 +3385,7 @@ function GradebookView({
       [
         "Student",
         "Username",
-        ...roomAssignments.map((item) => `${item.title} / ${item.max_points}`),
+        ...roomAssignments.map(formatAssignmentHeader),
       ],
       ...roster.map((student) => [
         student.display_name,
@@ -3544,7 +3581,7 @@ function PrintableGradebook({
             <th>Student</th>
             <th>Username</th>
             {assignments.map((assignment) => (
-              <th key={assignment.id}>{assignment.title} / {assignment.max_points}</th>
+              <th key={assignment.id}>{formatAssignmentHeader(assignment)}</th>
             ))}
           </tr>
         </thead>
@@ -3909,7 +3946,7 @@ function describeGradebookAction(
     const assignment = assignments.find(
       (item) => item.id === action.assignment_id,
     );
-    return `Change ${assignment?.title ?? "the assignment"} to “${action.title} / ${action.max_points}”.`;
+    return `Change ${assignment?.title ?? "the assignment"} to ${formatAssignmentHeader(action)}.`;
   }
   if (action.type === "add_column") {
     return `Add the “${action.title}” column${action.values?.length ? ` with ${action.values.length} value(s)` : ""}.`;

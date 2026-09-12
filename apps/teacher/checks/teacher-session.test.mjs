@@ -10,6 +10,13 @@ import {
   teacherStartupView,
 } from "../src/teacherSession.ts";
 import { isCinderHealthResponse } from "../../../packages/ui/src/health.ts";
+import { assignmentForHeader, formatAssignmentHeader } from "../src/gradebookIntent.ts";
+
+test("gradebook assignment headers stay readable and resolvable", () => {
+  const assignment = { id: "work-1", title: "Writing Work 1", max_points: 100 };
+  assert.equal(formatAssignmentHeader(assignment), '"Writing Work 1"  -/100');
+  assert.equal(assignmentForHeader(formatAssignmentHeader(assignment), [assignment])?.id, "work-1");
+});
 
 test("teacher session migration and startup modes stay server-specific", () => {
   const teacher = { id: "teacher-1", role: "teacher" };
