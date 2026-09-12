@@ -27,6 +27,8 @@ pub fn router() -> Router<AppState> {
 const KEY_BASE_URL: &str = "ai.base_url";
 const KEY_MODEL: &str = "ai.model";
 const KEY_API_KEY: &str = "ai.api_key";
+pub(crate) const KEY_GOOGLE_API_KEY: &str = "ai.google_key";
+pub(crate) const KEY_GOOGLE_MODEL: &str = "ai.google_model";
 
 /// Cap selected context so a whole gradebook can fit while one request still
 /// cannot consume an unbounded model window.
@@ -74,7 +76,7 @@ fn normalize_base_url(value: Option<String>) -> HostResult<Option<String>> {
     Ok(Some(url.to_string().trim_end_matches('/').to_owned()))
 }
 
-fn get_setting(conn: &rusqlite::Connection, key: &str) -> HostResult<Option<String>> {
+pub(crate) fn get_setting(conn: &rusqlite::Connection, key: &str) -> HostResult<Option<String>> {
     Ok(conn
         .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
             r.get::<_, String>(0)
@@ -110,7 +112,10 @@ fn encrypt_api_key(secret: &[u8; 32], plaintext: &str) -> HostResult<String> {
     ))
 }
 
-fn decrypt_api_key(secret: &[u8; 32], stored: Option<String>) -> HostResult<Option<String>> {
+pub(crate) fn decrypt_api_key(
+    secret: &[u8; 32],
+    stored: Option<String>,
+) -> HostResult<Option<String>> {
     let Some(stored) = stored.filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
@@ -169,11 +174,13 @@ async fn read_settings(
                 get_setting(conn, KEY_BASE_URL)?,
                 get_setting(conn, KEY_MODEL)?,
                 decrypt_api_key(&secret, get_setting(conn, KEY_API_KEY)?)?,
+                decrypt_api_key(&secret, get_setting(conn, KEY_GOOGLE_API_KEY)?)?,
+                get_setting(conn, KEY_GOOGLE_MODEL)?,
             ))
         })
         .await?;
 
-    let (stored_base_url, model, api_key) = stored;
+    let (stored_base_url, model, api_key, google_key, google_model) = stored;
     // Re-validate values loaded from older releases or a manually edited
     // database before making any provider request.
     let base_url = stored_base_url.and_then(|url| normalize_base_url(Some(url)).ok().flatten());
@@ -191,6 +198,8 @@ async fn read_settings(
         model: model.unwrap_or_default(),
         has_key: api_key.is_some(),
         reachable,
+        has_google_key: google_key.is_some(),
+        google_model: google_model.unwrap_or_else(|| cinder_ai::google::DEFAULT_MODEL.to_owned()),
     }))
 }
 
@@ -208,29 +217,38 @@ async fn write_settings(
     if model.chars().count() > MAX_MODEL_CHARS {
         return Err(HostError::BadRequest("The model name is too long.".into()));
     }
-    if req
-        .api_key
-        .as_deref()
-        .is_some_and(|key| key.chars().count() > MAX_API_KEY_CHARS)
-    {
-        return Err(HostError::BadRequest("The API key is too long.".into()));
+    for key in [req.api_key.as_deref(), req.google_key.as_deref()] {
+        if key.is_some_and(|key| key.chars().count() > MAX_API_KEY_CHARS) {
+            return Err(HostError::BadRequest("The API key is too long.".into()));
+        }
+    }
+    let google_model = req.google_model.unwrap_or_default().trim().to_owned();
+    if google_model.chars().count() > MAX_MODEL_CHARS {
+        return Err(HostError::BadRequest("The model name is too long.".into()));
     }
 
     let secret = state.ai_key_secret;
     let api_key = req.api_key;
+    let google_key = req.google_key;
     state
         .db(move |conn| {
             put_setting(conn, KEY_BASE_URL, base_url.as_deref().unwrap_or(""))?;
             put_setting(conn, KEY_MODEL, &model)?;
+            put_setting(conn, KEY_GOOGLE_MODEL, &google_model)?;
             // Absent means "leave the stored key alone", so the settings form
             // can be saved without the key being round-tripped through a client.
-            if let Some(key) = api_key.as_deref() {
-                let encrypted = if key.is_empty() {
-                    String::new()
-                } else {
-                    encrypt_api_key(&secret, key)?
-                };
-                put_setting(conn, KEY_API_KEY, &encrypted)?;
+            for (setting, supplied) in [
+                (KEY_API_KEY, api_key.as_deref()),
+                (KEY_GOOGLE_API_KEY, google_key.as_deref()),
+            ] {
+                if let Some(key) = supplied {
+                    let encrypted = if key.is_empty() {
+                        String::new()
+                    } else {
+                        encrypt_api_key(&secret, key)?
+                    };
+                    put_setting(conn, setting, &encrypted)?;
+                }
             }
             Ok(())
         })

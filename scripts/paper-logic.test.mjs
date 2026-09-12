@@ -163,6 +163,60 @@ test("keeps citations compact and question and answer content separate", () => {
   assert.doesNotMatch(questions, /Cinder/i);
 });
 
+test("reads a marking scheme and keeps it out of the question paper", () => {
+  const parsed = parseGeneratedPaperResponse(
+    JSON.stringify({
+      questions: [
+        {
+          id: "q1",
+          prompt: "Explain why the reading drifts.",
+          marks: 3,
+          answer: "The sensor warms up.",
+          scheme: {
+            marking_points: [
+              { text: "Identifies self-heating", marks: 2 },
+              "States the reading rises",
+            ],
+            accepted_alternatives: ["thermal drift", "sensor heats itself"],
+            guidance: "Award full marks without the numerical value.",
+          },
+        },
+      ],
+    }),
+  );
+
+  const scheme = parsed.questions[0].scheme;
+  assert.equal(scheme.markingPoints.length, 2);
+  assert.deepEqual(scheme.markingPoints[0], { text: "Identifies self-heating", marks: 2 });
+  // A bare string is still a marking point, worth one mark.
+  assert.equal(scheme.markingPoints[1].marks, 1);
+  assert.equal(scheme.acceptedAlternatives.length, 2);
+  assert.match(scheme.guidance, /without the numerical value/);
+
+  const schemeMetadata = { ...metadata, sources: [] };
+  const questions = questionPaperText(schemeMetadata, parsed);
+  assert.doesNotMatch(questions, /self-heating/i);
+  assert.doesNotMatch(questions, /Also accept/i);
+
+  const key = answerKeyText(schemeMetadata, parsed);
+  assert.match(key, /Identifies self-heating \[2\]/);
+  assert.match(key, /Also accept: thermal drift; sensor heats itself/);
+  assert.match(key, /Do not give this to students/);
+});
+
+test("tolerates a paper saved before marking schemes existed", () => {
+  // Papers already in a teacher's library have no `scheme` field at all.
+  assert.doesNotThrow(() => answerKeyText(metadata, paper));
+  const parsed = parseGeneratedPaperResponse(
+    '{"questions":[{"prompt":"State the unit.","marks":1,"answer":"newton","scheme":"nonsense"}]}',
+  );
+  assert.deepEqual(parsed.questions[0].scheme, {
+    markingPoints: [],
+    acceptedAlternatives: [],
+    guidance: "",
+  });
+});
+
 test("creates separate, unbranded PDF documents", async () => {
   const questionBytes = await createPaperPdf({ metadata, paper, kind: "question" });
   const answerBytes = await createPaperPdf({ metadata, paper, kind: "answer" });

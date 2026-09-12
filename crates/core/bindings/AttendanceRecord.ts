@@ -5,7 +5,7 @@ export type AttendanceRecord = { student_id: string, student_name: string, statu
 /**
  * A recent login is a suggestion only; the teacher remains authoritative.
  */
-checked_in: boolean,
+checked_in: boolean, 
 /**
  * Percentage of recorded classroom days marked present, rounded to a whole number.
  */

@@ -17,4 +17,10 @@ has_key: boolean,
 /**
  * False until the endpoint actually answers.
  */
-reachable: boolean, };
+reachable: boolean, 
+/**
+ * A separate Google key, used only for finding papers online and locating
+ * figures inside them. Without it the paper creator falls back to uploads
+ * and hand-drawn crops.
+ */
+has_google_key: boolean, google_model: string, };

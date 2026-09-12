@@ -32,13 +32,13 @@ pub fn router() -> Router<AppState> {
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
-struct UploadQuery {
-    parent_id: Option<Uuid>,
-    classroom_id: Option<Uuid>,
+pub(crate) struct UploadQuery {
+    pub parent_id: Option<Uuid>,
+    pub classroom_id: Option<Uuid>,
     /// Teachers only: put this in the shared class library instead of the
     /// uploader's own tree.
     #[serde(default)]
-    shared: bool,
+    pub shared: bool,
 }
 
 async fn upload(
@@ -71,6 +71,19 @@ async fn upload(
         break;
     }
 
+    store_material(&state, &user, query, original_name, bytes).await
+}
+
+/// Shared by teacher uploads and by papers fetched from an examination board,
+/// so both land in the same content-addressed store under the same checks.
+pub(crate) async fn store_material(
+    state: &AppState,
+    user: &CurrentUser,
+    query: UploadQuery,
+    original_name: String,
+    bytes: Vec<u8>,
+) -> HostResult<Json<Node>> {
+    let user = user.clone();
     if bytes.is_empty() {
         return Err(HostError::BadRequest("That file is empty.".into()));
     }

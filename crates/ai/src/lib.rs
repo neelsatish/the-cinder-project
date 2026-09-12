@@ -11,6 +11,7 @@ use anyhow::{bail, Context, Result};
 use cinder_core::GeneratedCard;
 use serde::Deserialize;
 
+pub mod google;
 pub mod grammar;
 
 const MAX_PROVIDER_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
@@ -250,7 +251,10 @@ impl ChatClient {
     }
 }
 
-async fn read_limited_response(mut response: reqwest::Response, limit: usize) -> Result<Vec<u8>> {
+pub(crate) async fn read_limited_response(
+    mut response: reqwest::Response,
+    limit: usize,
+) -> Result<Vec<u8>> {
     if response
         .content_length()
         .is_some_and(|length| length > limit as u64)
@@ -276,8 +280,9 @@ async fn read_limited_response(mut response: reqwest::Response, limit: usize) ->
     Ok(body)
 }
 
-/// Pulls `error.message` out of an OpenAI-style error body.
-fn upstream_error(body: &str) -> Option<String> {
+/// Pulls `error.message` out of an OpenAI-style error body. Google's error
+/// bodies use the same shape.
+pub(crate) fn upstream_error(body: &str) -> Option<String> {
     let value: serde_json::Value = serde_json::from_str(body).ok()?;
     value
         .get("error")?

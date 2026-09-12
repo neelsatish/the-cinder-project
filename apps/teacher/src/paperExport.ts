@@ -1,5 +1,6 @@
 import type { GeneratedPaper, PaperDiagram, PaperMetadata, PaperQuestion } from "./paperLogic.ts";
-import { boardName, sourceSummary } from "./paperLogic.ts";
+import { boardName, schemeLines, sourceSummary } from "./paperLogic.ts";
+import type { PaperScheme } from "./paperLogic.ts";
 
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
@@ -123,8 +124,8 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  pdf.setTitle(pdfSafeText(kind === "answer" ? `${metadata.title} - Answer key` : metadata.title));
-  pdf.setSubject(pdfSafeText(kind === "answer" ? "Answer key" : "Question paper"));
+  pdf.setTitle(pdfSafeText(kind === "answer" ? `${metadata.title} - Marking scheme` : metadata.title));
+  pdf.setSubject(pdfSafeText(kind === "answer" ? "Marking scheme" : "Question paper"));
   pdf.setCreator("Teacher worksheet");
 
   let page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
@@ -191,7 +192,45 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
     );
   };
 
-  const title = kind === "answer" ? `${metadata.title} - Answer key` : metadata.title;
+  const SCHEME_SIZE = 8.6;
+  const SCHEME_LINE_HEIGHT = 11;
+
+  const schemeHeight = (scheme: PaperScheme | undefined, width: number) =>
+    schemeLines(scheme, "").reduce(
+      (total, line) =>
+        total
+        + wrappedHeight(line, {
+          width,
+          size: SCHEME_SIZE,
+          lineHeight: SCHEME_LINE_HEIGHT,
+          gapAfter: 1,
+        }),
+      0,
+    );
+
+  const drawScheme = (scheme: PaperScheme | undefined, x: number) => {
+    for (const line of schemeLines(scheme, "")) {
+      const width = A4_WIDTH - PAGE_MARGIN - x;
+      ensureSpace(
+        wrappedHeight(line, {
+          width,
+          size: SCHEME_SIZE,
+          lineHeight: SCHEME_LINE_HEIGHT,
+          gapAfter: 1,
+        }),
+      );
+      drawWrapped(line, {
+        x,
+        width,
+        size: SCHEME_SIZE,
+        lineHeight: SCHEME_LINE_HEIGHT,
+        gapAfter: 1,
+        color: rgb(0.26, 0.3, 0.26),
+      });
+    }
+  };
+
+  const title = kind === "answer" ? `${metadata.title} - Marking scheme` : metadata.title;
   drawWrapped(title || "Question paper", { size: 19, lineHeight: 23, strong: true, gapAfter: 5 });
   drawWrapped(metadata.subject, { size: 11, strong: true, gapAfter: 2 });
   const boardDetails = [
@@ -269,6 +308,7 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
         gapAfter: 4,
       });
     }
+    if (kind === "answer") estimatedHeight += schemeHeight(question.scheme, contentWidth - 36);
     for (const part of question.subparts) {
       estimatedHeight += wrappedHeight(
         kind === "answer" ? part.answer || "No answer supplied." : part.prompt,
@@ -280,6 +320,7 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
         },
       );
       if (kind === "question") estimatedHeight += part.workingLines * 18;
+      if (kind === "answer") estimatedHeight += schemeHeight(part.scheme, contentWidth - 62);
     }
     if (!question.subparts.length && kind === "question") {
       estimatedHeight += question.workingLines * 18;
@@ -346,6 +387,7 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
         gapAfter: 4,
       });
     }
+    if (kind === "answer") drawScheme(question.scheme, PAGE_MARGIN + 36);
 
     for (const part of question.subparts) {
       const partText = kind === "answer" ? part.answer || "No answer supplied." : part.prompt;
@@ -385,6 +427,7 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
           y -= 6;
         }
       }
+      if (kind === "answer") drawScheme(part.scheme, PAGE_MARGIN + 62);
     }
 
     if (!question.subparts.length && kind === "question") {

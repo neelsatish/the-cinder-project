@@ -38,13 +38,14 @@ import {
   type Assignment,
   type AttendanceDay,
   type AttendanceStatus,
-  type ChatMessage,
   type Classroom,
   type ClassroomRoster,
   type ClassroomTeachers,
   type DashboardStats,
   type GradeChange,
+  type AiSettings,
   type NavigationItem,
+  type PaperCandidate,
   type Submission,
   type SubmissionComment,
   type StudyNode,
@@ -67,6 +68,7 @@ import {
   resolveGradebookIntent,
 } from "./gradebookIntent";
 import { createPaperPdf } from "./paperExport";
+import { FigurePicker, type FigureSource } from "./FigurePicker";
 import {
   answerKeyText,
   boardName,
@@ -74,14 +76,17 @@ import {
   DEFAULT_PAPER_OUTPUT_TOKENS,
   difficultyName,
   difficultyPrompt,
+  EMPTY_SCHEME,
   normalizePaperOutputTokens,
   PAPER_OUTPUT_TOKEN_OPTIONS,
+  PAPER_SOURCE_MODES,
   legacyPaperToSpec,
   normalizeGeneratedPaper,
   officialSourceUrl,
   paperTotalMarks,
   parseGeneratedPaperResponse,
   questionPaperText,
+  schemeLines,
   sourceSummary,
   type DifficultyLevel,
   type ExamBoard,
@@ -89,6 +94,7 @@ import {
   type PaperDiagram,
   type PaperMetadata,
   type PaperQuestion,
+  type PaperSourceMode,
 } from "./paperLogic";
 import {
   deleteQuestionPaper,
@@ -119,6 +125,7 @@ type TeacherTab =
   | "assignments"
   | "attendance"
   | "gradebook"
+  | "papers"
   | "settings";
 type TeacherConfig = { host_url: string | null; device_label: string | null };
 
@@ -131,6 +138,7 @@ const navigation: NavigationItem<TeacherTab>[] = [
   { id: "dashboard", label: "Overview", icon: "dashboard" },
   { id: "classrooms", label: "Classrooms", icon: "classrooms" },
   { id: "gradebook", label: "Gradebook", icon: "spreadsheet" },
+  { id: "papers", label: "Papers", icon: "document" },
   { id: "settings", label: "Settings", icon: "settings" },
 ];
 
@@ -709,6 +717,7 @@ export function App() {
           onUpdated={() => loadWorkspace(api)}
         />
       ) : null}
+      {tab === "papers" ? <PapersView api={api} classrooms={classrooms} /> : null}
       {tab === "settings" ? (
         <SettingsView
           api={api}
@@ -3995,7 +4004,7 @@ function diagramDataUrl(diagram: PaperDiagram) {
 }
 
 function paperHtml(metadata: PaperMetadata, paper: GeneratedPaper, kind: "question" | "answer") {
-  const title = kind === "answer" ? `${metadata.title} - Answer key` : metadata.title;
+  const title = kind === "answer" ? `${metadata.title} - Marking scheme` : metadata.title;
   const details = [
     boardName(metadata.board),
     metadata.syllabusCode ? `Syllabus ${metadata.syllabusCode}` : "",
@@ -4083,12 +4092,11 @@ async function extractPdfText(blob: Blob, name: string): Promise<ExtractedPdf> {
 }
 
 const ACTIVE_PAPER_KEY = "cinder.teacher.active-question-paper";
-const CHAT_TOKENS_KEY = "cinder.teacher.chat-max-output-tokens";
 
+/// A UUID, because the school server stores papers keyed by the id the teacher
+/// app generates.
 function createPaperId() {
-  const values = new Uint32Array(2);
-  crypto.getRandomValues(values);
-  return `paper-${Date.now().toString(36)}-${Array.from(values, (value) => value.toString(36)).join("")}`;
+  return crypto.randomUUID();
 }
 
 async function savePdfExport(defaultName: string, contents: Uint8Array) {
@@ -4147,7 +4155,7 @@ function PaperDocumentView({
   return (
     <article className={`worksheet-page worksheet-${kind}`}>
       <header className="worksheet-header">
-        <h1>{kind === "answer" ? `${metadata.title} - Answer key` : metadata.title}</h1>
+        <h1>{kind === "answer" ? `${metadata.title} - Marking scheme` : metadata.title}</h1>
         <strong>{metadata.subject}</strong>
         <p>{details.join(" | ")}</p>
         {kind === "question" && metadata.durationMinutes > 0 ? (
@@ -4297,6 +4305,21 @@ function PaperDocumentView({
               </div>
             ) : null}
 
+            {kind === "answer" ? (
+              <>
+                {schemeLines(question.scheme, "").map((line, index) => (
+                  <small className="worksheet-scheme-line" key={`scheme-${index}`}>{line}</small>
+                ))}
+                {question.subparts.flatMap((part) =>
+                  schemeLines(part.scheme, "").map((line, index) => (
+                    <small className="worksheet-scheme-line indented" key={`${part.label}-scheme-${index}`}>
+                      ({part.label}) {line}
+                    </small>
+                  )),
+                )}
+              </>
+            ) : null}
+
             {kind === "answer" && question.source ? (
               <small className="worksheet-source-note">Source note: {question.source}</small>
             ) : null}
@@ -4417,59 +4440,16 @@ function PrintablePaper({
     </div>
   );
 }
-
-function AssistantView({
+/// The papers workspace: a library rail on the left, the paper being worked on
+/// beside it. Master-detail rather than a mode switch, so a teacher can move
+/// between saved papers without losing their place.
+function PapersView({
   api,
   classrooms,
-  students,
-  assignments,
 }: {
   api: CinderApi;
   classrooms: Classroom[];
-  students: User[];
-  assignments: Assignment[];
 }) {
-  const [mode, setMode] = useState<"chat" | "paper" | "saved">("chat");
-  const [chatMaxOutputTokens, setChatMaxOutputTokens] = useState(() =>
-    normalizePaperOutputTokens(localStorage.getItem(CHAT_TOKENS_KEY)),
-  );
-  const [chatFloating, setChatFloating] = useState(false);
-  const [floatPos, setFloatPos] = useState({ x: 96, y: 96 });
-  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
-  const startDrag = (event: { clientX: number; clientY: number }) => {
-    dragRef.current = { startX: event.clientX, startY: event.clientY, originX: floatPos.x, originY: floatPos.y };
-    const onMove = (moveEvent: MouseEvent) => {
-      if (!dragRef.current) return;
-      const { startX, startY, originX, originY } = dragRef.current;
-      setFloatPos({
-        x: Math.max(0, originX + (moveEvent.clientX - startX)),
-        y: Math.max(0, originY + (moveEvent.clientY - startY)),
-      });
-    };
-    const onUp = () => {
-      dragRef.current = null;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  };
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: "assistant",
-      content: "Ask about a lesson, a quiz, or student feedback.",
-    },
-  ]);
-  const [prompt, setPrompt] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [contextClassroomId, setContextClassroomId] = useState(
-    classrooms[0]?.id ?? "",
-  );
-  const [includeNames, setIncludeNames] = useState(false);
-  const [includeScores, setIncludeScores] = useState(true);
-  const [materials, setMaterials] = useState<StudyNode[]>([]);
-  const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
-  const [contextStatus, setContextStatus] = useState("");
   const [savedPapers, setSavedPapers] = useState<SavedQuestionPaper[]>([]);
   const [papersLoading, setPapersLoading] = useState(true);
   const [papersError, setPapersError] = useState("");
@@ -4477,48 +4457,37 @@ function AssistantView({
     localStorage.getItem(ACTIVE_PAPER_KEY),
   );
   const [newPaperVersion, setNewPaperVersion] = useState(0);
-  const messagesRef = useRef<HTMLDivElement>(null);
-  const assistantMountedRef = useRef(true);
+  const [libraryFilter, setLibraryFilter] = useState("");
+  const mountedRef = useRef(true);
+
   useEffect(() => {
-    assistantMountedRef.current = true;
+    mountedRef.current = true;
     return () => {
-      assistantMountedRef.current = false;
+      mountedRef.current = false;
     };
   }, []);
-  useEffect(() => {
-    if (!contextClassroomId && classrooms[0]) {
-      setContextClassroomId(classrooms[0].id);
-    }
-  }, [classrooms, contextClassroomId]);
-  useEffect(() => {
-    void api
-      .tree()
-      .then((result) => setMaterials(result.nodes.filter((node) => node.kind === "pdf")))
-      .catch(() => setMaterials([]));
-  }, [api]);
+
   useEffect(() => {
     let cancelled = false;
-    void listSavedQuestionPapers()
+    void listSavedQuestionPapers(api)
       .then((papers) => {
-        if (!cancelled) {
-          setSavedPapers(papers);
-          setPapersError("");
-          const remembered = localStorage.getItem(ACTIVE_PAPER_KEY);
-          if (remembered && !papers.some((paper) => paper.id === remembered)) {
-            localStorage.removeItem(ACTIVE_PAPER_KEY);
-            setActivePaperId(null);
-          }
+        if (cancelled) return;
+        setSavedPapers(papers);
+        setPapersError("");
+        const remembered = localStorage.getItem(ACTIVE_PAPER_KEY);
+        if (remembered && !papers.some((paper) => paper.id === remembered)) {
+          localStorage.removeItem(ACTIVE_PAPER_KEY);
+          setActivePaperId(null);
         }
       })
       .catch((failure) => {
-        if (!cancelled) {
-          setSavedPapers([]);
-          setPapersError(
-            failure instanceof Error
-              ? `Saved papers could not be opened: ${failure.message}`
-              : "Saved papers could not be opened on this computer.",
-          );
-        }
+        if (cancelled) return;
+        setSavedPapers([]);
+        setPapersError(
+          failure instanceof Error
+            ? `Saved papers could not be opened: ${failure.message}`
+            : "Saved papers could not be opened from the school server.",
+        );
       })
       .finally(() => {
         if (!cancelled) setPapersLoading(false);
@@ -4526,476 +4495,272 @@ function AssistantView({
     return () => {
       cancelled = true;
     };
-  }, []);
-  useEffect(() => {
-    messagesRef.current?.scrollTo({
-      top: messagesRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-  }, [messages, busy]);
+  }, [api]);
 
-  const availableMaterials = materials.filter(
-    (material) =>
-      !contextClassroomId || material.classroom_id === contextClassroomId,
-  );
-
-  const buildCopilotContext = async () => {
-    const classroom = classrooms.find((item) => item.id === contextClassroomId);
-    if (!classroom) return undefined;
-    setContextStatus("Refreshing classroom context…");
-    const roomAssignments = assignments.filter(
-      (assignment) =>
-        assignment.classroom_id === classroom.id && assignment.status !== "draft",
-    );
-    const rosterResult = await api.classroomRoster(classroom.id);
-    const submissions = includeScores
-      ? await Promise.all(
-          roomAssignments.map(async (assignment) => ({
-            assignment,
-            submissions: await api.submissions(assignment.id),
-          })),
-        )
-      : [];
-    const submissionsByStudent = new Map<string, Map<string, Submission>>();
-    submissions.forEach(({ assignment, submissions: entries }) => {
-      entries.forEach((submission) => {
-        const current = submissionsByStudent.get(submission.student_id) ?? new Map();
-        current.set(assignment.id, submission);
-        submissionsByStudent.set(submission.student_id, current);
-      });
-    });
-
-    const lines = [
-      `Classroom: ${classroom.name}`,
-      `Subject code: ${classroom.subject_code || "Not set"}`,
-      `Student accounts in school: ${students.length}`,
-      "Assignments:",
-      ...roomAssignments.map(
-        (assignment, index) =>
-          `A${index + 1}: ${assignment.title} (${assignment.max_points} points, ${assignment.status})`,
-      ),
-    ];
-    if (includeScores) {
-      lines.push("Student scores:");
-      for (const [index, student] of rosterResult.students.entries()) {
-        const name = includeNames ? student.display_name : `Student ${index + 1}`;
-        const scores = roomAssignments.map((assignment, assignmentIndex) => {
-          const submission = submissionsByStudent.get(student.id)?.get(assignment.id);
-          if (!submission) return `A${assignmentIndex + 1}=not submitted`;
-          const points = submission.grade?.points;
-          return `A${assignmentIndex + 1}=${points ?? "ungraded"}/${assignment.max_points}`;
-        });
-        lines.push(`${name}: ${scores.join(", ") || "No assignments"}`);
-        if (lines.join("\n").length > 8_500) {
-          lines.push("Additional score rows were omitted to stay within the AI context limit.");
-          break;
-        }
-      }
-    } else {
-      lines.push(`Roster: ${rosterResult.students.length} students; scores were not included.`);
-      if (includeNames) {
-        lines.push(
-          `Student names: ${rosterResult.students.map((student) => student.display_name).join(", ")}`,
-        );
-      }
-    }
-
-    const selectedNodes = selectedMaterials
-      .map((id) => materials.find((material) => material.id === id))
-      .filter((material): material is StudyNode => Boolean(material));
-    if (selectedNodes.length) lines.push("Selected material extracts:");
-    const perMaterialLimit = Math.max(
-      2_000,
-      Math.floor(10_000 / Math.max(1, selectedNodes.length)),
-    );
-    const materialWarnings: string[] = [];
-    for (const material of selectedNodes) {
-      try {
-        const extracted = await extractPdfText(
-          await api.materialBlob(material.id),
-          material.name,
-        );
-        lines.push(
-          `MATERIAL: ${material.name} (${compactPageRanges(extracted.pages)})\n${extracted.text.slice(0, perMaterialLimit)}`,
-        );
-      } catch (failure) {
-        materialWarnings.push(
-          failure instanceof Error
-            ? failure.message
-            : `${material.name} could not be read.`,
-        );
-      }
-    }
-    const context = lines.join("\n").slice(0, 19_500);
-    setContextStatus(
-      `Using ${rosterResult.students.length} students, ${roomAssignments.length} assignments${includeNames ? ", names" : ", aliases"}${includeScores ? ", scores" : ""}, and ${selectedNodes.length - materialWarnings.length} material(s).${materialWarnings.length ? ` ${materialWarnings.join(" ")}` : ""}`,
-    );
-    return context;
-  };
-
-  const send = async () => {
-    if (!prompt.trim()) return;
-    const outgoing: ChatMessage[] = [
-      ...messages,
-      { role: "user", content: prompt.trim() },
-    ];
-    setMessages(outgoing);
-    setPrompt("");
-    setBusy(true);
-    try {
-      const context = await buildCopilotContext();
-      const result = await api.chat(
-        outgoing.filter((item) => item.role !== "system"),
-        context,
-        chatMaxOutputTokens,
+  const savePaperRecord = useCallback(
+    async (paper: SavedQuestionPaper) => {
+      await saveQuestionPaper(api, paper);
+      localStorage.setItem(ACTIVE_PAPER_KEY, paper.id);
+      if (!mountedRef.current) return;
+      setSavedPapers((current) =>
+        [paper, ...current.filter((item) => item.id !== paper.id)].sort((left, right) =>
+          right.updatedAt.localeCompare(left.updatedAt),
+        ),
       );
-      setMessages([
-        ...outgoing,
-        { role: "assistant", content: result.content },
-      ]);
-    } catch (failure) {
-      setMessages([
-        ...outgoing,
-        {
-          role: "assistant",
-          content:
-            failure instanceof Error
-              ? failure.message
-              : "The AI service could not answer.",
-        },
-      ]);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const savePaperRecord = useCallback(async (paper: SavedQuestionPaper) => {
-    await saveQuestionPaper(paper);
-    localStorage.setItem(ACTIVE_PAPER_KEY, paper.id);
-    if (!assistantMountedRef.current) return;
-    setSavedPapers((current) =>
-      [paper, ...current.filter((item) => item.id !== paper.id)].sort((left, right) =>
-        right.updatedAt.localeCompare(left.updatedAt),
-      ),
-    );
-    setActivePaperId(paper.id);
-  }, []);
+      setActivePaperId(paper.id);
+    },
+    [api],
+  );
 
   const startNewPaper = useCallback(() => {
     setActivePaperId(null);
     localStorage.removeItem(ACTIVE_PAPER_KEY);
     setNewPaperVersion((version) => version + 1);
-    setMode("paper");
   }, []);
 
   const openPaper = useCallback((id: string) => {
     setActivePaperId(id);
     localStorage.setItem(ACTIVE_PAPER_KEY, id);
-    setMode("paper");
   }, []);
 
-  const removePaper = useCallback(async (id: string) => {
-    await deleteQuestionPaper(id);
-    setSavedPapers((current) => current.filter((paper) => paper.id !== id));
-    if (activePaperId === id) {
-      setActivePaperId(null);
-      localStorage.removeItem(ACTIVE_PAPER_KEY);
-    }
-  }, [activePaperId]);
+  const removePaper = useCallback(
+    async (id: string) => {
+      await deleteQuestionPaper(api, id);
+      setSavedPapers((current) => current.filter((paper) => paper.id !== id));
+      if (activePaperId === id) {
+        setActivePaperId(null);
+        localStorage.removeItem(ACTIVE_PAPER_KEY);
+      }
+    },
+    [activePaperId, api],
+  );
 
-  const activePaper =
-    savedPapers.find((paper) => paper.id === activePaperId) ?? null;
+  const activePaper = savedPapers.find((paper) => paper.id === activePaperId) ?? null;
+  const filter = libraryFilter.trim().toLowerCase();
+  const visiblePapers = filter
+    ? savedPapers.filter((paper) =>
+        `${paper.title} ${paper.subject} ${paper.syllabusCode ?? ""}`.toLowerCase().includes(filter),
+      )
+    : savedPapers;
 
   return (
-    <div className="assistant-page">
-      <div className="assistant-mode-switch" role="tablist" aria-label="AI tools">
-        <Button
-          variant={mode === "chat" ? "primary" : "secondary"}
-          onClick={() => setMode("chat")}
-        >
-          Ask AI
-        </Button>
-        <Button
-          variant={mode === "paper" ? "primary" : "secondary"}
-          onClick={() => setMode("paper")}
-        >
-          Create question paper
-        </Button>
-        <Button
-          variant={mode === "saved" ? "primary" : "secondary"}
-          onClick={() => setMode("saved")}
-        >
-          Saved papers{savedPapers.length ? ` (${savedPapers.length})` : ""}
-        </Button>
-      </div>
-      {mode === "chat" ? (
-        <div className="chat-layout">
-          <Panel
-            className="chat-panel panel-flush"
-            title="Teacher assistant"
-            eyebrow="AI"
-            action={
-              <Button variant="ghost" icon="popout" onClick={() => setChatFloating(true)}>
-                Pop out
-              </Button>
-            }
-          >
-            {chatFloating ? (
-              <EmptyState
-                icon="assistant"
-                title="Chat is floating"
-                description="The assistant is open in a floating window. Move it, or dock it back here."
-                action={<Button onClick={() => setChatFloating(false)}>Dock chat</Button>}
-              />
-            ) : (
-              <>
-                <div className="chat-messages" ref={messagesRef}>
-                  {messages.map((message, index) => (
-                    <div key={index} className={`message message-${message.role}`}>
-                      {message.content}
-                    </div>
-                  ))}
-                  {busy ? <div className="message message-assistant">Thinking…</div> : null}
-                </div>
-                <div className="chat-compose">
-                  <textarea
-                    value={prompt}
-                    onChange={(event) => setPrompt(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        void send();
+    <div className="page papers-page">
+      <PageHeader
+        eyebrow="Assessment"
+        title="Question papers"
+        description="Build a paper from official past papers, keep its marking scheme private, then publish it to a classroom."
+        action={<Button variant="primary" icon="plus" onClick={startNewPaper}>New paper</Button>}
+      />
+      <div className="papers-workspace">
+        <aside className="papers-library" aria-label="Saved question papers">
+          <div className="papers-library-head">
+            <h2>Library</h2>
+            <span className="papers-library-count">
+              {papersLoading ? "Loading" : `${savedPapers.length} saved`}
+            </span>
+          </div>
+          <input
+            className="papers-library-filter"
+            type="search"
+            value={libraryFilter}
+            placeholder="Filter by title or subject"
+            aria-label="Filter saved papers"
+            onChange={(event) => setLibraryFilter(event.target.value)}
+          />
+          {papersError ? <p className="form-error">{papersError}</p> : null}
+          <div className="papers-library-list">
+            {papersLoading ? (
+              <p className="papers-library-empty">Opening saved papers…</p>
+            ) : visiblePapers.length ? (
+              visiblePapers.map((paper) => (
+                <div
+                  className={`papers-library-row${paper.id === activePaperId ? " is-active" : ""}`}
+                  key={paper.id}
+                >
+                  <button type="button" onClick={() => openPaper(paper.id)}>
+                    <strong>{paper.title}</strong>
+                    <small>
+                      {[paper.subject || "General", paper.board, paper.syllabusCode]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </small>
+                    <small>Updated {formatDate(paper.updatedAt)}</small>
+                  </button>
+                  <button
+                    type="button"
+                    className="papers-library-delete"
+                    aria-label={`Delete ${paper.title}`}
+                    onClick={() => {
+                      if (window.confirm(`Delete “${paper.title}” from the school server?`)) {
+                        void removePaper(paper.id);
                       }
                     }}
-                    placeholder="Ask about a lesson or student work…"
-                  />
-                  <Button
-                    variant="primary"
-                    icon="send"
-                    onClick={() => void send()}
-                    disabled={busy || !prompt.trim()}
                   >
-                    {busy ? "Thinking…" : "Send"}
-                  </Button>
+                    <Icon name="trash" />
+                  </button>
                 </div>
-              </>
+              ))
+            ) : (
+              <p className="papers-library-empty">
+                {savedPapers.length
+                  ? "No paper matches that filter."
+                  : "Papers you create are saved here on the school server."}
+              </p>
             )}
-          </Panel>
-          <div className="assistant-side-stack">
-            <Panel title="Copilot context">
-              <div className="form-stack copilot-context">
-                <Field label="AI output allowance">
-                  <select
-                    value={chatMaxOutputTokens}
-                    onChange={(event) => {
-                      const next = normalizePaperOutputTokens(event.target.value);
-                      setChatMaxOutputTokens(next);
-                      localStorage.setItem(CHAT_TOKENS_KEY, String(next));
-                    }}
-                  >
-                    {PAPER_OUTPUT_TOKEN_OPTIONS.map((option) => (
-                      <option value={option.value} key={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Classroom">
-                  <select
-                    value={contextClassroomId}
-                    onChange={(event) => {
-                      setContextClassroomId(event.target.value);
-                      setSelectedMaterials([]);
-                    }}
-                  >
-                    {classrooms.map((classroom) => (
-                      <option value={classroom.id} key={classroom.id}>
-                        {classroom.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <label className="check-field">
-                  <input
-                    type="checkbox"
-                    checked={includeScores}
-                    onChange={(event) => setIncludeScores(event.target.checked)}
-                  />
-                  <span>Include assignment scores</span>
-                </label>
-                <label className="check-field">
-                  <input
-                    type="checkbox"
-                    checked={includeNames}
-                    onChange={(event) => setIncludeNames(event.target.checked)}
-                  />
-                  <span>Include student names</span>
-                </label>
-                <div className="copilot-materials">
-                  <strong>Material text</strong>
-                  {availableMaterials.length ? (
-                    availableMaterials.map((material) => (
-                      <label className="check-field" key={material.id}>
-                        <input
-                          type="checkbox"
-                          checked={selectedMaterials.includes(material.id)}
-                          onChange={(event) =>
-                            setSelectedMaterials((current) =>
-                              event.target.checked
-                                ? [...current, material.id].slice(0, 4)
-                                : current.filter((id) => id !== material.id),
-                            )
-                          }
-                        />
-                        <span>{material.name}</span>
-                      </label>
-                    ))
-                  ) : (
-                    <small>No PDF materials in this classroom.</small>
-                  )}
-                </div>
-                <small>{contextStatus}</small>
-              </div>
-            </Panel>
           </div>
-        </div>
-      ) : mode === "paper" ? (
-        <QuestionPaperStudio
-          key={activePaperId ?? `new-${newPaperVersion}`}
-          api={api}
-          classrooms={classrooms}
-          activePaper={activePaper}
-          onSave={savePaperRecord}
-          onDelete={removePaper}
-          onCreateNew={startNewPaper}
-        />
-      ) : (
-        <SavedPapersView
-          papers={savedPapers}
-          loading={papersLoading}
-          error={papersError}
-          onOpen={openPaper}
-          onDelete={removePaper}
-          onCreate={startNewPaper}
-        />
-      )}
-      {chatFloating ? (
-        <div className="chat-float" style={{ left: floatPos.x, top: floatPos.y }}>
-          <div className="chat-float-header" onMouseDown={startDrag}>
-            <span>Teacher assistant</span>
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => setChatFloating(false)}
-              aria-label="Dock chat"
-            >
-              <Icon name="close" />
-            </button>
-          </div>
-          <div className="chat-messages" ref={messagesRef}>
-            {messages.map((message, index) => (
-              <div key={index} className={`message message-${message.role}`}>
-                {message.content}
-              </div>
-            ))}
-            {busy ? <div className="message message-assistant">Thinking…</div> : null}
-          </div>
-          <div className="chat-compose">
-            <textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void send();
-                }
-              }}
-              placeholder="Ask about a lesson or student work…"
-            />
-            <Button
-              variant="primary"
-              icon="send"
-              onClick={() => void send()}
-              disabled={busy || !prompt.trim()}
-            >
-              {busy ? "Thinking…" : "Send"}
-            </Button>
-          </div>
-        </div>
-      ) : null}
+        </aside>
+
+        {/* The studio reads its fields from the paper it mounts with, so it must
+            not mount before the library has resolved the remembered paper. */}
+        {papersLoading ? (
+          <div className="papers-editor-loading">Opening the paper library…</div>
+        ) : (
+          <QuestionPaperStudio
+            key={activePaperId ?? `new-${newPaperVersion}`}
+            api={api}
+            classrooms={classrooms}
+            activePaper={activePaper}
+            onSave={savePaperRecord}
+            onDelete={removePaper}
+            onCreateNew={startNewPaper}
+          />
+        )}
+      </div>
     </div>
   );
 }
 
-function SavedPapersView({
-  papers,
-  loading,
-  error,
-  onOpen,
-  onDelete,
-  onCreate,
-}: {
-  papers: SavedQuestionPaper[];
-  loading: boolean;
-  error: string;
-  onOpen: (id: string) => void;
-  onDelete: (id: string) => Promise<void>;
-  onCreate: () => void;
-}) {
+
+
+/// Both keys live on the school server, encrypted, and are never read back to a
+/// client — the form only reports whether one is stored.
+function AiSettingsPanel({ api }: { api: CinderApi }) {
+  const [settings, setSettings] = useState<AiSettings | null>(null);
+  const [baseUrl, setBaseUrl] = useState("");
+  const [model, setModel] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [googleKey, setGoogleKey] = useState("");
+  const [googleModel, setGoogleModel] = useState("");
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void api
+      .aiSettings()
+      .then((result) => {
+        setSettings(result);
+        setBaseUrl(result.base_url ?? "");
+        setModel(result.model);
+        setGoogleModel(result.google_model);
+      })
+      .catch(() => setStatus("AI settings could not be read from the school server."));
+  }, [api]);
+
+  const save = async () => {
+    setBusy(true);
+    setStatus("");
+    try {
+      const result = await api.saveAiSettings({
+        base_url: baseUrl.trim() || undefined,
+        model: model.trim(),
+        // Absent leaves the stored key alone; a blank box is not a deletion.
+        api_key: apiKey.trim() ? apiKey.trim() : undefined,
+        google_key: googleKey.trim() ? googleKey.trim() : undefined,
+        google_model: googleModel.trim() || undefined,
+      });
+      setSettings(result);
+      setApiKey("");
+      setGoogleKey("");
+      setStatus("Saved.");
+    } catch (failure) {
+      setStatus(failure instanceof Error ? failure.message : "Those settings could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearGoogleKey = async () => {
+    setBusy(true);
+    try {
+      setSettings(
+        await api.saveAiSettings({
+          base_url: baseUrl.trim() || undefined,
+          model: model.trim(),
+          google_key: "",
+          google_model: googleModel.trim() || undefined,
+        }),
+      );
+      setStatus("Google key removed.");
+    } catch (failure) {
+      setStatus(failure instanceof Error ? failure.message : "The key could not be removed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <Panel
-      className="saved-papers-panel panel-flush"
-      title="Saved question papers"
-      eyebrow="Teacher library"
-      action={<Button variant="primary" icon="plus" onClick={onCreate}>New paper</Button>}
-    >
-      {loading ? (
-        <div className="editor-loading">Opening saved papers…</div>
-      ) : error ? (
-        <EmptyState
-          icon="document"
-          title="Saved papers are unavailable"
-          description={error}
-          action={<Button variant="primary" onClick={onCreate}>Create a new paper</Button>}
-        />
-      ) : papers.length ? (
-        <div className="saved-paper-list">
-          {papers.map((paper) => (
-            <article className="saved-paper-row" key={paper.id}>
-              <button type="button" onClick={() => onOpen(paper.id)}>
-                <Icon name="document" />
-                <span>
-                  <strong>{paper.title}</strong>
-                  <small>
-                    {paper.subject || "General"} · Updated {formatDate(paper.updatedAt)}
-                  </small>
-                  {paper.sources.length ? <small>{sourceSummary(paper.sources)}</small> : null}
-                </span>
-              </button>
-              <Button
-                variant="ghost"
-                icon="trash"
-                onClick={() => {
-                  if (window.confirm(`Delete “${paper.title}” from this computer?`)) {
-                    void onDelete(paper.id);
-                  }
-                }}
-              >
-                Delete
-              </Button>
-            </article>
-          ))}
+    <Panel title="AI provider" eyebrow="Paper creator">
+      <div className="form-stack">
+        <Field label="Text model address">
+          <input
+            value={baseUrl}
+            placeholder="https://provider.example.com/v1"
+            onChange={(event) => setBaseUrl(event.target.value)}
+          />
+        </Field>
+        <Field label="Model">
+          <input value={model} placeholder="gpt-4o-mini" onChange={(event) => setModel(event.target.value)} />
+        </Field>
+        <Field label={settings?.has_key ? "Replace the stored key" : "API key"}>
+          <input
+            type="password"
+            value={apiKey}
+            placeholder={settings?.has_key ? "A key is stored" : "Paste the provider key"}
+            onChange={(event) => setApiKey(event.target.value)}
+          />
+        </Field>
+        {settings ? (
+          <small className="form-hint">
+            {settings.reachable
+              ? "The text model answered."
+              : settings.base_url
+                ? "The text model did not answer."
+                : "No text model is configured, so papers cannot be generated yet."}
+          </small>
+        ) : null}
+
+        <Field label={settings?.has_google_key ? "Replace the Google key" : "Google key"}>
+          <input
+            type="password"
+            value={googleKey}
+            placeholder={settings?.has_google_key ? "A key is stored" : "Paste a Google AI Studio key"}
+            onChange={(event) => setGoogleKey(event.target.value)}
+          />
+        </Field>
+        <Field label="Google model">
+          <input value={googleModel} onChange={(event) => setGoogleModel(event.target.value)} />
+        </Field>
+        <small className="form-hint">
+          Used only to find official papers online and locate figures on their pages. Without it the
+          paper creator still works from PDFs you upload. Cinder never sends student work to it, and
+          only teachers can reach it.
+        </small>
+
+        <div className="list-actions">
+          <Button variant="primary" disabled={busy} onClick={() => void save()}>
+            {busy ? "Saving…" : "Save AI settings"}
+          </Button>
+          {settings?.has_google_key ? (
+            <Button disabled={busy} onClick={() => void clearGoogleKey()}>Remove Google key</Button>
+          ) : null}
         </div>
-      ) : (
-        <EmptyState
-          icon="document"
-          title="No saved papers"
-          description="Created papers and their separate answer keys will be stored here on this teacher computer."
-          action={<Button variant="primary" onClick={onCreate}>Create a paper</Button>}
-        />
-      )}
+        {status ? (
+          <p className={/could not|not answer|cannot/i.test(status) ? "form-error" : "form-hint"}>{status}</p>
+        ) : null}
+      </div>
     </Panel>
   );
 }
-
 
 function initialPaperSpec(paper: SavedQuestionPaper | null): GeneratedPaper {
   if (!paper) return EMPTY_GENERATED_PAPER;
@@ -5057,6 +4822,16 @@ function QuestionPaperStudio({
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(
     activePaper?.difficulty ?? 3,
   );
+  const [sourceMode, setSourceMode] = useState<PaperSourceMode>(
+    activePaper?.sourceMode ?? "adapt",
+  );
+  const [rightsConfirmed, setRightsConfirmed] = useState(activePaper?.rightsConfirmed ?? false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<PaperCandidate[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
+  const [showFigurePicker, setShowFigurePicker] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [questionCount, setQuestionCount] = useState(
     activePaper?.paperSpec?.questions.length ?? 10,
   );
@@ -5087,8 +4862,12 @@ function QuestionPaperStudio({
   const classroom = classrooms.find((item) => item.id === classroomId) ?? null;
   const maxOutputTokens = normalizePaperOutputTokens(advanced.maxOutputTokens);
   const subject = classroom?.name ?? activePaper?.subject ?? "General";
+  // A reference can be a class material or a paper the teacher downloaded into
+  // their own tree; both are usable as a source, only the first is visible to
+  // students.
   const classroomMaterials = materials.filter(
-    (material) => !classroomId || material.classroom_id === classroomId,
+    (material) =>
+      !classroomId || material.classroom_id === classroomId || !material.classroom_id,
   );
   const metadata = useMemo<PaperMetadata>(
     () => ({
@@ -5116,6 +4895,13 @@ function QuestionPaperStudio({
     if (!classroomId && classrooms[0]) setClassroomId(classrooms[0].id);
   }, [classroomId, classrooms]);
 
+  useEffect(() => {
+    void api
+      .aiSettings()
+      .then((settings) => setGoogleReady(settings.has_google_key))
+      .catch(() => setGoogleReady(false));
+  }, [api]);
+
   const buildSavedPaper = useCallback(
     (id: string, created: string): SavedQuestionPaper => {
       const questionText = questionPaperText(metadata, paper);
@@ -5133,13 +4919,26 @@ function QuestionPaperStudio({
         board,
         syllabusCode: metadata.syllabusCode,
         difficulty,
+        sourceMode,
+        rightsConfirmed,
         advanced,
         paperSpec: paper,
         createdAt: created,
         updatedAt: new Date().toISOString(),
       };
     },
-    [advanced, board, classroomId, difficulty, metadata, paper, sources, subject],
+    [
+      advanced,
+      board,
+      classroomId,
+      difficulty,
+      metadata,
+      paper,
+      rightsConfirmed,
+      sourceMode,
+      sources,
+      subject,
+    ],
   );
 
   latestPaperRef.current = paperId && paper.questions.length
@@ -5152,7 +4951,7 @@ function QuestionPaperStudio({
     const timer = window.setTimeout(() => {
       if (discardingPaperRef.current) return;
       void onSave(current)
-        .then(() => setStatus("Saved on this teacher computer."))
+        .then(() => setStatus("Saved to the school server."))
         .catch((failure) =>
           setStatus(
             failure instanceof Error
@@ -5223,8 +5022,9 @@ function QuestionPaperStudio({
   const makeGenerationPrompt = (repair = false) => `
 ${repair ? "Repair the supplied draft and return a complete replacement." : "Create a new classroom-ready examination paper."}
 Return ONLY valid JSON. Do not use Markdown fences or explanatory text.
-Schema: {"instructions":["string"],"questions":[{"id":"q1","prompt":"string","marks":4,"answer":"string","working_lines":4,"source":"filename, p. 2, Q3 (adapted)","subparts":[{"label":"a","prompt":"string","marks":2,"answer":"string","working_lines":2}],"diagram":null}]}
+Schema: {"instructions":["string"],"questions":[{"id":"q1","prompt":"string","marks":4,"answer":"string","working_lines":4,"source":"filename, p. 2, Q3 (adapted)","scheme":{"marking_points":[{"text":"string","marks":2}],"accepted_alternatives":["string"],"guidance":"string"},"subparts":[{"label":"a","prompt":"string","marks":2,"answer":"string","working_lines":2,"scheme":{"marking_points":[{"text":"string","marks":1}],"accepted_alternatives":["string"],"guidance":"string"}}],"diagram":null}]}
 Always set diagram to null. Never redraw, infer or approximate an examination diagram. If a question depends on a figure, choose a different self-contained question; the teacher can attach the exact PNG or JPEG from the cited official source afterwards.
+Every question needs a marking scheme. Marking points must sum to that question's marks, or to each subpart's marks where subparts exist. State the creditable point, not the whole answer. List accepted alternative wordings a student could reasonably write, and use guidance for partial credit and common errors. The marking scheme is for the teacher only; never repeat it in a prompt.
 
 Paper specification:
 - Board: ${boardName(board)}.
@@ -5237,7 +5037,12 @@ Paper specification:
 - Teacher brief: ${teacherBrief.trim().slice(0, 2_000) || "No additional brief"}.
 - ${advanced.includeDiagrams ? "You may select questions that use official source diagrams only when a self-contained alternative is unavailable, but still set diagram to null for exact teacher attachment." : "Choose only self-contained questions that do not require diagrams."}
 - Use board-appropriate command words, mathematical notation and mark allocation. Do not create elementary recall questions at an advanced setting.
-- References are evidence, not a licence to copy. Adapt rather than reproduce long passages. Never invent a filename, page or question number.
+- ${sourceMode === "adapt"
+  ? "References are evidence, not a licence to copy. Write original questions in the source's style and difficulty; adapt rather than reproduce long passages."
+  : sourceMode === "excerpt"
+    ? "The teacher has confirmed the school may reproduce this material, so exact question wording from a reference is permitted where it is the best question. Cite the filename, page and question number for every reused question."
+    : "The teacher has confirmed the school may reproduce whole pages of this material. Still write the question text out in full; whole pages are attached as images by the teacher, not described by you."}
+- Never invent a filename, page or question number.
 ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are supplied. Draw questions across all of them, not just the first, weighted by the teacher brief and topics rather than by block order." : ""}
 - Put answers only in answer fields. Never put an answer key in a prompt.
 - Give enough working_lines for a student to solve each question.
@@ -5253,6 +5058,12 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
     }
     if (totalMarks < questionCount) {
       setStatus("Total marks must be at least the number of questions.");
+      return;
+    }
+    if (sourceMode !== "adapt" && !rightsConfirmed) {
+      setStatus(
+        "Confirm your school may reproduce this board's material, or switch back to adapted questions.",
+      );
       return;
     }
     setBusy(true);
@@ -5314,6 +5125,8 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
         board,
         syllabusCode: nextMetadata.syllabusCode,
         difficulty,
+        sourceMode,
+        rightsConfirmed,
         advanced,
         paperSpec: nextPaper,
         createdAt: paperId ? createdAt : now,
@@ -5346,7 +5159,149 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
     }
   };
 
-  const activeLabel = editorView === "question" ? "Question paper" : "Answer key";
+  const searchOfficialPapers = async () => {
+    const query = searchQuery.trim()
+      || [boardName(board), syllabusCode.trim(), subject, advanced.year.trim(), advanced.session.trim(), "past paper"]
+        .filter(Boolean)
+        .join(" ");
+    setSearching(true);
+    setStatus("");
+    try {
+      const results = await api.searchPapers(query);
+      setSearchResults(results);
+      if (!results.length) {
+        setStatus("No official papers were found. Try naming the syllabus code and year.");
+      }
+    } catch (failure) {
+      setSearchResults([]);
+      setStatus(failure instanceof Error ? failure.message : "The search could not be run.");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const addOnlinePaper = async (candidate: PaperCandidate) => {
+    setSearching(true);
+    try {
+      const node = await api.fetchPaperSource(candidate.url);
+      const result = await api.tree();
+      setMaterials(result.nodes.filter((item) => item.kind === "pdf"));
+      setSelected((current) => [...new Set([...current, node.id])].slice(0, 8));
+      setStatus(`${node.name} added as a reference.`);
+    } catch (failure) {
+      setStatus(failure instanceof Error ? failure.message : "That paper could not be downloaded.");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const figureSources = useMemo<FigureSource[]>(
+    () => [
+      ...selected.flatMap((id) => {
+        const material = materials.find((item) => item.id === id);
+        return material
+          ? [{ id, name: material.name, load: () => api.materialBlob(id) }]
+          : [];
+      }),
+      ...localFiles.map((file, index) => ({
+        id: `local-${index}`,
+        name: file.name,
+        load: async () => file as Blob,
+      })),
+    ],
+    [api, localFiles, materials, selected],
+  );
+
+  const attachFigure = (questionId: string, diagram: PaperDiagram) => {
+    setPaper((current) => ({
+      ...current,
+      questions: current.questions.map((question) =>
+        question.id === questionId ? { ...question, diagram } : question,
+      ),
+    }));
+    setPreviewRevision((revision) => revision + 1);
+  };
+
+  const publishAsAssignment = async () => {
+    if (!classroomId) {
+      setStatus("Choose a classroom before publishing.");
+      return;
+    }
+    setPublishing(true);
+    try {
+      // Only the question paper is uploaded. The marking scheme stays with the
+      // teacher's copy of the paper.
+      const pdf = await createPaperPdf({ metadata, paper, kind: "question" });
+      const file = new File([pdf as BlobPart], `${safeFilename(metadata.title)}.pdf`, {
+        type: "application/pdf",
+      });
+      await api.uploadMaterial(classroomId, file);
+      await api.createAssignment({
+        classroom_id: classroomId,
+        title: metadata.title,
+        instructions: `${metadata.title} is in the class materials. ${paper.questions.length} questions, ${paperTotalMarks(paper)} marks.`,
+        due_at: null,
+        max_points: paperTotalMarks(paper),
+        grading_scheme: { kind: "points", max_points: paperTotalMarks(paper) },
+        publish: true,
+      });
+      setStatus("Published as an assignment, with the paper in class materials.");
+    } catch (failure) {
+      setStatus(failure instanceof Error ? failure.message : "The paper could not be published.");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const convertToQuiz = async () => {
+    if (!classroomId) {
+      setStatus("Choose a classroom before making a quiz.");
+      return;
+    }
+    setPublishing(true);
+    try {
+      // Only plain, single-answer questions map onto the quiz engine's three
+      // kinds. Anything with subparts or a figure is left for the teacher.
+      const convertible = paper.questions.filter(
+        (question) => !question.subparts.length && !question.diagram && question.answer.trim(),
+      );
+      if (!convertible.length) {
+        setStatus(
+          "None of these questions convert automatically. Quizzes take single-answer questions without figures.",
+        );
+        return;
+      }
+      const quiz = await api.createQuiz({
+        classroom_id: classroomId,
+        title: metadata.title,
+        instructions: paper.instructions.join(" "),
+        time_limit_minutes: advanced.durationMinutes || null,
+        questions: convertible.map((question) => ({
+          id: null,
+          kind: "short_answer" as const,
+          prompt: question.prompt,
+          options: [],
+          canonical_answer: question.answer,
+          max_points: question.marks,
+          required: true,
+        })),
+      });
+      const skipped = paper.questions.length - convertible.length;
+      setStatus(
+        `Quiz “${quiz.title}” created with ${convertible.length} question${convertible.length === 1 ? "" : "s"}.`
+        + (skipped
+          ? ` ${skipped} question${skipped === 1 ? "" : "s"} with subparts or figures need${skipped === 1 ? "s" : ""} to be added by hand.`
+          : "")
+        + " Marking guidance stays in this paper's marking scheme.",
+      );
+    } catch (failure) {
+      setStatus(failure instanceof Error ? failure.message : "The quiz could not be created.");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const activeLabel = editorView === "question" ? "Question paper" : "Marking scheme";
   const activeFilename = `${metadata.title}${editorView === "answer" ? " answer key" : ""}`;
 
   const exportPaper = async (extension: "doc" | "html" | "txt") => {
@@ -5399,13 +5354,14 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
       subparts: [],
       diagram: null,
       source: "",
+      scheme: { ...EMPTY_SCHEME },
     };
     setPaper((current) => ({ ...current, questions: [...current.questions, next] }));
   };
 
   const deleteCurrentPaper = async () => {
     if (!paperId || deleting) return;
-    if (!window.confirm(`Delete “${metadata.title}” from this computer? This cannot be undone.`)) {
+    if (!window.confirm(`Delete “${metadata.title}” from the school server? This cannot be undone.`)) {
       return;
     }
     discardingPaperRef.current = true;
@@ -5423,14 +5379,23 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
     }
   };
 
+  const sourceModeCopy = PAPER_SOURCE_MODES.find((mode) => mode.value === sourceMode);
+  const referenceCount = selected.length + localFiles.length;
+
   return (
-    <div className="paper-studio">
-      <Panel title="Paper setup" eyebrow="Assessment builder">
-        <div className="paper-controls form-stack">
-          <Field label="Paper title">
+    <div className="papers-editor">
+      <section className="paper-section" aria-labelledby="paper-brief-heading">
+        <div className="paper-section-head">
+          <h2 id="paper-brief-heading">The paper</h2>
+          <span className="paper-section-note">
+            {paperId ? "Saved to the school server as you work." : "Not saved yet."}
+          </span>
+        </div>
+        <div className="paper-grid">
+          <Field label="Title">
             <input maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} />
           </Field>
-          <Field label="Classroom and subject">
+          <Field label="Classroom">
             <select
               value={classroomId}
               onChange={(event) => {
@@ -5444,153 +5409,288 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
               {classrooms.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
             </select>
           </Field>
-          <div className="paper-brief-strip">
-            <Field label="Board">
-              <select value={board} onChange={(event) => setBoard(event.target.value as ExamBoard)}>
-                <option value="CIE">CIE</option>
-                <option value="IGCSE">IGCSE</option>
-                <option value="CBSE">CBSE</option>
-                <option value="ICSE">ICSE</option>
-              </select>
-            </Field>
-            <Field label="Difficulty">
-              <select value={difficulty} onChange={(event) => setDifficulty(Number(event.target.value) as DifficultyLevel)}>
-                {[1, 2, 3, 4, 5].map((level) => (
-                  <option value={level} key={level}>{level} - {difficultyName(level as DifficultyLevel)}</option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          <div className="paper-brief-strip">
-            <Field label="Questions">
-              <input type="number" min={1} max={30} value={questionCount} onChange={(event) => setQuestionCount(Math.max(1, Math.min(30, Number(event.target.value) || 1)))} />
-            </Field>
-            <Field label="Total marks">
-              <input type="number" min={1} max={300} value={totalMarks} onChange={(event) => setTotalMarks(Math.max(1, Math.min(300, Number(event.target.value) || 1)))} />
-            </Field>
-          </div>
-          <Field label="Teacher brief">
-            <textarea maxLength={2000} value={teacherBrief} onChange={(event) => setTeacherBrief(event.target.value)} placeholder="Chapters, question types, learning goals or accommodations..." />
+          <Field label="Board">
+            <select value={board} onChange={(event) => setBoard(event.target.value as ExamBoard)}>
+              <option value="CIE">CIE</option>
+              <option value="IGCSE">IGCSE</option>
+              <option value="CBSE">CBSE</option>
+              <option value="ICSE">ICSE</option>
+            </select>
           </Field>
-
-          <details className="paper-advanced">
-            <summary>Advanced options</summary>
-            <div className="form-stack">
-              <Field label="Syllabus code">
-                <input maxLength={40} value={syllabusCode} onChange={(event) => setSyllabusCode(event.target.value)} placeholder="For example, 9702" />
-              </Field>
-              <div className="paper-brief-strip">
-                <Field label="Past-paper year">
-                  <input maxLength={20} value={advanced.year} onChange={(event) => setAdvanced((current) => ({ ...current, year: event.target.value }))} />
-                </Field>
-                <Field label="Session">
-                  <input maxLength={40} value={advanced.session} onChange={(event) => setAdvanced((current) => ({ ...current, session: event.target.value }))} placeholder="May/June" />
-                </Field>
-              </div>
-              <div className="paper-brief-strip">
-                <Field label="Paper / variant">
-                  <input maxLength={40} value={advanced.paperVariant} onChange={(event) => setAdvanced((current) => ({ ...current, paperVariant: event.target.value }))} placeholder="22" />
-                </Field>
-                <Field label="Duration (minutes)">
-                  <input type="number" min={10} max={360} value={advanced.durationMinutes} onChange={(event) => setAdvanced((current) => ({ ...current, durationMinutes: Math.max(10, Math.min(360, Number(event.target.value) || 60)) }))} />
-                </Field>
-              </div>
-              <Field label="Topics">
-                <input maxLength={400} value={advanced.topics} onChange={(event) => setAdvanced((current) => ({ ...current, topics: event.target.value }))} placeholder="Mechanics, electricity..." />
-              </Field>
-              <Field label="AI output allowance">
-                <select
-                  value={maxOutputTokens}
-                  onChange={(event) => setAdvanced((current) => ({
-                    ...current,
-                    maxOutputTokens: normalizePaperOutputTokens(event.target.value),
-                  }))}
-                >
-                  {PAPER_OUTPUT_TOKEN_OPTIONS.map((option) => (
-                    <option value={option.value} key={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </Field>
-              <label className="check-field">
-                <input type="checkbox" checked={advanced.includeDiagrams} onChange={(event) => setAdvanced((current) => ({ ...current, includeDiagrams: event.target.checked }))} />
-                <span>Allow exact source diagrams (attach PNG/JPEG in preview)</span>
-              </label>
-
-              <div className="reference-picker">
-                <div className="reference-heading">
-                  <span><strong>Past-paper references</strong><small>Official sources and uploaded PDFs</small></span>
-                  <Button variant="secondary" onClick={() => void openExternalUrl(officialSourceUrl(board, syllabusCode, subject, advanced.year))}>Open official library</Button>
-                </div>
-                <small>Download an official paper, then add it below. Selected PDF text is sent to your configured AI provider and cited by filename and page. For a figure, save the exact source diagram as PNG/JPEG and attach it beneath the matching question.</small>
-                <div className="reference-list">
-                  {classroomMaterials.length ? classroomMaterials.map((material) => (
-                    <label className="check-field" key={material.id}>
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(material.id)}
-                        onChange={(event) => setSelected((current) => event.target.checked ? [...new Set([...current, material.id])].slice(0, 8) : current.filter((id) => id !== material.id))}
-                      />
-                      <span>{material.name}</span>
-                    </label>
-                  )) : <small>No PDF materials in this classroom.</small>}
-                </div>
-                <label className="button button-secondary upload-button">
-                  Add PDF references
-                  <input type="file" accept="application/pdf,.pdf" multiple onChange={(event) => {
-                    setLocalFiles((current) => [...current, ...Array.from(event.target.files ?? [])].slice(0, 8));
-                    event.target.value = "";
-                  }} />
-                </label>
-                {localFiles.length ? (
-                  <div className="reference-chips">
-                    {localFiles.map((file, index) => (
-                      <button type="button" key={`${file.name}-${index}`} onClick={() => setLocalFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}>{file.name} x</button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </details>
-
-          <div className="paper-create-actions">
-            <Button variant="primary" icon="assistant" onClick={() => void generate()} disabled={busy || !title.trim() || !classroomId}>
-              {busy ? "Creating paper..." : "Create paper"}
-            </Button>
-            <Button variant="ghost" onClick={onCreateNew}>Start a new blank paper</Button>
-          </div>
-          {status ? <p className={/could not|must|unavailable|incomplete/i.test(status) ? "form-error" : "form-hint"}>{status}</p> : null}
+          <Field label="Syllabus code">
+            <input maxLength={40} value={syllabusCode} placeholder="9702" onChange={(event) => setSyllabusCode(event.target.value)} />
+          </Field>
+          <Field label="Difficulty">
+            <select value={difficulty} onChange={(event) => setDifficulty(Number(event.target.value) as DifficultyLevel)}>
+              {[1, 2, 3, 4, 5].map((level) => (
+                <option value={level} key={level}>{level} - {difficultyName(level as DifficultyLevel)}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Duration (minutes)">
+            <input
+              type="number"
+              min={10}
+              max={360}
+              value={advanced.durationMinutes}
+              onChange={(event) => setAdvanced((current) => ({
+                ...current,
+                durationMinutes: Math.max(10, Math.min(360, Number(event.target.value) || 60)),
+              }))}
+            />
+          </Field>
+          <Field label="Questions">
+            <input type="number" min={1} max={30} value={questionCount} onChange={(event) => setQuestionCount(Math.max(1, Math.min(30, Number(event.target.value) || 1)))} />
+          </Field>
+          <Field label="Total marks">
+            <input type="number" min={1} max={300} value={totalMarks} onChange={(event) => setTotalMarks(Math.max(1, Math.min(300, Number(event.target.value) || 1)))} />
+          </Field>
+          <Field label="Topics">
+            <input maxLength={400} value={advanced.topics} placeholder="Mechanics, electricity" onChange={(event) => setAdvanced((current) => ({ ...current, topics: event.target.value }))} />
+          </Field>
+          <Field label="Past-paper year">
+            <input maxLength={20} value={advanced.year} onChange={(event) => setAdvanced((current) => ({ ...current, year: event.target.value }))} />
+          </Field>
+          <Field label="Session">
+            <input maxLength={40} value={advanced.session} placeholder="May/June" onChange={(event) => setAdvanced((current) => ({ ...current, session: event.target.value }))} />
+          </Field>
+          <Field label="Paper or variant">
+            <input maxLength={40} value={advanced.paperVariant} placeholder="22" onChange={(event) => setAdvanced((current) => ({ ...current, paperVariant: event.target.value }))} />
+          </Field>
         </div>
-      </Panel>
+        <Field label="Teacher brief" hint="Chapters, question types, learning goals or accommodations.">
+          <textarea maxLength={2000} value={teacherBrief} onChange={(event) => setTeacherBrief(event.target.value)} />
+        </Field>
+      </section>
 
-      <Panel className="paper-editor-panel panel-flush" title="Paper preview" eyebrow={`${board} / ${difficultyName(difficulty)}`}>
+      <section className="paper-section" aria-labelledby="paper-sources-heading">
+        <div className="paper-section-head">
+          <h2 id="paper-sources-heading">Sources</h2>
+          <span className="paper-section-note">
+            {referenceCount
+              ? `${referenceCount} reference${referenceCount === 1 ? "" : "s"} selected`
+              : "No references yet"}
+          </span>
+        </div>
+
+        <Field label="How the sources are used">
+          <select
+            value={sourceMode}
+            onChange={(event) => {
+              setSourceMode(event.target.value as PaperSourceMode);
+              setRightsConfirmed(false);
+            }}
+          >
+            {PAPER_SOURCE_MODES.map((mode) => (
+              <option value={mode.value} key={mode.value}>{mode.label}</option>
+            ))}
+          </select>
+        </Field>
+        <p className="paper-help">{sourceModeCopy?.description}</p>
+        {sourceMode === "adapt" ? null : (
+          <label className="check-field paper-rights">
+            <input
+              type="checkbox"
+              checked={rightsConfirmed}
+              onChange={(event) => setRightsConfirmed(event.target.checked)}
+            />
+            <span>
+              My school may reproduce this board's material for its own classes. Boards restrict
+              electronic reproduction; this confirmation is recorded with the paper.
+            </span>
+          </label>
+        )}
+
+        <div className="paper-search">
+          <Field label="Find an official paper online">
+            <input
+              maxLength={400}
+              value={searchQuery}
+              placeholder={`${boardName(board)} ${syllabusCode.trim() || subject} past paper`}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  if (googleReady && !searching) void searchOfficialPapers();
+                }
+              }}
+            />
+          </Field>
+          <Button
+            variant="secondary"
+            disabled={searching || !googleReady}
+            onClick={() => void searchOfficialPapers()}
+          >
+            {searching ? "Searching…" : "Search"}
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => void openExternalUrl(officialSourceUrl(board, syllabusCode, subject, advanced.year))}
+          >
+            Open board library
+          </Button>
+        </div>
+        <p className="paper-help">
+          {googleReady
+            ? "Only an examination board's own site is searched, and only the paper you choose is downloaded."
+            : "Add a Google key in Settings to search for papers. You can still upload one below."}
+        </p>
+
+        {searchResults.length ? (
+          <div className="paper-search-results">
+            {searchResults.map((candidate) => (
+              <div className="paper-search-result" key={candidate.url}>
+                <div>
+                  <strong>{candidate.title || candidate.url}</strong>
+                  <small>
+                    {[candidate.board, candidate.year, candidate.session, candidate.variant]
+                      .filter(Boolean)
+                      .join(" · ") || candidate.snippet}
+                  </small>
+                  <button type="button" className="link-button" onClick={() => void openExternalUrl(candidate.url)}>
+                    View on the board's site
+                  </button>
+                </div>
+                <Button variant="secondary" disabled={searching} onClick={() => void addOnlinePaper(candidate)}>
+                  Use this paper
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="paper-reference-columns">
+          <div>
+            <h3>Classroom materials</h3>
+            <div className="reference-list">
+              {classroomMaterials.length ? classroomMaterials.map((material) => (
+                <label className="check-field" key={material.id}>
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(material.id)}
+                    onChange={(event) => setSelected((current) => event.target.checked
+                      ? [...new Set([...current, material.id])].slice(0, 8)
+                      : current.filter((id) => id !== material.id))}
+                  />
+                  <span>{material.name}</span>
+                </label>
+              )) : <p className="paper-help">No PDF materials in this classroom yet.</p>}
+            </div>
+          </div>
+          <div>
+            <h3>From this computer</h3>
+            {localFiles.length ? (
+              <div className="reference-chips">
+                {localFiles.map((file, index) => (
+                  <button
+                    type="button"
+                    key={`${file.name}-${index}`}
+                    onClick={() => setLocalFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}
+                  >
+                    {file.name} ×
+                  </button>
+                ))}
+              </div>
+            ) : <p className="paper-help">Nothing added from this computer.</p>}
+            <label className="button button-secondary upload-button">
+              Add PDF references
+              <input type="file" accept="application/pdf,.pdf" multiple onChange={(event) => {
+                setLocalFiles((current) => [...current, ...Array.from(event.target.files ?? [])].slice(0, 8));
+                event.target.value = "";
+              }} />
+            </label>
+          </div>
+        </div>
+
+        <details className="paper-advanced">
+          <summary>AI output allowance</summary>
+          <Field label="Response size" hint="Larger allowances cost more and take longer.">
+            <select
+              value={maxOutputTokens}
+              onChange={(event) => setAdvanced((current) => ({
+                ...current,
+                maxOutputTokens: normalizePaperOutputTokens(event.target.value),
+              }))}
+            >
+              {PAPER_OUTPUT_TOKEN_OPTIONS.map((option) => (
+                <option value={option.value} key={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </Field>
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={advanced.includeDiagrams}
+              onChange={(event) => setAdvanced((current) => ({ ...current, includeDiagrams: event.target.checked }))}
+            />
+            <span>Allow questions that need a figure, and attach the figures yourself</span>
+          </label>
+        </details>
+      </section>
+
+      <div className="paper-action-bar">
+        <Button
+          variant="primary"
+          onClick={() => void generate()}
+          disabled={busy || !title.trim() || !classroomId}
+        >
+          {busy ? "Creating paper…" : paper.questions.length ? "Create paper again" : "Create paper"}
+        </Button>
+        {paperId ? (
+          <Button variant="ghost" disabled={busy || deleting} onClick={() => void deleteCurrentPaper()}>
+            {deleting ? "Deleting…" : "Delete this paper"}
+          </Button>
+        ) : null}
+        {status ? (
+          <p className={/could not|must|unavailable|incomplete|confirm/i.test(status) ? "form-error" : "form-hint"}>
+            {status}
+          </p>
+        ) : null}
+      </div>
+
+      <section className="paper-section paper-preview-section" aria-labelledby="paper-preview-heading">
+        <div className="paper-section-head">
+          <h2 id="paper-preview-heading">{editorView === "question" ? "Question paper" : "Marking scheme"}</h2>
+          <span className="paper-section-note">
+            {paper.questions.length} question{paper.questions.length === 1 ? "" : "s"} · {paperTotalMarks(paper)} marks
+          </span>
+        </div>
+
         {paper.questions.length ? (
           <>
             <div className="paper-export-bar">
               <div className="paper-document-switch" role="tablist" aria-label="Paper document">
                 <Button variant={editorView === "question" ? "primary" : "secondary"} onClick={() => setEditorView("question")}>Question paper</Button>
-                <Button variant={editorView === "answer" ? "primary" : "secondary"} onClick={() => setEditorView("answer")}>Answer key</Button>
+                <Button variant={editorView === "answer" ? "primary" : "secondary"} onClick={() => setEditorView("answer")}>Marking scheme</Button>
               </div>
-              <span className="paper-save-status">{paper.questions.length} questions / {paperTotalMarks(paper)} marks</span>
               <Button variant="primary" icon="download" onClick={() => void downloadPdf()}>Download PDF</Button>
               <Button onClick={printPaper}>Print</Button>
+              <Button onClick={() => setShowFigurePicker(true)}>Add a figure</Button>
+              <Button
+                disabled={publishing || !classroomId}
+                onClick={() => void publishAsAssignment()}
+              >
+                Publish as assignment
+              </Button>
+              <Button
+                disabled={publishing || !classroomId}
+                onClick={() => void convertToQuiz()}
+              >
+                Make a quiz
+              </Button>
               <details className="paper-more-actions">
                 <summary>More</summary>
                 <div className="paper-more-menu">
                   <button type="button" onClick={() => void exportPaper("doc")}>Export .doc</button>
                   <button type="button" onClick={() => void exportPaper("txt")}>Export text</button>
-                  {paperId ? (
-                    <button
-                      type="button"
-                      className="paper-delete-action"
-                      disabled={busy || deleting}
-                      onClick={() => void deleteCurrentPaper()}
-                    >
-                      {deleting ? "Deleting…" : "Delete current paper"}
-                    </button>
-                  ) : null}
                 </div>
               </details>
             </div>
+            {editorView === "answer" ? (
+              <p className="paper-help paper-scheme-warning">
+                Teacher copy. The marking scheme is never published with an assignment or quiz.
+              </p>
+            ) : null}
             <div className="worksheet-canvas">
               <PaperDocumentView
                 key={`paper-preview-${previewRevision}`}
@@ -5604,9 +5704,26 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
             </div>
             <PrintablePaper metadata={metadata} paper={paper} kind="question" />
             <PrintablePaper metadata={metadata} paper={paper} kind="answer" />
+            {showFigurePicker ? (
+              <FigurePicker
+                api={api}
+                sources={figureSources}
+                questions={paper.questions.map((question, index) => ({
+                  id: question.id,
+                  label: `${index + 1}. ${question.prompt.slice(0, 60)}`,
+                }))}
+                canDetect={googleReady}
+                onAttach={attachFigure}
+                onClose={() => setShowFigurePicker(false)}
+              />
+            ) : null}
           </>
         ) : (
-          <EmptyState icon="document" title="No paper yet" description="Choose a classroom and paper settings, then create a structured paper." />
+          <EmptyState
+            icon="document"
+            title="No paper yet"
+            description="Set the paper details and sources above, then create the paper."
+          />
         )}
         {busy ? (
           <div className="paper-generation-overlay" role="status" aria-live="polite">
@@ -5615,11 +5732,10 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
             <small>This may take a minute. The paper is checked before it is saved.</small>
           </div>
         ) : null}
-      </Panel>
+      </section>
     </div>
   );
 }
-
 function SettingsView({
   api,
   baseUrl,
@@ -5695,6 +5811,7 @@ function SettingsView({
         <Panel title="Appearance" eyebrow="Theme">
           <ThemePicker />
         </Panel>
+        <AiSettingsPanel api={api} />
         <Panel title="Teacher accounts" eyebrow="Security">
           <div className="teacher-account-list">
             {teachers.map((teacher) => (
