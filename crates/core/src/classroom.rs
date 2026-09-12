@@ -347,6 +347,8 @@ pub struct AttendanceRecord {
     pub note: String,
     /// A recent login is a suggestion only; the teacher remains authoritative.
     pub checked_in: bool,
+    /// Percentage of recorded classroom days marked present, rounded to a whole number.
+    pub present_percentage: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

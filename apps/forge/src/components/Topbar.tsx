@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Bell, MagnifyingGlass, UserCircle, WifiHigh, WifiSlash, X } from "@phosphor-icons/react";
+import { ArrowsClockwise, Bell, MagnifyingGlass, UserCircle, WifiHigh, WifiSlash, X } from "@phosphor-icons/react";
 
 type TopbarProps = {
   profileName: string;
@@ -7,12 +7,14 @@ type TopbarProps = {
   onSearch: (query: string) => void;
   onSwitchAccount: () => void;
   onOpenConnection: () => void;
+  onRefresh: () => Promise<void>;
 };
 
-export function Topbar({ profileName, online, onSearch, onSwitchAccount, onOpenConnection }: TopbarProps) {
+export function Topbar({ profileName, online, onSearch, onSwitchAccount, onOpenConnection, onRefresh }: TopbarProps) {
   const [query, setQuery] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   function handleSearch(event: FormEvent) {
     event.preventDefault();
@@ -29,6 +31,20 @@ export function Topbar({ profileName, online, onSearch, onSwitchAccount, onOpenC
         <button type="submit" className="forge-search-submit">Search</button>
       </form>
       <div className="forge-topbar-actions">
+        <button
+          type="button"
+          className={`forge-icon-btn${refreshing ? " is-refreshing" : ""}`}
+          title="Refresh"
+          aria-label="Refresh student data"
+          disabled={refreshing}
+          onClick={async () => {
+            setRefreshing(true);
+            try { await onRefresh(); }
+            finally { setRefreshing(false); }
+          }}
+        >
+          <ArrowsClockwise size={19} />
+        </button>
         <div className="forge-popover-anchor">
           <button type="button" className="forge-icon-btn" title="Notifications" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen((open) => !open); setProfileOpen(false); }}><Bell size={19} /></button>
           {notificationsOpen ? <div className="forge-popover forge-menu-popover notification-empty"><PopoverTitle title="Notifications" onClose={() => setNotificationsOpen(false)} /><Bell size={24} /><p>Nothing new.</p></div> : null}

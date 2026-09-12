@@ -6,6 +6,14 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.10.1
+
+- Prevented graded submissions from being withdrawn or resubmitted.
+- Added in-app material previews and clearer gradebook assignment headings.
+- Added attendance percentages and compact teacher session history.
+- Added refresh controls to Student and Host.
+- Polished Teacher and Student quiz layouts and aligned note text sizing.
+
 ## 0.10.0
 
 - Added the Cinder Host desktop app for school setup, server control, account management, files, backups and updates.

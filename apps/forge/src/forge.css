@@ -231,6 +231,8 @@ button { -webkit-tap-highlight-color: transparent; }
 .forge-search-submit:hover { background: var(--forge-surface-soft); }
 
 .forge-topbar-actions { display: flex; align-items: center; gap: 7px; }
+.forge-icon-btn.is-refreshing svg { animation: forge-spin .8s linear infinite; }
+@keyframes forge-spin { to { transform: rotate(360deg); } }
 .forge-popover-anchor { position: relative; }
 
 .forge-icon-btn,
@@ -388,6 +390,26 @@ button { -webkit-tap-highlight-color: transparent; }
 .widget-library { grid-column: span 3; }
 .widget-studio { grid-column: span 3; }
 .widget-activity { grid-column: span 6; }
+
+:root[data-theme="paper"] .widget-timer,
+:root[data-theme="paper"] .widget-activity {
+  color: var(--surface-lowest);
+  background: var(--success);
+}
+:root[data-theme="paper"] .widget-library {
+  color: var(--surface-lowest);
+  background: var(--primary-strong);
+}
+:root[data-theme="paper"] .widget-studio {
+  color: var(--text);
+  background: var(--tallow);
+}
+:root[data-theme="paper"] .widget-grid > .forge-panel :is(.panel-heading, .panel-heading > svg, .forge-kicker, .widget-number, p, .forge-button.text, .activity-row small, .activity-row time) {
+  color: inherit;
+}
+:root[data-theme="paper"] .widget-grid > .forge-panel :is(p, .activity-row small, .activity-row time) {
+  opacity: .78;
+}
 
 .panel-heading { display: flex; align-items: center; justify-content: space-between; min-height: 22px; gap: 12px; color: var(--forge-muted); }
 .panel-heading > svg { color: var(--forge-muted); }
@@ -789,8 +811,7 @@ summary:focus-visible { outline: 3px solid var(--forge-accent); outline-offset: 
   .forge-topbar { min-height: 60px; padding: 9px 11px; }
   .forge-search { min-width: 0; }
   .forge-topbar-actions { gap: 4px; }
-  .forge-topbar-actions .forge-popover-anchor:nth-of-type(2),
-  .forge-topbar-actions > .forge-icon-btn { display: none; }
+  .forge-topbar-actions .forge-popover-anchor:nth-of-type(2) { display: none; }
   .forge-icon-btn,
   .forge-avatar { width: 36px; height: 36px; }
   .forge-main { padding: 25px 15px 42px; }

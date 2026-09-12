@@ -79,10 +79,15 @@ function gradebookValues(workbook: GradebookAiContext | null) {
 
 function parseAssignmentHeader(value: unknown) {
   const text = String(value ?? "").trim();
-  const match = /^(.*?)\s*\/\s*(\d+(?:\.\d+)?)\s*(?:points?)?$/i.exec(text);
+  const match = /^(.*?)\s*(?:-\s*)?\/\s*(\d+(?:\.\d+)?)\s*(?:points?)?$/i.exec(text);
+  const title = match?.[1].trim().replace(/^["“](.*)["”]$/, "$1") ?? text;
   return match
-    ? { title: match[1].trim(), maxPoints: Number(match[2]) }
+    ? { title, maxPoints: Number(match[2]) }
     : { title: text, maxPoints: null };
+}
+
+export function formatAssignmentHeader(assignment: Pick<Assignment, "title" | "max_points">) {
+  return `"${assignment.title}"  -/${assignment.max_points}`;
 }
 
 export function assignmentForHeader(

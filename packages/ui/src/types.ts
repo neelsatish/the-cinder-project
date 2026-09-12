@@ -117,6 +117,7 @@ export type AttendanceRecord = {
   status: AttendanceStatus | null;
   note: string;
   checked_in: boolean;
+  present_percentage: number | null;
 };
 
 export type AttendanceDay = {

@@ -36,7 +36,12 @@ async fn read_day(
                         EXISTS(
                             SELECT 1 FROM sessions s
                              WHERE s.user_id = u.id AND date(s.created_at, 'localtime') = ?1
-                        )
+                        ),
+                        (SELECT count(*) FROM attendance_records history
+                          WHERE history.classroom_id = ?2 AND history.student_id = u.id
+                            AND history.status = 'present'),
+                        (SELECT count(*) FROM attendance_records history
+                          WHERE history.classroom_id = ?2 AND history.student_id = u.id)
                    FROM users u
                    LEFT JOIN attendance_days d ON d.day = ?1
                    LEFT JOIN attendance_records r
@@ -58,6 +63,8 @@ async fn read_day(
                             row.get::<_, Option<String>>(2)?,
                             row.get::<_, String>(3)?,
                             row.get::<_, bool>(4)?,
+                            row.get::<_, i64>(5)?,
+                            row.get::<_, i64>(6)?,
                         ))
                     },
                 )?
@@ -77,6 +84,7 @@ async fn read_day(
                             .map_err(|error| HostError::Other(anyhow::anyhow!("{error}")))?,
                         note: row.3,
                         checked_in: row.4,
+                        present_percentage: attendance_percentage(row.5, row.6),
                     })
                 })
                 .collect::<HostResult<Vec<_>>>()?;
@@ -159,12 +167,20 @@ async fn save_record(
                 ],
             )?;
             tx.commit()?;
+            let (present_days, recorded_days): (i64, i64) = conn.query_row(
+                "SELECT count(*) FILTER (WHERE status = 'present'), count(*)
+                   FROM attendance_records
+                  WHERE classroom_id = ?1 AND student_id = ?2",
+                rusqlite::params![classroom_id.to_string(), req.student_id.to_string()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
             Ok(Json(AttendanceRecord {
                 student_id: req.student_id,
                 student_name,
                 status: Some(req.status),
                 note: req.note.trim().to_owned(),
                 checked_in: false,
+                present_percentage: attendance_percentage(present_days, recorded_days),
             }))
         })
         .await
@@ -175,9 +191,13 @@ fn parse_day(raw: &str) -> HostResult<NaiveDate> {
         .map_err(|_| HostError::BadRequest("Date must be written as YYYY-MM-DD.".into()))
 }
 
+fn attendance_percentage(present_days: i64, recorded_days: i64) -> Option<u8> {
+    (recorded_days > 0).then(|| ((present_days * 100 + recorded_days / 2) / recorded_days) as u8)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{read_day, save_record};
+    use super::{attendance_percentage, read_day, save_record};
     use crate::auth::CurrentUser;
     use crate::{db, AppState};
     use axum::extract::{Path, State};
@@ -187,6 +207,13 @@ mod tests {
     use cinder_core::{AttendanceStatus, Role, SaveAttendanceRequest, User};
     use std::sync::Arc;
     use uuid::Uuid;
+
+    #[test]
+    fn attendance_percentage_is_rounded_and_empty_history_is_unset() {
+        assert_eq!(attendance_percentage(0, 0), None);
+        assert_eq!(attendance_percentage(2, 3), Some(67));
+        assert_eq!(attendance_percentage(3, 4), Some(75));
+    }
 
     #[tokio::test]
     async fn attendance_is_limited_to_the_teachers_classrooms() {

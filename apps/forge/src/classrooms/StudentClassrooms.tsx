@@ -398,6 +398,7 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const closed = assignment.status === "closed";
+  const graded = current?.status === "graded" || current?.grade?.published === true;
 
   useEffect(() => {
     let cancelled = false;
@@ -408,7 +409,7 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
 
   async function submit() {
     const note = availableNotes.find((item) => item.id === noteId);
-    if (!note || syncing) return;
+    if (!note || syncing || graded) return;
     setBusy(true);
     setMessage("");
     try {
@@ -468,7 +469,7 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
       }
       return;
     }
-    if (!online || !current || current.status === "withdrawn") return;
+    if (!online || !current || current.status === "withdrawn" || graded) return;
     if (!window.confirm("Take back this submission? You can submit a note again while the assignment stays open.")) return;
     setBusy(true);
     setMessage("");
@@ -496,14 +497,15 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
         <h2>Hand in a saved note</h2>
         <p>The current contents become a fixed submission. Later edits to your note do not change it.</p>
         <label htmlFor="submission-note">Note</label>
-        <select id="submission-note" value={noteId} onChange={(event) => setNoteId(event.target.value)} disabled={closed || busy}>
+        <select id="submission-note" value={noteId} onChange={(event) => setNoteId(event.target.value)} disabled={closed || graded || busy}>
           {!availableNotes.length ? <option value="">No saved notes available</option> : null}
           {availableNotes.map((note) => <option key={note.id} value={note.id}>{note.title}</option>)}
         </select>
         <div className="panel-actions">
-          <button className="forge-button primary" disabled={closed || busy || syncing || !noteId} type="button" onClick={() => void submit()}>{busy || syncing ? "Saving…" : current && current.status !== "withdrawn" ? "Resubmit note" : "Submit note"}</button>
-          {queued || (current && current.status !== "withdrawn") ? <button className="forge-button secondary" disabled={busy || syncing || (!queued && (closed || !online))} type="button" onClick={() => void withdraw()}>{queued ? "Cancel waiting work" : "Take back"}</button> : null}
+          <button className="forge-button primary" disabled={closed || graded || busy || syncing || !noteId} type="button" onClick={() => void submit()}>{busy || syncing ? "Saving…" : graded ? "Graded" : current && current.status !== "withdrawn" ? "Resubmit note" : "Submit note"}</button>
+          {queued || (current && current.status !== "withdrawn" && !graded) ? <button className="forge-button secondary" disabled={busy || syncing || (!queued && (closed || !online))} type="button" onClick={() => void withdraw()}>{queued ? "Cancel waiting work" : "Take back"}</button> : null}
         </div>
+        {graded ? <p className="classroom-muted">Your teacher has graded this version, so it is now final.</p> : null}
         <p className="classroom-muted">Status: {submissionLabel(current, queued)}</p>
         {message ? <p role="status">{message}</p> : null}
       </section>
