@@ -35,9 +35,9 @@ jobs:
           components: rustfmt
 
       - name: Audit Rust dependencies
-        uses: rustsec/audit-check@v2.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo audit
 
       - name: Install Tauri Linux dependencies
         run: |
