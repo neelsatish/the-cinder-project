@@ -4636,130 +4636,56 @@ function PapersView({
 
 /// Both keys live on the school server, encrypted, and are never read back to a
 /// client — the form only reports whether one is stored.
-function AiSettingsPanel({ api }: { api: CinderApi }) {
+/// Read-only on purpose. The school's keys are set once in Cinder Host, so a
+/// teacher sees whether the paper creator is ready and who to ask if it is not.
+function AiStatusPanel({ api }: { api: CinderApi }) {
   const [settings, setSettings] = useState<AiSettings | null>(null);
-  const [baseUrl, setBaseUrl] = useState("");
-  const [model, setModel] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [googleKey, setGoogleKey] = useState("");
-  const [googleModel, setGoogleModel] = useState("");
-  const [status, setStatus] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     void api
       .aiSettings()
-      .then((result) => {
-        setSettings(result);
-        setBaseUrl(result.base_url ?? "");
-        setModel(result.model);
-        setGoogleModel(result.google_model);
-      })
-      .catch(() => setStatus("AI settings could not be read from the school server."));
+      .then(setSettings)
+      .catch(() => setError("The AI setup could not be read from the school server."));
   }, [api]);
 
-  const save = async () => {
-    setBusy(true);
-    setStatus("");
-    try {
-      const result = await api.saveAiSettings({
-        base_url: baseUrl.trim() || undefined,
-        model: model.trim(),
-        // Absent leaves the stored key alone; a blank box is not a deletion.
-        api_key: apiKey.trim() ? apiKey.trim() : undefined,
-        google_key: googleKey.trim() ? googleKey.trim() : undefined,
-        google_model: googleModel.trim() || undefined,
-      });
-      setSettings(result);
-      setApiKey("");
-      setGoogleKey("");
-      setStatus("Saved.");
-    } catch (failure) {
-      setStatus(failure instanceof Error ? failure.message : "Those settings could not be saved.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const clearGoogleKey = async () => {
-    setBusy(true);
-    try {
-      setSettings(
-        await api.saveAiSettings({
-          base_url: baseUrl.trim() || undefined,
-          model: model.trim(),
-          google_key: "",
-          google_model: googleModel.trim() || undefined,
-        }),
-      );
-      setStatus("Google key removed.");
-    } catch (failure) {
-      setStatus(failure instanceof Error ? failure.message : "The key could not be removed.");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const writing = settings?.base_url
+    ? settings.reachable
+      ? { tone: "good" as const, label: "Ready" }
+      : { tone: "warning" as const, label: "Not answering" }
+    : { tone: "warning" as const, label: "Not set up" };
+  const finding = settings?.has_google_key
+    ? { tone: "good" as const, label: "Ready" }
+    : { tone: "warning" as const, label: "Not set up" };
 
   return (
-    <Panel title="AI provider" eyebrow="Paper creator">
-      <div className="form-stack">
-        <Field label="Text model address">
-          <input
-            value={baseUrl}
-            placeholder="https://provider.example.com/v1"
-            onChange={(event) => setBaseUrl(event.target.value)}
-          />
-        </Field>
-        <Field label="Model">
-          <input value={model} placeholder="gpt-4o-mini" onChange={(event) => setModel(event.target.value)} />
-        </Field>
-        <Field label={settings?.has_key ? "Replace the stored key" : "API key"}>
-          <input
-            type="password"
-            value={apiKey}
-            placeholder={settings?.has_key ? "A key is stored" : "Paste the provider key"}
-            onChange={(event) => setApiKey(event.target.value)}
-          />
-        </Field>
-        {settings ? (
-          <small className="form-hint">
-            {settings.reachable
-              ? "The text model answered."
-              : settings.base_url
-                ? "The text model did not answer."
-                : "No text model is configured, so papers cannot be generated yet."}
-          </small>
-        ) : null}
-
-        <Field label={settings?.has_google_key ? "Replace the Google key" : "Google key"}>
-          <input
-            type="password"
-            value={googleKey}
-            placeholder={settings?.has_google_key ? "A key is stored" : "Paste a Google AI Studio key"}
-            onChange={(event) => setGoogleKey(event.target.value)}
-          />
-        </Field>
-        <Field label="Google model">
-          <input value={googleModel} onChange={(event) => setGoogleModel(event.target.value)} />
-        </Field>
-        <small className="form-hint">
-          Used only to find official papers online and locate figures on their pages. Without it the
-          paper creator still works from PDFs you upload. Cinder never sends student work to it, and
-          only teachers can reach it.
-        </small>
-
-        <div className="list-actions">
-          <Button variant="primary" disabled={busy} onClick={() => void save()}>
-            {busy ? "Saving…" : "Save AI settings"}
-          </Button>
-          {settings?.has_google_key ? (
-            <Button disabled={busy} onClick={() => void clearGoogleKey()}>Remove Google key</Button>
-          ) : null}
-        </div>
-        {status ? (
-          <p className={/could not|not answer|cannot/i.test(status) ? "form-error" : "form-hint"}>{status}</p>
-        ) : null}
-      </div>
+    <Panel title="Paper creator" eyebrow="AI">
+      {error ? (
+        <p className="form-error">{error}</p>
+      ) : (
+        <>
+          <dl className="detail-list">
+            <div>
+              <dt>Writing papers</dt>
+              <dd>
+                <Badge tone={writing.tone}>{writing.label}</Badge>
+                {settings?.model ? <small> {settings.model}</small> : null}
+              </dd>
+            </div>
+            <div>
+              <dt>Finding papers and figures</dt>
+              <dd>
+                <Badge tone={finding.tone}>{finding.label}</Badge>
+                {settings?.has_google_key ? <small> {settings.google_model}</small> : null}
+              </dd>
+            </div>
+          </dl>
+          <p className="form-hint">
+            These are set up once in Cinder Host, on the computer running the school server. Ask
+            whoever looks after it if something here says it is not ready.
+          </p>
+        </>
+      )}
     </Panel>
   );
 }
@@ -5836,7 +5762,7 @@ function SettingsView({
         <Panel title="Appearance" eyebrow="Theme">
           <ThemePicker />
         </Panel>
-        <AiSettingsPanel api={api} />
+        <AiStatusPanel api={api} />
         <Panel title="Teacher accounts" eyebrow="Security">
           <div className="teacher-account-list">
             {teachers.map((teacher) => (

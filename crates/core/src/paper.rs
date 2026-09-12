@@ -84,6 +84,15 @@ pub struct PaperPageImage {
     pub jpeg_base64: String,
 }
 
+/// A model the configured Google key may actually use.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct GoogleModel {
+    pub id: String,
+    pub display_name: String,
+    pub description: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct PaperSearchRequest {

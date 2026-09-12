@@ -20,7 +20,9 @@ use crate::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/ai/settings", get(read_settings).put(write_settings))
+        // Read-only: the school's keys are set in the Cinder Host app, against
+        // the database directly, so there is one place to configure them.
+        .route("/api/ai/settings", get(read_settings))
         .route("/api/ai/chat", post(chat))
 }
 
@@ -162,99 +164,100 @@ pub(crate) fn decrypt_api_key(
     })
 }
 
-async fn read_settings(
-    State(state): State<AppState>,
-    user: CurrentUser,
-) -> HostResult<Json<AiSettings>> {
-    user.require_teacher()?;
-    let secret = state.ai_key_secret;
-    let stored = state
-        .db(move |conn| {
-            Ok((
-                get_setting(conn, KEY_BASE_URL)?,
-                get_setting(conn, KEY_MODEL)?,
-                decrypt_api_key(&secret, get_setting(conn, KEY_API_KEY)?)?,
-                decrypt_api_key(&secret, get_setting(conn, KEY_GOOGLE_API_KEY)?)?,
-                get_setting(conn, KEY_GOOGLE_MODEL)?,
-            ))
-        })
-        .await?;
-
-    let (stored_base_url, model, api_key, google_key, google_model) = stored;
-    // Re-validate values loaded from older releases or a manually edited
-    // database before making any provider request.
-    let base_url = stored_base_url.and_then(|url| normalize_base_url(Some(url)).ok().flatten());
-    let reachable = match &base_url {
-        Some(url) => {
-            ChatClient::new(url, api_key.clone(), model.as_deref().unwrap_or_default())
-                .reachable()
-                .await
-        }
-        None => false,
-    };
-
-    Ok(Json(AiSettings {
-        base_url,
-        model: model.unwrap_or_default(),
-        has_key: api_key.is_some(),
-        reachable,
-        has_google_key: google_key.is_some(),
-        google_model: google_model.unwrap_or_else(|| cinder_ai::google::DEFAULT_MODEL.to_owned()),
-    }))
+/// Everything the host has stored about the AI provider, keys included.
+///
+/// Shared by the HTTP route and the Host desktop app, which configures this
+/// directly against the school database rather than over the API.
+pub struct StoredAi {
+    pub base_url: Option<String>,
+    pub model: String,
+    pub api_key: Option<String>,
+    pub google_key: Option<String>,
+    pub google_model: String,
 }
 
-async fn write_settings(
-    State(state): State<AppState>,
-    user: CurrentUser,
-    Json(req): Json<SaveAiSettings>,
-) -> HostResult<Json<AiSettings>> {
-    // Only the teacher configures this. On a shared lab the key is the school's,
-    // not a student's, and students never need to see or change it.
-    user.require_teacher()?;
+pub fn load_ai(conn: &rusqlite::Connection, secret: &[u8; 32]) -> HostResult<StoredAi> {
+    let stored_base_url = get_setting(conn, KEY_BASE_URL)?;
+    Ok(StoredAi {
+        // Re-validate values loaded from older releases or a manually edited
+        // database before making any provider request.
+        base_url: stored_base_url.and_then(|url| normalize_base_url(Some(url)).ok().flatten()),
+        model: get_setting(conn, KEY_MODEL)?.unwrap_or_default(),
+        api_key: decrypt_api_key(secret, get_setting(conn, KEY_API_KEY)?)?,
+        google_key: decrypt_api_key(secret, get_setting(conn, KEY_GOOGLE_API_KEY)?)?,
+        google_model: get_setting(conn, KEY_GOOGLE_MODEL)?
+            .unwrap_or_else(|| cinder_ai::google::DEFAULT_MODEL.to_owned()),
+    })
+}
 
+pub fn store_ai(
+    conn: &rusqlite::Connection,
+    secret: &[u8; 32],
+    req: SaveAiSettings,
+) -> HostResult<()> {
     let base_url = normalize_base_url(req.base_url)?;
     let model = req.model.trim().to_owned();
-    if model.chars().count() > MAX_MODEL_CHARS {
-        return Err(HostError::BadRequest("The model name is too long.".into()));
+    let google_model = req.google_model.unwrap_or_default().trim().to_owned();
+    for name in [&model, &google_model] {
+        if name.chars().count() > MAX_MODEL_CHARS {
+            return Err(HostError::BadRequest("The model name is too long.".into()));
+        }
     }
     for key in [req.api_key.as_deref(), req.google_key.as_deref()] {
         if key.is_some_and(|key| key.chars().count() > MAX_API_KEY_CHARS) {
             return Err(HostError::BadRequest("The API key is too long.".into()));
         }
     }
-    let google_model = req.google_model.unwrap_or_default().trim().to_owned();
-    if google_model.chars().count() > MAX_MODEL_CHARS {
-        return Err(HostError::BadRequest("The model name is too long.".into()));
+
+    put_setting(conn, KEY_BASE_URL, base_url.as_deref().unwrap_or(""))?;
+    put_setting(conn, KEY_MODEL, &model)?;
+    put_setting(conn, KEY_GOOGLE_MODEL, &google_model)?;
+    // Absent means "leave the stored key alone", so the settings form can be
+    // saved without the key being round-tripped through a client.
+    for (setting, supplied) in [
+        (KEY_API_KEY, req.api_key.as_deref()),
+        (KEY_GOOGLE_API_KEY, req.google_key.as_deref()),
+    ] {
+        if let Some(key) = supplied {
+            let encrypted = if key.is_empty() {
+                String::new()
+            } else {
+                encrypt_api_key(secret, key)?
+            };
+            put_setting(conn, setting, &encrypted)?;
+        }
     }
+    Ok(())
+}
 
+/// What a client may see: whether keys exist, never what they are.
+pub async fn visible_settings(stored: StoredAi) -> AiSettings {
+    let reachable = match &stored.base_url {
+        Some(url) => {
+            ChatClient::new(url, stored.api_key.clone(), &stored.model)
+                .reachable()
+                .await
+        }
+        None => false,
+    };
+    AiSettings {
+        base_url: stored.base_url,
+        model: stored.model,
+        has_key: stored.api_key.is_some(),
+        reachable,
+        has_google_key: stored.google_key.is_some(),
+        google_model: stored.google_model,
+    }
+}
+
+async fn read_settings(
+    State(state): State<AppState>,
+    user: CurrentUser,
+) -> HostResult<Json<AiSettings>> {
+    user.require_teacher()?;
     let secret = state.ai_key_secret;
-    let api_key = req.api_key;
-    let google_key = req.google_key;
-    state
-        .db(move |conn| {
-            put_setting(conn, KEY_BASE_URL, base_url.as_deref().unwrap_or(""))?;
-            put_setting(conn, KEY_MODEL, &model)?;
-            put_setting(conn, KEY_GOOGLE_MODEL, &google_model)?;
-            // Absent means "leave the stored key alone", so the settings form
-            // can be saved without the key being round-tripped through a client.
-            for (setting, supplied) in [
-                (KEY_API_KEY, api_key.as_deref()),
-                (KEY_GOOGLE_API_KEY, google_key.as_deref()),
-            ] {
-                if let Some(key) = supplied {
-                    let encrypted = if key.is_empty() {
-                        String::new()
-                    } else {
-                        encrypt_api_key(&secret, key)?
-                    };
-                    put_setting(conn, setting, &encrypted)?;
-                }
-            }
-            Ok(())
-        })
-        .await?;
-
-    read_settings(State(state), user).await
+    let stored = state.db(move |conn| load_ai(conn, &secret)).await?;
+    Ok(Json(visible_settings(stored).await))
 }
 
 async fn chat(
@@ -360,6 +363,68 @@ async fn chat(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn settings_round_trip_and_keys_are_encrypted_at_rest() {
+        let pool = crate::db::open_in_memory().unwrap();
+        let conn = pool.get().unwrap();
+        let secret = [7u8; 32];
+
+        store_ai(
+            &conn,
+            &secret,
+            SaveAiSettings {
+                base_url: Some("https://api.example.com/v1".into()),
+                model: "some-text-model".into(),
+                api_key: Some("text-key".into()),
+                google_key: Some("google-key".into()),
+                google_model: Some("gemini-9.9-flash".into()),
+            },
+        )
+        .unwrap();
+
+        let stored = load_ai(&conn, &secret).unwrap();
+        assert_eq!(
+            stored.base_url.as_deref(),
+            Some("https://api.example.com/v1")
+        );
+        assert_eq!(stored.api_key.as_deref(), Some("text-key"));
+        assert_eq!(stored.google_key.as_deref(), Some("google-key"));
+        assert_eq!(stored.google_model, "gemini-9.9-flash");
+
+        // Whatever else happens, a key must never sit in the database as text.
+        for key in [KEY_API_KEY, KEY_GOOGLE_API_KEY] {
+            let raw = get_setting(&conn, key).unwrap().unwrap();
+            assert!(raw.starts_with("v1:"), "{key} was not encrypted");
+            assert!(!raw.contains("key"), "{key} leaked its plaintext");
+        }
+
+        // An absent key leaves the stored one alone; an empty one clears it.
+        store_ai(
+            &conn,
+            &secret,
+            SaveAiSettings {
+                base_url: Some("https://api.example.com/v1".into()),
+                model: "some-text-model".into(),
+                api_key: None,
+                google_key: Some(String::new()),
+                google_model: Some("gemini-9.9-flash".into()),
+            },
+        )
+        .unwrap();
+        let stored = load_ai(&conn, &secret).unwrap();
+        assert_eq!(stored.api_key.as_deref(), Some("text-key"));
+        assert_eq!(stored.google_key, None);
+    }
+
+    #[test]
+    fn a_missing_google_model_falls_back_to_a_usable_default() {
+        let pool = crate::db::open_in_memory().unwrap();
+        let conn = pool.get().unwrap();
+        let stored = load_ai(&conn, &[3u8; 32]).unwrap();
+        assert_eq!(stored.google_model, cinder_ai::google::DEFAULT_MODEL);
+        assert_eq!(stored.google_key, None);
+    }
 
     #[test]
     fn cloud_ai_requires_https() {

@@ -9,12 +9,16 @@
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use cinder_core::{PaperCandidate, PaperFigure, PaperPageImage};
+use cinder_core::{GoogleModel, PaperCandidate, PaperFigure, PaperPageImage};
 use serde::Deserialize;
 
 use crate::{read_limited_response, upstream_error, MAX_PROVIDER_RESPONSE_BYTES};
 
 const API_ROOT: &str = "https://generativelanguage.googleapis.com/v1beta/models";
+
+/// Only a starting point. Google retires model names on its own schedule, so
+/// the school picks from [`GoogleClient::list_models`] rather than trusting
+/// whatever was current when this was written.
 pub const DEFAULT_MODEL: &str = "gemini-2.5-flash";
 
 pub struct GoogleClient {
@@ -45,6 +49,103 @@ impl GoogleClient {
                 .build()
                 .expect("building an http client cannot fail"),
         }
+    }
+
+    /// The models this key may actually use, newest-looking first. Asking
+    /// Google is the only reliable answer: a model can be retired, or limited
+    /// to accounts that already used it, without the key changing.
+    pub async fn list_models(&self) -> Result<Vec<GoogleModel>> {
+        let mut models: Vec<GoogleModel> = Vec::new();
+        let mut page_token = String::new();
+
+        // A key with many models pages; without the loop the newest can be on
+        // the page nobody fetched.
+        for _ in 0..5 {
+            let mut url = format!("{API_ROOT}?pageSize=200");
+            if !page_token.is_empty() {
+                url.push_str(&format!("&pageToken={page_token}"));
+            }
+            let response = self
+                .client
+                .get(url)
+                .header("x-goog-api-key", &self.api_key)
+                .send()
+                .await
+                .context("asking Google which models this key can use")?;
+            let status = response.status();
+            let raw = String::from_utf8_lossy(
+                &read_limited_response(response, MAX_PROVIDER_RESPONSE_BYTES).await?,
+            )
+            .into_owned();
+            if !status.is_success() {
+                bail!(
+                    "{}",
+                    upstream_error(&raw).unwrap_or_else(|| format!("Google returned {status}"))
+                );
+            }
+
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Entry {
+                name: String,
+                #[serde(default)]
+                display_name: String,
+                #[serde(default)]
+                description: String,
+                #[serde(default)]
+                supported_generation_methods: Vec<String>,
+            }
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            struct Page {
+                #[serde(default)]
+                models: Vec<Entry>,
+                #[serde(default)]
+                next_page_token: String,
+            }
+
+            let page: Page =
+                serde_json::from_str(&raw).context("Google sent a model list we could not read")?;
+            for entry in page.models {
+                if !entry
+                    .supported_generation_methods
+                    .iter()
+                    .any(|method| method == "generateContent")
+                {
+                    continue;
+                }
+                let id = entry.name.trim_start_matches("models/").to_owned();
+                // Paper work needs a general text/vision model; the speech,
+                // image and embedding models cannot do it.
+                if id.contains("embedding")
+                    || id.contains("transcribe")
+                    || id.contains("-tts")
+                    || id.contains("-image")
+                    || id.contains("veo-")
+                {
+                    continue;
+                }
+                models.push(GoogleModel {
+                    display_name: if entry.display_name.is_empty() {
+                        id.clone()
+                    } else {
+                        entry.display_name
+                    },
+                    description: entry.description,
+                    id,
+                });
+            }
+            page_token = page.next_page_token;
+            if page_token.is_empty() {
+                break;
+            }
+        }
+
+        if models.is_empty() {
+            bail!("this key has no models that can write a paper");
+        }
+        models.sort_by(|left, right| right.id.cmp(&left.id));
+        Ok(models)
     }
 
     pub async fn search_papers(&self, query: &str) -> Result<Vec<PaperCandidate>> {

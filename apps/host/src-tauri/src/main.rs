@@ -1216,6 +1216,72 @@ fn save_settings(
     })
 }
 
+/// The same machine-local key the running server uses, so a key saved here can
+/// be decrypted by the server and vice versa.
+fn ai_secret(config: &HostConfig) -> Result<[u8; 32], String> {
+    cinder_core::secure_store::load_or_create_key(&config.data_dir.join("ai-key-secret.bin"))
+        .map_err(|e| e.to_string())
+}
+
+/// Reads the stored AI configuration. The rusqlite connection is dropped before
+/// any await: it is not Send, and the reachability probe is async.
+fn stored_ai(admin: &HostAdmin, token: &str) -> Result<cinder_host::routes::ai::StoredAi, String> {
+    let config = authorised_config(admin, token)?;
+    let secret = ai_secret(&config)?;
+    let conn = database(&config)?;
+    cinder_host::routes::ai::load_ai(&conn, &secret).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn ai_settings(
+    admin: State<'_, HostAdmin>,
+    token: String,
+) -> Result<cinder_core::AiSettings, String> {
+    let stored = stored_ai(&admin, &token)?;
+    Ok(cinder_host::routes::ai::visible_settings(stored).await)
+}
+
+#[tauri::command]
+async fn save_ai_settings(
+    admin: State<'_, HostAdmin>,
+    token: String,
+    settings: cinder_core::SaveAiSettings,
+) -> Result<cinder_core::AiSettings, String> {
+    {
+        let config = authorised_config(&admin, &token)?;
+        let secret = ai_secret(&config)?;
+        let conn = database(&config)?;
+        let describe = format!(
+            "AI provider updated: model {}, Google model {}",
+            if settings.model.trim().is_empty() {
+                "unset"
+            } else {
+                settings.model.trim()
+            },
+            settings.google_model.as_deref().unwrap_or("unset"),
+        );
+        cinder_host::routes::ai::store_ai(&conn, &secret, settings).map_err(|e| e.to_string())?;
+        // The audit line records that keys changed, never their values.
+        audit(&conn, "ai.settings", Some("school"), None, &describe)?;
+    }
+    let stored = stored_ai(&admin, &token)?;
+    Ok(cinder_host::routes::ai::visible_settings(stored).await)
+}
+
+#[tauri::command]
+async fn google_models(
+    admin: State<'_, HostAdmin>,
+    token: String,
+) -> Result<Vec<cinder_core::GoogleModel>, String> {
+    let key = stored_ai(&admin, &token)?
+        .google_key
+        .ok_or_else(|| "Save a Google key first, then choose a model.".to_owned())?;
+    cinder_ai::google::GoogleClient::new(&key, "")
+        .list_models()
+        .await
+        .map_err(|e| format!("{e:#}"))
+}
+
 #[tauri::command]
 fn list_audit(admin: State<HostAdmin>, token: String) -> Result<Vec<AuditEntry>, String> {
     let config = authorised_config(&admin, &token)?;
@@ -1311,6 +1377,9 @@ fn main() {
             restore_school,
             reset_school,
             save_settings,
+            ai_settings,
+            save_ai_settings,
+            google_models,
             list_audit
         ])
         .run(tauri::generate_context!())

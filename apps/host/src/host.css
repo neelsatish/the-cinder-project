@@ -46,6 +46,8 @@ select,
 .notice,
 .table-head { background: var(--surface-raised); color: var(--text); }
 .notice { border-color: var(--primary); }
+.card-note { margin: 0; color: var(--text-soft); font-size: 12px; font-weight: 400; line-height: 1.5; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .host-shell nav button { color: var(--text-soft); }
 .host-shell nav button.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
 .server-chip i,
