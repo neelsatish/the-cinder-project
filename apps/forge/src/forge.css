@@ -396,6 +396,7 @@ button { -webkit-tap-highlight-color: transparent; }
   color: var(--surface-lowest);
   background: var(--success);
 }
+:root[data-theme="paper"] .widget-timer .countdown-controls { color: inherit; }
 :root[data-theme="paper"] .widget-library {
   color: var(--surface-lowest);
   background: var(--primary-strong);

@@ -103,14 +103,17 @@ export function StudentQuizzes({ api, classroomId, online, focusDeliveryId }: { 
   const nowDate = new Date();
   return (
     <section className="forge-panel student-quiz-list">
-      <div className="panel-heading"><div><span className="forge-kicker">Assessment</span><h2>Quizzes</h2></div><button className="forge-button text" type="button" onClick={() => void refresh()}>Refresh</button></div>
+      <div className="panel-heading student-quiz-heading">
+        <div><span className="forge-kicker">Assessment</span><h2>Quizzes</h2><p>Timed and take-home quizzes for this classroom.</p></div>
+        <button className="forge-button secondary" type="button" onClick={() => void refresh()}>Refresh</button>
+      </div>
       {deliveries.length ? <div className="quiz-deliveries">{deliveries.map((delivery) => {
         const notOpen = Boolean(delivery.opens_at && new Date(delivery.opens_at) > nowDate);
         const closed = Boolean(delivery.due_at && new Date(delivery.due_at) <= nowDate);
         const releasedWithoutSubmission = Boolean(delivery.results_released_at && delivery.attempt_state !== "submitted");
         const state = delivery.attempt_state === "submitted" ? delivery.results_released_at ? "View result" : "Submitted" : releasedWithoutSubmission ? "Closed" : delivery.attempt_id ? "Resume" : notOpen ? "Not open" : closed ? "Closed" : "Start";
         return <button className="quiz-delivery-card" type="button" key={delivery.id} disabled={notOpen || closed || releasedWithoutSubmission} onClick={() => void open(delivery)}><span><strong>{delivery.title}</strong><small>{delivery.kind === "live" ? "Live quiz" : delivery.due_at ? `Due ${new Date(delivery.due_at).toLocaleString()}` : "Homework"}</small></span><span className="quiz-delivery-state">{state}</span></button>;
-      })}</div> : <p className="classroom-muted">No quizzes have been assigned.</p>}
+      })}</div> : <div className="student-quiz-empty"><strong>No quizzes yet</strong><p>Your teacher’s quizzes will appear here when they are ready.</p></div>}
       {message ? <p className="form-hint" role="status">{message}</p> : null}
     </section>
   );

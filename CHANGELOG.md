@@ -6,6 +6,14 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.10.3
+
+- Rebuilt the paper creator as three uncluttered workspaces: Options, Feed and Editing.
+- Added a live A4 editing canvas with editable paper title, target marks, headers, footers and repeat-on-page controls.
+- Removed the unused board-library shortcut and the year, session and paper-variant form clutter.
+- Refined Teacher and Student classroom tabs and reorganised the Student quiz empty state.
+- Fixed Paper-theme timer controls so their text stays readable on the green widget.
+
 ## 0.10.2
 
 - Added the Papers workspace to Teacher: a library of saved question papers beside the paper being built.

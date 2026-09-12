@@ -132,9 +132,20 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
   let y = A4_HEIGHT - PAGE_MARGIN;
   const contentWidth = A4_WIDTH - PAGE_MARGIN * 2;
 
+  const drawCustomHeader = () => {
+    const header = metadata.headerText?.trim();
+    if (!header) return;
+    for (const line of wrapLine(header, contentWidth, bold, 8.5)) {
+      page.drawText(line, { x: PAGE_MARGIN, y, size: 8.5, font: bold, color: rgb(0.3, 0.3, 0.3) });
+      y -= 11;
+    }
+    y -= 7;
+  };
+
   const newPage = () => {
     page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
     y = A4_HEIGHT - PAGE_MARGIN;
+    if (metadata.repeatHeader) drawCustomHeader();
   };
 
   const ensureSpace = (height: number) => {
@@ -231,6 +242,7 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
   };
 
   const title = kind === "answer" ? `${metadata.title} - Marking scheme` : metadata.title;
+  drawCustomHeader();
   drawWrapped(title || "Question paper", { size: 19, lineHeight: 23, strong: true, gapAfter: 5 });
   drawWrapped(metadata.subject, { size: 11, strong: true, gapAfter: 2 });
   const boardDetails = [
@@ -460,9 +472,19 @@ export async function createPaperPdf({ metadata, paper, kind }: PdfOptions) {
 
   const pages = pdf.getPages();
   pages.forEach((pdfPage, index) => {
-    const footer = `${index + 1} of ${pages.length}`;
-    pdfPage.drawText(footer, {
-      x: A4_WIDTH - PAGE_MARGIN - regular.widthOfTextAtSize(footer, 8),
+    const pageNumber = `${index + 1} of ${pages.length}`;
+    const footer = metadata.footerText?.trim();
+    if (footer && (metadata.repeatFooter || index === pages.length - 1)) {
+      pdfPage.drawText(pdfSafeText(footer).slice(0, 160), {
+        x: PAGE_MARGIN,
+        y: 24,
+        size: 8,
+        font: regular,
+        color: rgb(0.42, 0.42, 0.42),
+      });
+    }
+    pdfPage.drawText(pageNumber, {
+      x: A4_WIDTH - PAGE_MARGIN - regular.widthOfTextAtSize(pageNumber, 8),
       y: 24,
       size: 8,
       font: regular,

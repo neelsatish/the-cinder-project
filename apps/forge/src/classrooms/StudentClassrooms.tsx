@@ -273,7 +273,7 @@ export function StudentClassrooms({
         </header>
         <nav className="classroom-sections" aria-label="Classroom sections">
           {(["overview", "work", "quizzes", "materials", "marks"] as ClassroomSection[]).map((item) => (
-            <button className={section === item ? "active" : ""} key={item} type="button" onClick={() => setSection(item)}>{item}</button>
+            <button className={section === item ? "active" : ""} aria-current={section === item ? "page" : undefined} key={item} type="button" onClick={() => setSection(item)}>{item}</button>
           ))}
         </nav>
         {section === "overview" ? (
