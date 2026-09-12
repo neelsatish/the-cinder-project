@@ -108,6 +108,7 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::dashboard::router())
         .merge(routes::tree::router())
         .merge(routes::notes::router())
+        .merge(routes::papers::router())
         .merge(routes::quizzes::router())
         .merge(routes::files::router())
         .merge(routes::live_sessions::router())

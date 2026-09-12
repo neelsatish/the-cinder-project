@@ -4,4 +4,8 @@ export type SaveAiSettings = { base_url?: string, model: string,
 /**
  * Absent leaves the stored key alone; empty string clears it.
  */
-api_key?: string, };
+api_key?: string, 
+/**
+ * Same rule as `api_key`, for the Google key.
+ */
+google_key?: string, google_model?: string, };

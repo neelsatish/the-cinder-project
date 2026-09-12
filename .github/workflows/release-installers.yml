@@ -279,7 +279,16 @@ jobs:
           else
             gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "Cinder Matchbox $VERSION" --notes-file release-notes.md --latest
           fi
-          gh release upload "$RELEASE_TAG" artifacts/* --clobber
+          # Installers plus the updater feeds only. The detached .sig files and
+          # the checksum list are left off: the signature the updater checks is
+          # already inside each feed, and a release page a head teacher can read
+          # is worth more than duplicate verification files.
+          gh release upload "$RELEASE_TAG" \
+            artifacts/*-Setup.exe \
+            artifacts/*.AppImage \
+            artifacts/*.deb \
+            artifacts/*-latest.json \
+            --clobber
 
       - name: Publish redirect-free updater feeds
         env:

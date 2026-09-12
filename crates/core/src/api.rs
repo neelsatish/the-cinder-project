@@ -232,6 +232,11 @@ pub struct AiSettings {
     pub has_key: bool,
     /// False until the endpoint actually answers.
     pub reachable: bool,
+    /// A separate Google key, used only for finding papers online and locating
+    /// figures inside them. Without it the paper creator falls back to uploads
+    /// and hand-drawn crops.
+    pub has_google_key: bool,
+    pub google_model: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -243,6 +248,11 @@ pub struct SaveAiSettings {
     /// Absent leaves the stored key alone; empty string clears it.
     #[ts(optional)]
     pub api_key: Option<String>,
+    /// Same rule as `api_key`, for the Google key.
+    #[ts(optional)]
+    pub google_key: Option<String>,
+    #[ts(optional)]
+    pub google_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

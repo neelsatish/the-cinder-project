@@ -21,6 +21,9 @@ import type {
   LiveSessionTaskKind,
   LiveSessionTaskState,
   NoteBody,
+  PaperCandidate,
+  PaperFigure,
+  QuestionPaper,
   Quiz,
   QuizAttempt,
   QuizDelivery,
@@ -29,6 +32,7 @@ import type {
   QuizResponse,
   QuizStatistics,
   Role,
+  SaveQuestionPaperInput,
   StudyNode,
   Submission,
   SubmissionComment,
@@ -745,11 +749,54 @@ export class CinderApi {
     base_url?: string;
     model: string;
     api_key?: string;
+    google_key?: string;
+    google_model?: string;
   }) {
     return this.request<AiSettings>("/api/ai/settings", {
       method: "PUT",
       body: JSON.stringify(input),
     });
+  }
+
+  searchPapers(query: string) {
+    return this.request<PaperCandidate[]>(
+      "/api/papers/search",
+      { method: "POST", body: JSON.stringify({ query }) },
+      120_000,
+    );
+  }
+
+  /** Downloads one teacher-chosen paper into their own tree, not the class library. */
+  fetchPaperSource(url: string) {
+    return this.request<StudyNode>(
+      "/api/papers/fetch",
+      { method: "POST", body: JSON.stringify({ url }) },
+      120_000,
+    );
+  }
+
+  findPaperFigures(pages: { page: number; jpeg_base64: string }[]) {
+    return this.request<PaperFigure[]>(
+      "/api/papers/figures",
+      { method: "POST", body: JSON.stringify({ pages }) },
+      190_000,
+    );
+  }
+
+  questionPapers() {
+    return this.request<QuestionPaper[]>("/api/papers");
+  }
+
+  /** Creates or replaces the paper with this id; the teacher app autosaves. */
+  saveQuestionPaper(id: string, input: SaveQuestionPaperInput) {
+    return this.request<QuestionPaper>(`/api/papers/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteQuestionPaper(id: string) {
+    return this.request<void>(`/api/papers/${id}`, { method: "DELETE" });
   }
 
   chat(messages: ChatMessage[], context?: string, maxOutputTokens?: number) {

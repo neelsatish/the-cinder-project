@@ -6,6 +6,16 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.10.2
+
+- Added the Papers workspace to Teacher: a library of saved question papers beside the paper being built.
+- Papers can now be built from an official past paper found online. Teachers search, choose a result and Cinder downloads that one document from the board's own site.
+- Added figure capture: a source page is rendered in the app, proposed figures are shown for approval, and the approved crop is attached to a question.
+- Generated papers now carry a detailed marking scheme with marking points, accepted alternative answers and partial-credit guidance. It stays on the teacher's copy and is never published with an assignment or quiz.
+- A finished paper can be published to a classroom as an assignment or converted into a quiz.
+- Question papers are now stored on the school server instead of the teacher's computer, so they survive a change of machine and are included in backups. Papers already saved on a teacher's computer are copied up once.
+- Added AI provider settings to Teacher, including a separate Google key used only for finding papers and figures. Both keys are stored encrypted on the Host and are never read back to a client.
+
 ## 0.10.1
 
 - Prevented graded submissions from being withdrawn or resubmitted.

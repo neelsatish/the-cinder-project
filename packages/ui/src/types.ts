@@ -249,6 +249,62 @@ export type AiSettings = {
   model: string;
   has_key: boolean;
   reachable: boolean;
+  has_google_key: boolean;
+  google_model: string;
+};
+
+export type PaperSourceMode = "adapt" | "excerpt" | "full_page";
+
+export type PaperCandidate = {
+  title: string;
+  url: string;
+  board: string;
+  year: string;
+  session: string;
+  variant: string;
+  snippet: string;
+};
+
+/** `[ymin, xmin, ymax, xmax]`, each 0–1000 of the page image that was sent. */
+export type PaperFigure = {
+  page: number;
+  box_2d: [number, number, number, number];
+  caption: string;
+  alt: string;
+};
+
+export type QuestionPaper = {
+  id: string;
+  owner_id: string;
+  classroom_id: string | null;
+  title: string;
+  subject: string;
+  board: string;
+  syllabus_code: string;
+  difficulty: number;
+  source_mode: PaperSourceMode;
+  rights_confirmed: boolean;
+  spec: unknown;
+  scheme: unknown;
+  sources: unknown;
+  advanced: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SaveQuestionPaperInput = {
+  classroom_id: string | null;
+  title: string;
+  subject: string;
+  board: string;
+  syllabus_code: string;
+  difficulty: number;
+  source_mode: PaperSourceMode;
+  rights_confirmed: boolean;
+  spec: unknown;
+  scheme: unknown;
+  sources: unknown;
+  advanced: unknown;
 };
 
 export type ChatMessage = {

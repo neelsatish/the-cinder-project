@@ -3,6 +3,35 @@ import type { PaperSourceCitation } from "./paperLibrary";
 export type ExamBoard = "CIE" | "IGCSE" | "CBSE" | "ICSE";
 export type DifficultyLevel = 1 | 2 | 3 | 4 | 5;
 
+/// How much of a source paper is reused. `excerpt` and `full_page` reproduce a
+/// board's material directly, so the host records a rights confirmation.
+export type PaperSourceMode = "adapt" | "excerpt" | "full_page";
+
+export const PAPER_SOURCE_MODES: {
+  value: PaperSourceMode;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "adapt",
+    label: "Adapt questions, import figures",
+    description:
+      "Write original questions in the style of the source and attach only the figures you approve, with attribution.",
+  },
+  {
+    value: "excerpt",
+    label: "Use exact questions and crops",
+    description:
+      "Reproduce questions or page crops exactly. Confirm your school may reproduce the board's material.",
+  },
+  {
+    value: "full_page",
+    label: "Use whole source pages",
+    description:
+      "Embed complete pages from the source paper. Boards restrict electronic reproduction; confirm your school's rights first.",
+  },
+];
+
 export const PAPER_OUTPUT_TOKEN_OPTIONS = [
   { value: 512, label: "512 - Smoke test" },
   { value: 1_024, label: "1,024 - Small test" },
@@ -26,12 +55,26 @@ export type PaperDiagram = {
   alt: string;
 };
 
+/** One creditable point in the marking scheme, with the marks it earns. */
+export type PaperMarkingPoint = {
+  text: string;
+  marks: number;
+};
+
+/** Teacher-only marking guidance. Never included in anything a student sees. */
+export type PaperScheme = {
+  markingPoints: PaperMarkingPoint[];
+  acceptedAlternatives: string[];
+  guidance: string;
+};
+
 export type PaperSubpart = {
   label: string;
   prompt: string;
   marks: number;
   answer: string;
   workingLines: number;
+  scheme: PaperScheme;
 };
 
 export type PaperQuestion = {
@@ -43,6 +86,7 @@ export type PaperQuestion = {
   subparts: PaperSubpart[];
   diagram: PaperDiagram | null;
   source: string;
+  scheme: PaperScheme;
 };
 
 export type GeneratedPaper = {
@@ -183,6 +227,43 @@ export function sanitizeDiagramImageDataUrl(value: unknown) {
   return dataUrl;
 }
 
+export const EMPTY_SCHEME: PaperScheme = {
+  markingPoints: [],
+  acceptedAlternatives: [],
+  guidance: "",
+};
+
+function normalizeScheme(value: unknown, availableMarks: number): PaperScheme {
+  if (!value || typeof value !== "object") return { ...EMPTY_SCHEME };
+  const candidate = value as Record<string, unknown>;
+  const rawPoints = candidate.marking_points ?? candidate.markingPoints;
+  const markingPoints = Array.isArray(rawPoints)
+    ? rawPoints.slice(0, 20).flatMap((item): PaperMarkingPoint[] => {
+        if (typeof item === "string") {
+          const text = cleanModelText(item).slice(0, 600);
+          return text ? [{ text, marks: 1 }] : [];
+        }
+        if (!item || typeof item !== "object") return [];
+        const point = item as Record<string, unknown>;
+        const text = cleanModelText(point.text ?? point.point).slice(0, 600);
+        if (!text) return [];
+        return [{ text, marks: numeric(point.marks, 1, 0, Math.max(1, availableMarks)) }];
+      })
+    : [];
+  const rawAlternatives = candidate.accepted_alternatives ?? candidate.acceptedAlternatives;
+  const acceptedAlternatives = Array.isArray(rawAlternatives)
+    ? rawAlternatives
+        .map((item) => cleanModelText(item).slice(0, 400))
+        .filter(Boolean)
+        .slice(0, 20)
+    : [];
+  return {
+    markingPoints,
+    acceptedAlternatives,
+    guidance: cleanModelText(candidate.guidance ?? candidate.notes).slice(0, 2_000),
+  };
+}
+
 function normalizeSubparts(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 12).flatMap((item, index): PaperSubpart[] => {
@@ -190,13 +271,18 @@ function normalizeSubparts(value: unknown) {
     const candidate = item as Record<string, unknown>;
     const prompt = cleanModelText(candidate.prompt ?? candidate.question).slice(0, 4_000);
     if (!prompt) return [];
+    const marks = numeric(candidate.marks, 1, 1, 50);
     return [
       {
         label: cleanModelText(candidate.label, String.fromCharCode(97 + index)).slice(0, 5),
         prompt,
-        marks: numeric(candidate.marks, 1, 1, 50),
+        marks,
         answer: cleanModelText(candidate.answer).slice(0, 8_000),
         workingLines: numeric(candidate.working_lines ?? candidate.workingLines, 3, 0, 12),
+        scheme: normalizeScheme(
+          candidate.scheme ?? candidate.marking_scheme ?? candidate.markingScheme,
+          marks,
+        ),
       },
     ];
   });
@@ -253,6 +339,10 @@ export function normalizeGeneratedPaper(value: unknown): GeneratedPaper {
         subparts,
         diagram: normalizeDiagram(question.diagram),
         source: cleanModelText(question.source).slice(0, 300),
+        scheme: normalizeScheme(
+          question.scheme ?? question.marking_scheme ?? question.markingScheme,
+          marks,
+        ),
       },
     ];
   });
@@ -433,11 +523,29 @@ export function questionPaperText(metadata: PaperMetadata, paper: GeneratedPaper
   return lines.join("\n").trim();
 }
 
+/// Papers saved before marking schemes existed have no `scheme`, so every
+/// reader has to tolerate its absence rather than each caller guarding.
+export function schemeLines(scheme: PaperScheme | undefined, indent: string) {
+  const lines: string[] = [];
+  if (!scheme) return lines;
+  scheme.markingPoints.forEach((point) => {
+    lines.push(`${indent}- ${point.text} [${point.marks}]`);
+  });
+  if (scheme.acceptedAlternatives.length) {
+    lines.push(`${indent}Also accept: ${scheme.acceptedAlternatives.join("; ")}`);
+  }
+  if (scheme.guidance) lines.push(`${indent}Guidance: ${scheme.guidance}`);
+  return lines;
+}
+
+/// The answer key doubles as the marking scheme, and is teacher-only: it is
+/// exported separately and never attached to a published assignment or quiz.
 export function answerKeyText(metadata: PaperMetadata, paper: GeneratedPaper) {
   const lines = [
-    `${metadata.title.trim() || "Question paper"} - Answer key`,
+    `${metadata.title.trim() || "Question paper"} - Marking scheme`,
     metadata.subject.trim(),
     boardName(metadata.board),
+    "Teacher copy. Do not give this to students.",
   ].filter(Boolean);
   paper.questions.forEach((question, index) => {
     lines.push(
@@ -446,8 +554,10 @@ export function answerKeyText(metadata: PaperMetadata, paper: GeneratedPaper) {
         ? `${index + 1}. ${question.prompt} [${question.marks}]`
         : `${index + 1}. ${question.answer || "No answer supplied."} [${question.marks}]`,
     );
+    lines.push(...schemeLines(question.scheme, "   "));
     question.subparts.forEach((part) => {
       lines.push(`   (${part.label}) ${part.answer || "No answer supplied."} [${part.marks}]`);
+      lines.push(...schemeLines(part.scheme, "      "));
     });
     if (question.source) lines.push(`   Source note: ${question.source}`);
   });
@@ -480,6 +590,7 @@ export function legacyPaperToSpec(questionText: string, answerText: string): Gen
       subparts: [],
       diagram: null,
       source: "",
+      scheme: { ...EMPTY_SCHEME },
     });
   });
   if (questions.length) return { instructions: [], questions };
@@ -500,6 +611,7 @@ export function legacyPaperToSpec(questionText: string, answerText: string): Gen
           subparts: [],
           diagram: null,
           source: "",
+          scheme: { ...EMPTY_SCHEME },
         }]
       : [],
   };

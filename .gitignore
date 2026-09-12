@@ -1,5 +1,7 @@
 node_modules/
 target/
+# Installers copied to the repository root while testing a build.
+/*.exe
 tmp/
 apps/*/dist/
 /apps/forge/.edge-profile*/
