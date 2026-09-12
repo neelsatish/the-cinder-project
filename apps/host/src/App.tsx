@@ -10,6 +10,8 @@ type Person = { id:string; username:string; display_name:string; role:string; di
 type StoredFile = { node_id:string; display_name:string; original_name:string; mime:string; bytes:number; sha256:string; owner:string|null; classroom:string|null; created_at:string; references:number; trashed_at:string|null; missing:boolean };
 type SetupResult = { recovery_code:string; bootstrap_pin:string|null };
 type AuditEntry = { id:number; action:string; detail:string; target_id:string|null; created_at:string };
+type AiSettings = { base_url?:string; model:string; has_key:boolean; reachable:boolean; has_google_key:boolean; google_model:string };
+type GoogleModel = { id:string; display_name:string; description:string };
 
 const tabs: {id:Tab; label:string}[] = [
   {id:"dashboard",label:"Dashboard"},{id:"people",label:"People"},{id:"files",label:"Stored files"},{id:"backup",label:"Backup & recovery"},{id:"settings",label:"Settings"},
@@ -64,7 +66,83 @@ function Files({token}:{token:string}){const [files,setFiles]=useState<StoredFil
 
 function Backup({token,running}:{token:string;running:boolean}){const [message,setMessage]=useState("");async function backup(){const dir=await open({directory:true,multiple:false,title:"Choose an external backup folder"});if(typeof dir==="string")try{setMessage("Creating and verifying backup…");setMessage(`Verified backup: ${await invoke<string>("backup_school",{token,destination:dir})}`)}catch(e){setMessage(errorText(e))}}async function restore(){if(running){setMessage("Stop the Host before restoring a backup.");return}const dir=await open({directory:true,multiple:false,title:"Choose a Cinder backup folder"});if(typeof dir!=="string")return;const password=prompt("Enter the Host password to restore this backup");if(!password)return;if(!confirm("Restore this backup? Cinder will first create a safety archive of the current school."))return;try{setMessage(`Restore complete. Previous school safety archive: ${await invoke<string>("restore_school",{token,password,backup:dir})}`)}catch(e){setMessage(errorText(e))}}return <Page title="Backup & recovery" subtitle="Keep a verified copy on a different drive."><div className="two-cols"><Card title="Create backup"><p>Copies a consistent database snapshot and every referenced file, then verifies both.</p><button className="primary" onClick={backup}>Choose folder and back up</button></Card><Card title="Restore backup"><p>The server must be stopped. The current school is archived before replacement.</p><button className="secondary" onClick={restore} disabled={running}>Choose backup and restore</button></Card></div>{message&&<pre className="notice">{message}</pre>}</Page>}
 
-function Settings({token,state,running,onSaved}:{token:string;state:PublicState;running:boolean;onSaved:()=>Promise<void>}){const [school,setSchool]=useState(state.school_name??"");const [port,setPort]=useState(state.port??7373);const [message,setMessage]=useState("");async function saveSettings(){try{await invoke("save_settings",{token,schoolName:school,port});setMessage("Settings saved.");await onSaved()}catch(e){setMessage(errorText(e))}}async function reset(){if(running){setMessage("Stop the Host before resetting the school.");return}const typed=prompt(`Type “${school}” to confirm the reset`)??"";if(!typed)return;const password=prompt("Enter the Host password")??"";if(!password)return;try{const result=await invoke<SetupResult>("reset_school",{token,password,typedSchoolName:typed});setMessage(`School reset complete.\nRecovery archive: ${result.recovery_code}\nTeacher setup PIN: ${result.bootstrap_pin??"Unavailable"}`)}catch(e){setMessage(errorText(e))}}return <Page title="Settings" subtitle="Network changes require the server to be stopped."><div className="two-cols"><Card title="School identity"><label>School name<input value={school} onChange={e=>setSchool(e.target.value)}/></label><label>Port<input type="number" min={1024} max={65535} value={port} onChange={e=>setPort(Number(e.target.value))}/></label><button className="primary" disabled={running} onClick={saveSettings}>Save changes</button></Card><Card title="Appearance"><ThemePicker/></Card><Card title="Application updates"><AppUpdater appName="Cinder Host"/></Card></div><AuditLog token={token}/><section className="danger-zone"><h2>Reset school</h2><p>Creates and verifies a recovery archive before starting a new empty school. This cannot run while the server is active.</p><button className="danger" disabled={running} onClick={reset}>Archive and reset school</button></section>{message&&<pre className="notice">{message}</pre>}</Page>}
+/**
+ * The school's AI keys live here rather than in Teacher: one person sets them
+ * up on the server, and teachers only ever use the paper creator.
+ *
+ * The model is chosen from what the key can actually reach. Google retires and
+ * restricts model names on its own schedule, and a hard-coded name leaves the
+ * school with a paper creator that simply stops working.
+ */
+function AiCard({token}:{token:string}){
+  const [settings,setSettings]=useState<AiSettings|null>(null);
+  const [baseUrl,setBaseUrl]=useState("");
+  const [model,setModel]=useState("");
+  const [apiKey,setApiKey]=useState("");
+  const [googleKey,setGoogleKey]=useState("");
+  const [googleModel,setGoogleModel]=useState("");
+  const [models,setModels]=useState<GoogleModel[]>([]);
+  const [message,setMessage]=useState("");
+  const [busy,setBusy]=useState(false);
+
+  const load=useCallback(async()=>{
+    try{
+      const result=await invoke<AiSettings>("ai_settings",{token});
+      setSettings(result);setBaseUrl(result.base_url??"");setModel(result.model);setGoogleModel(result.google_model);
+    }catch(e){setMessage(errorText(e))}
+  },[token]);
+  useEffect(()=>{void load()},[load]);
+
+  async function save(){
+    setBusy(true);setMessage("");
+    try{
+      const result=await invoke<AiSettings>("save_ai_settings",{token,settings:{
+        base_url:baseUrl.trim()||undefined,
+        model:model.trim(),
+        // Absent leaves a stored key alone; an empty box is not a deletion.
+        api_key:apiKey.trim()?apiKey.trim():undefined,
+        google_key:googleKey.trim()?googleKey.trim():undefined,
+        google_model:googleModel.trim()||undefined,
+      }});
+      setSettings(result);setApiKey("");setGoogleKey("");setMessage("Saved.");
+    }catch(e){setMessage(errorText(e))}finally{setBusy(false)}
+  }
+
+  async function loadModels(){
+    setBusy(true);setMessage("");
+    try{
+      const list=await invoke<GoogleModel[]>("google_models",{token});
+      setModels(list);
+      if(!list.some(item=>item.id===googleModel)){
+        setGoogleModel(list[0]?.id??"");
+        setMessage(`This key offers ${list.length} models. ${googleModel||"The saved model"} is not one of them, so the newest was picked — save to keep it.`);
+      }else{
+        setMessage(`This key offers ${list.length} models.`);
+      }
+    }catch(e){setMessage(errorText(e))}finally{setBusy(false)}
+  }
+
+  return <Card title="AI provider">
+    <p className="card-note">Used by the Teacher paper creator. Teachers never enter a key; students never reach it.</p>
+    <label>Text model address<input value={baseUrl} placeholder="https://provider.example.com/v1" onChange={e=>setBaseUrl(e.target.value)}/></label>
+    <label>Text model<input value={model} placeholder="gpt-4o-mini" onChange={e=>setModel(e.target.value)}/></label>
+    <label>{settings?.has_key?"Replace the API key":"API key"}<input type="password" value={apiKey} placeholder={settings?.has_key?"A key is stored":"Paste the provider key"} onChange={e=>setApiKey(e.target.value)}/></label>
+    <label>{settings?.has_google_key?"Replace the Google key":"Google key"}<input type="password" value={googleKey} placeholder={settings?.has_google_key?"A key is stored":"Paste a Google AI Studio key"} onChange={e=>setGoogleKey(e.target.value)}/></label>
+    <label>Google model
+      {models.length
+        ? <select value={googleModel} onChange={e=>setGoogleModel(e.target.value)}>{models.map(item=><option key={item.id} value={item.id}>{item.display_name} ({item.id})</option>)}</select>
+        : <input value={googleModel} onChange={e=>setGoogleModel(e.target.value)}/>}
+    </label>
+    <div className="card-actions">
+      <button className="primary" disabled={busy} onClick={()=>void save()}>{busy?"Working…":"Save AI settings"}</button>
+      <button className="secondary" disabled={busy||!settings?.has_google_key} onClick={()=>void loadModels()}>Check available models</button>
+    </div>
+    {settings&&<small className="card-note">{settings.base_url?(settings.reachable?"The text model answered.":"The text model did not answer."):"No text model is set, so papers cannot be written yet."}{settings.has_google_key?" Google key stored.":" No Google key, so finding papers and figures online is off."}</small>}
+    {message&&<pre className="notice">{message}</pre>}
+  </Card>;
+}
+
+function Settings({token,state,running,onSaved}:{token:string;state:PublicState;running:boolean;onSaved:()=>Promise<void>}){const [school,setSchool]=useState(state.school_name??"");const [port,setPort]=useState(state.port??7373);const [message,setMessage]=useState("");async function saveSettings(){try{await invoke("save_settings",{token,schoolName:school,port});setMessage("Settings saved.");await onSaved()}catch(e){setMessage(errorText(e))}}async function reset(){if(running){setMessage("Stop the Host before resetting the school.");return}const typed=prompt(`Type “${school}” to confirm the reset`)??"";if(!typed)return;const password=prompt("Enter the Host password")??"";if(!password)return;try{const result=await invoke<SetupResult>("reset_school",{token,password,typedSchoolName:typed});setMessage(`School reset complete.\nRecovery archive: ${result.recovery_code}\nTeacher setup PIN: ${result.bootstrap_pin??"Unavailable"}`)}catch(e){setMessage(errorText(e))}}return <Page title="Settings" subtitle="Network changes require the server to be stopped."><div className="two-cols"><Card title="School identity"><label>School name<input value={school} onChange={e=>setSchool(e.target.value)}/></label><label>Port<input type="number" min={1024} max={65535} value={port} onChange={e=>setPort(Number(e.target.value))}/></label><button className="primary" disabled={running} onClick={saveSettings}>Save changes</button></Card><Card title="Appearance"><ThemePicker/></Card><AiCard token={token}/><Card title="Application updates"><AppUpdater appName="Cinder Host"/></Card></div><AuditLog token={token}/><section className="danger-zone"><h2>Reset school</h2><p>Creates and verifies a recovery archive before starting a new empty school. This cannot run while the server is active.</p><button className="danger" disabled={running} onClick={reset}>Archive and reset school</button></section>{message&&<pre className="notice">{message}</pre>}</Page>}
 
 function AuditLog({token}:{token:string}){const [entries,setEntries]=useState<AuditEntry[]>([]);useEffect(()=>{void invoke<AuditEntry[]>("list_audit",{token}).then(setEntries)},[token]);return <Card title="Recent administrator activity"><div className="audit-list">{entries.map(entry=><div key={entry.id}><span><strong>{entry.action}</strong><small>{entry.detail||entry.target_id||"Local administrator"}</small></span><time>{fmt(entry.created_at)}</time></div>)}</div></Card>}
 

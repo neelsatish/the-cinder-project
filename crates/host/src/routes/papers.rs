@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::error::{HostError, HostResult};
-use crate::routes::ai::{decrypt_api_key, get_setting, KEY_GOOGLE_API_KEY, KEY_GOOGLE_MODEL};
+use crate::routes::ai::load_ai;
 use crate::routes::classrooms::require_teacher_access;
 use crate::routes::files::{store_material, UploadQuery};
 use crate::AppState;
@@ -100,19 +100,9 @@ fn validate_source_url(raw: &str) -> HostResult<reqwest::Url> {
 
 async fn google_client(state: &AppState) -> HostResult<GoogleClient> {
     let secret = state.ai_key_secret;
-    let (key, model) = state
-        .db(move |conn| {
-            Ok((
-                decrypt_api_key(&secret, get_setting(conn, KEY_GOOGLE_API_KEY)?)?,
-                get_setting(conn, KEY_GOOGLE_MODEL)?,
-            ))
-        })
-        .await?;
-    let key = key.ok_or(HostError::AiUnavailable)?;
-    Ok(GoogleClient::new(
-        &key,
-        model.as_deref().unwrap_or_default(),
-    ))
+    let stored = state.db(move |conn| load_ai(conn, &secret)).await?;
+    let key = stored.google_key.ok_or(HostError::AiUnavailable)?;
+    Ok(GoogleClient::new(&key, &stored.google_model))
 }
 
 async fn search(

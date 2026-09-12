@@ -745,19 +745,6 @@ export class CinderApi {
     return this.request<AiSettings>("/api/ai/settings");
   }
 
-  saveAiSettings(input: {
-    base_url?: string;
-    model: string;
-    api_key?: string;
-    google_key?: string;
-    google_model?: string;
-  }) {
-    return this.request<AiSettings>("/api/ai/settings", {
-      method: "PUT",
-      body: JSON.stringify(input),
-    });
-  }
-
   searchPapers(query: string) {
     return this.request<PaperCandidate[]>(
       "/api/papers/search",
