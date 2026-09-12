@@ -104,6 +104,10 @@ export type PaperMetadata = {
   paperVariant: string;
   durationMinutes: number;
   sources: PaperSourceCitation[];
+  headerText?: string;
+  footerText?: string;
+  repeatHeader?: boolean;
+  repeatFooter?: boolean;
 };
 
 const BOARD_NAMES: Record<ExamBoard, string> = {

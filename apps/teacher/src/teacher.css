@@ -668,6 +668,42 @@
   display: grid;
   gap: 16px;
 }
+.paper-workflow-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-low);
+}
+.paper-workflow-tabs button {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  background: transparent;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+.paper-workflow-tabs button:hover:not(.is-active) { color: var(--text); background: var(--surface); }
+.paper-workflow-tabs button.is-active { color: var(--primary-ink); background: var(--primary); }
+.paper-workflow-tabs button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.paper-workflow-tabs button > span {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 11px;
+}
 .papers-editor-loading {
   padding: 24px 16px;
   border: 2px solid var(--border-strong, var(--border));
@@ -690,6 +726,8 @@
   border-bottom: 1px solid var(--border);
 }
 .paper-section-head h2 { margin: 0; font-size: 15px; }
+.paper-section-head > div { display: grid; gap: 3px; }
+.paper-section-head > div .eyebrow { margin: 0; }
 .paper-section-note { color: var(--muted); font-size: 12px; }
 .paper-section h3 {
   margin: 0 0 8px;
@@ -703,6 +741,22 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px 12px;
 }
+.paper-options-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.paper-options-grid > :last-child { grid-column: span 2; }
+.paper-section-actions { display: flex; justify-content: flex-end; padding-top: 4px; }
+.paper-editing-settings {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(130px, .8fr);
+  gap: 12px 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-low);
+}
+.paper-editing-settings > :nth-child(3),
+.paper-editing-settings > :nth-child(5) { grid-column: 1; }
+.paper-repeat-setting { align-self: center; margin-top: 17px; }
+.paper-editing-count { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .paper-help { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .paper-rights { align-items: flex-start; }
 .paper-reference-columns {
@@ -1007,6 +1061,14 @@
   font-size: 28px;
   line-height: 1.2;
 }
+.worksheet-custom-header {
+  margin: 0 0 16px !important;
+  color: #555 !important;
+  font-size: 11px !important;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
 .worksheet-header p {
   margin: 3px 0 0;
   color: #494949;
@@ -1148,6 +1210,31 @@
   flex: 0 0 auto;
   margin-top: 14px;
 }
+.worksheet-page { position: relative; }
+.worksheet-custom-footer {
+  position: absolute;
+  right: 70px;
+  bottom: 34px;
+  left: 70px;
+  padding-top: 8px;
+  border-top: 1px solid #c7c7c7;
+  color: #565656;
+  font-size: 11px;
+}
+.paper-blank-message {
+  min-height: 620px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.paper-blank-message h3 { margin: 0; font-size: 24px; text-transform: none; letter-spacing: 0; color: #171717; }
+.paper-blank-message p { max-width: 360px; margin: 0; color: #666; }
+.paper-blank-message > div { display: flex; gap: 8px; margin-top: 8px; }
+:root[data-theme="paper"] .paper-workflow-tabs,
+:root[data-theme="paper"] .paper-editing-settings { border-width: 2px; border-radius: 0; box-shadow: 3px 3px 0 var(--border); }
+:root[data-theme="paper"] .paper-workflow-tabs button { border-radius: 0; }
 .paper-generation-overlay {
   position: absolute;
   inset: 0;
@@ -1214,6 +1301,7 @@
   }
   .papers-workspace { grid-template-columns: 1fr; }
   .papers-library { position: static; }
+  .paper-options-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -1228,6 +1316,14 @@
   .co-teacher-add {
     grid-template-columns: 1fr;
   }
+  .paper-workflow-tabs,
+  .paper-options-grid,
+  .paper-editing-settings { grid-template-columns: 1fr; }
+  .paper-options-grid > :last-child,
+  .paper-editing-settings > :nth-child(3),
+  .paper-editing-settings > :nth-child(5) { grid-column: auto; }
+  .paper-repeat-setting { margin-top: 0; }
+  .paper-export-bar { flex-wrap: wrap; }
 }
 
 @media print {
@@ -1515,7 +1611,11 @@
   .quiz-library-row .panel-actions,
   .quiz-attempt-row .panel-actions { justify-content: flex-start; }
 }
-.classroom-tabs { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--border, #ddd); padding-bottom: 12px; }
+.classroom-tabs { display: flex; width: max-content; max-width: 100%; gap: 4px; margin-bottom: 8px; padding: 4px; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-low); }
+.classroom-tabs button { min-height: 38px; padding: 0 15px; border: 0; border-radius: calc(var(--radius-sm) - 2px); color: var(--text-soft); background: transparent; font: inherit; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.classroom-tabs button:hover:not(.is-active) { color: var(--text); background: var(--surface); }
+.classroom-tabs button.is-active { color: var(--primary-ink); background: var(--primary); }
+.classroom-tabs button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .classroom-workspace .classroom-manager { width: 100%; max-width: none; }
 .classroom-workspace [hidden] { display: none !important; }
 :root[data-theme="paper"] .teacher-shell .nav-rail { border-right-width: 2px; }
@@ -1541,3 +1641,5 @@
 }
 :root[data-theme="paper"] .teacher-shell .button { border-width: 2px; box-shadow: 2px 2px 0 var(--border); }
 :root[data-theme="paper"] .teacher-shell .button:active { box-shadow: none; transform: translate(2px, 2px); }
+:root[data-theme="paper"] .classroom-tabs { border-width: 2px; border-radius: 0; box-shadow: 3px 3px 0 var(--border); }
+:root[data-theme="paper"] .classroom-tabs button { border-radius: 0; }

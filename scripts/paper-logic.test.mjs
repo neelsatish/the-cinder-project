@@ -240,7 +240,17 @@ test("paginates a long paper across A4 sheets", async () => {
       workingLines: index % 3 === 0 ? 8 : 4,
     })),
   };
-  const bytes = await createPaperPdf({ metadata, paper: longPaper, kind: "question" });
+  const bytes = await createPaperPdf({
+    metadata: {
+      ...metadata,
+      headerText: "Inventure Academy",
+      footerText: "Return to your teacher",
+      repeatHeader: true,
+      repeatFooter: true,
+    },
+    paper: longPaper,
+    kind: "question",
+  });
   const document = await PDFDocument.load(bytes);
   assert.ok(document.getPageCount() >= 3);
 });

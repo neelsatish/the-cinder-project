@@ -18,6 +18,10 @@ export type PaperAdvancedOptions = {
   durationMinutes: number;
   topics: string;
   includeDiagrams: boolean;
+  headerText?: string;
+  footerText?: string;
+  repeatHeader?: boolean;
+  repeatFooter?: boolean;
   maxOutputTokens?: number;
 };
 

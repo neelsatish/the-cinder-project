@@ -78,11 +78,9 @@ import {
   difficultyPrompt,
   EMPTY_SCHEME,
   normalizePaperOutputTokens,
-  PAPER_OUTPUT_TOKEN_OPTIONS,
   PAPER_SOURCE_MODES,
   legacyPaperToSpec,
   normalizeGeneratedPaper,
-  officialSourceUrl,
   paperTotalMarks,
   parseGeneratedPaperResponse,
   questionPaperText,
@@ -1761,7 +1759,7 @@ function ClassroomWorkspace({
       <div className="page classroom-workspace">
         <PageHeader title={roster?.classroom.name ?? "Classroom"} description="Manage this classroom’s students, work and live sessions." action={<Button onClick={onClose}>All classrooms</Button>} />
         <nav className="classroom-tabs" aria-label="Classroom sections">
-          {["overview", "students", "materials", "assignments", "quizzes", "attendance", "live", "teachers"].map((item) => <Button key={item} variant={section === item ? "primary" : "ghost"} aria-current={section === item ? "page" : undefined} onClick={() => setSection(item)}>{item === "live" ? "Live classroom" : item[0].toUpperCase() + item.slice(1)}</Button>)}
+          {["overview", "students", "materials", "assignments", "quizzes", "attendance", "live", "teachers"].map((item) => <button type="button" className={section === item ? "is-active" : ""} key={item} aria-current={section === item ? "page" : undefined} onClick={() => setSection(item)}>{item === "live" ? "Live classroom" : item[0].toUpperCase() + item.slice(1)}</button>)}
         </nav>
         {roster && section === "assignments" ? <AssignmentsView api={api} classrooms={[roster.classroom]} assignments={assignments} onUpdated={onUpdated} /> : null}
         {roster && section === "quizzes" ? <QuizManager api={api} classrooms={[roster.classroom]} /> : null}
@@ -4040,7 +4038,9 @@ function paperHtml(metadata: PaperMetadata, paper: GeneratedPaper, kind: "questi
   const sources = metadata.sources.length
     ? `<p class="sources"><strong>Sources:</strong> ${escapeHtml(sourceSummary(metadata.sources))}</p>`
     : "";
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>@page{size:A4;margin:16mm 18mm}*{box-sizing:border-box}body{max-width:174mm;margin:0 auto;color:#171717;font:11pt/1.48 Arial,"Liberation Sans",sans-serif}header{padding-bottom:12pt;border-bottom:1px solid #999}h1{margin:0 0 5pt;font-size:20pt}header p{margin:2pt 0}.meta,.sources{font-size:8.5pt;color:#444}.instructions{margin:12pt 0}.instructions h2{font-size:10pt;margin:0 0 4pt}.instructions ul{margin:0;padding-left:18pt}.question{margin:14pt 0;break-inside:avoid}.question-row,.subpart{display:grid;grid-template-columns:24pt 1fr 32pt;gap:5pt;align-items:start}.question-row p,.subpart p{margin:0;white-space:pre-wrap}.question-row>b,.subpart>b{text-align:right}.answer{margin:6pt 0 0 24pt!important;color:#26382b}.subpart .answer{margin-left:0!important}.subpart{margin:8pt 0 0 24pt}.working{margin:7pt 0 0 24pt}.working i{display:block;height:18pt;border-bottom:1px solid #bbb}figure{max-width:130mm;margin:10pt auto;text-align:center}figure img{display:block;max-width:100%;max-height:62mm;margin:auto}figcaption{margin-top:4pt;color:#555;font-size:8.5pt}.question small{display:block;margin:6pt 0 0 24pt;color:#555}</style></head><body><header><h1>${escapeHtml(title)}</h1><p><strong>${escapeHtml(metadata.subject)}</strong></p><p class="meta">${escapeHtml(details.join(" | "))}${metadata.durationMinutes > 0 && kind === "question" ? ` | Time: ${metadata.durationMinutes} minutes` : ""}</p>${sources}</header>${instructions}${questions}</body></html>`;
+  const customHeader = metadata.headerText ? `<p class="custom">${escapeHtml(metadata.headerText)}</p>` : "";
+  const customFooter = metadata.footerText ? `<footer>${escapeHtml(metadata.footerText)}</footer>` : "";
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>@page{size:A4;margin:16mm 18mm}*{box-sizing:border-box}body{max-width:174mm;margin:0 auto;color:#171717;font:11pt/1.48 Arial,"Liberation Sans",sans-serif}header{padding-bottom:12pt;border-bottom:1px solid #999}h1{margin:0 0 5pt;font-size:20pt}header p{margin:2pt 0}.custom{font-size:8.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.05em}.meta,.sources,footer{font-size:8.5pt;color:#444}footer{margin-top:18pt;padding-top:7pt;border-top:1px solid #bbb}.instructions{margin:12pt 0}.instructions h2{font-size:10pt;margin:0 0 4pt}.instructions ul{margin:0;padding-left:18pt}.question{margin:14pt 0;break-inside:avoid}.question-row,.subpart{display:grid;grid-template-columns:24pt 1fr 32pt;gap:5pt;align-items:start}.question-row p,.subpart p{margin:0;white-space:pre-wrap}.question-row>b,.subpart>b{text-align:right}.answer{margin:6pt 0 0 24pt!important;color:#26382b}.subpart .answer{margin-left:0!important}.subpart{margin:8pt 0 0 24pt}.working{margin:7pt 0 0 24pt}.working i{display:block;height:18pt;border-bottom:1px solid #bbb}figure{max-width:130mm;margin:10pt auto;text-align:center}figure img{display:block;max-width:100%;max-height:62mm;margin:auto}figcaption{margin-top:4pt;color:#555;font-size:8.5pt}.question small{display:block;margin:6pt 0 0 24pt;color:#555}</style></head><body><header>${customHeader}<h1>${escapeHtml(title)}</h1><p><strong>${escapeHtml(metadata.subject)}</strong></p><p class="meta">${escapeHtml(details.join(" | "))}${metadata.durationMinutes > 0 && kind === "question" ? ` | Time: ${metadata.durationMinutes} minutes` : ""}</p>${sources}</header>${instructions}${questions}${customFooter}</body></html>`;
 }
 
 type ExtractedPdf = {
@@ -4155,6 +4155,7 @@ function PaperDocumentView({
   return (
     <article className={`worksheet-page worksheet-${kind}`}>
       <header className="worksheet-header">
+        {metadata.headerText ? <p className="worksheet-custom-header">{metadata.headerText}</p> : null}
         <h1>{kind === "answer" ? `${metadata.title} - Marking scheme` : metadata.title}</h1>
         <strong>{metadata.subject}</strong>
         <p>{details.join(" | ")}</p>
@@ -4421,6 +4422,7 @@ function PaperDocumentView({
           </section>
         ))}
       </div>
+      {metadata.footerText ? <footer className="worksheet-custom-footer">{metadata.footerText}</footer> : null}
     </article>
   );
 }
@@ -4780,6 +4782,10 @@ const DEFAULT_PAPER_ADVANCED: PaperAdvancedOptions = {
   durationMinutes: 60,
   topics: "",
   includeDiagrams: true,
+  headerText: "",
+  footerText: "",
+  repeatHeader: false,
+  repeatFooter: true,
   maxOutputTokens: DEFAULT_PAPER_OUTPUT_TOKENS,
 };
 
@@ -4851,6 +4857,9 @@ function QuestionPaperStudio({
   const [paper, setPaper] = useState<GeneratedPaper>(() => initialPaperSpec(activePaper));
   const [sources, setSources] = useState<PaperSourceCitation[]>(activePaper?.sources ?? []);
   const [editorView, setEditorView] = useState<"question" | "answer">("question");
+  const [workspaceSection, setWorkspaceSection] = useState<"options" | "feed" | "editing">(
+    activePaper ? "editing" : "options",
+  );
   const [status, setStatus] = useState(activePaper ? "Saved paper opened." : "");
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -4880,6 +4889,10 @@ function QuestionPaperStudio({
       paperVariant: advanced.paperVariant.trim().slice(0, 40),
       durationMinutes: advanced.durationMinutes,
       sources,
+      headerText: advanced.headerText?.trim().slice(0, 160) || "",
+      footerText: advanced.footerText?.trim().slice(0, 160) || "",
+      repeatHeader: Boolean(advanced.repeatHeader),
+      repeatFooter: advanced.repeatFooter !== false,
     }),
     [advanced, board, sources, subject, syllabusCode, title],
   );
@@ -5139,6 +5152,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
       setPreviewRevision((revision) => revision + 1);
       setEditorView("question");
       await onSave(saved);
+      setWorkspaceSection("editing");
       setStatus(
         references.warnings.length
           ? `Paper saved. Some references were skipped: ${references.warnings.join(" ")}`
@@ -5384,17 +5398,27 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
 
   return (
     <div className="papers-editor">
-      <section className="paper-section" aria-labelledby="paper-brief-heading">
+      <nav className="paper-workflow-tabs" aria-label="Paper creator sections">
+        {(["options", "feed", "editing"] as const).map((item, index) => (
+          <button
+            type="button"
+            key={item}
+            className={workspaceSection === item ? "is-active" : ""}
+            aria-current={workspaceSection === item ? "step" : undefined}
+            onClick={() => setWorkspaceSection(item)}
+          >
+            <span>{index + 1}</span>
+            {item[0].toUpperCase() + item.slice(1)}
+          </button>
+        ))}
+      </nav>
+
+      {workspaceSection === "options" ? <section className="paper-section paper-workflow-section" aria-labelledby="paper-options-heading">
         <div className="paper-section-head">
-          <h2 id="paper-brief-heading">The paper</h2>
-          <span className="paper-section-note">
-            {paperId ? "Saved to the school server as you work." : "Not saved yet."}
-          </span>
+          <div><span className="eyebrow">Step 1</span><h2 id="paper-options-heading">Options</h2></div>
+          <span className="paper-section-note">Set the shape of the paper.</span>
         </div>
-        <div className="paper-grid">
-          <Field label="Title">
-            <input maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} />
-          </Field>
+        <div className="paper-grid paper-options-grid">
           <Field label="Classroom">
             <select
               value={classroomId}
@@ -5409,12 +5433,12 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
               {classrooms.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
             </select>
           </Field>
-          <Field label="Board">
+          <Field label="Syllabus">
             <select value={board} onChange={(event) => setBoard(event.target.value as ExamBoard)}>
-              <option value="CIE">CIE</option>
-              <option value="IGCSE">IGCSE</option>
+              <option value="CIE">Cambridge International AS &amp; A Level</option>
+              <option value="IGCSE">Cambridge IGCSE</option>
               <option value="CBSE">CBSE</option>
-              <option value="ICSE">ICSE</option>
+              <option value="ICSE">CISCE / ICSE</option>
             </select>
           </Field>
           <Field label="Syllabus code">
@@ -5427,18 +5451,6 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
               ))}
             </select>
           </Field>
-          <Field label="Duration (minutes)">
-            <input
-              type="number"
-              min={10}
-              max={360}
-              value={advanced.durationMinutes}
-              onChange={(event) => setAdvanced((current) => ({
-                ...current,
-                durationMinutes: Math.max(10, Math.min(360, Number(event.target.value) || 60)),
-              }))}
-            />
-          </Field>
           <Field label="Questions">
             <input type="number" min={1} max={30} value={questionCount} onChange={(event) => setQuestionCount(Math.max(1, Math.min(30, Number(event.target.value) || 1)))} />
           </Field>
@@ -5448,32 +5460,26 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           <Field label="Topics">
             <input maxLength={400} value={advanced.topics} placeholder="Mechanics, electricity" onChange={(event) => setAdvanced((current) => ({ ...current, topics: event.target.value }))} />
           </Field>
-          <Field label="Past-paper year">
-            <input maxLength={20} value={advanced.year} onChange={(event) => setAdvanced((current) => ({ ...current, year: event.target.value }))} />
-          </Field>
-          <Field label="Session">
-            <input maxLength={40} value={advanced.session} placeholder="May/June" onChange={(event) => setAdvanced((current) => ({ ...current, session: event.target.value }))} />
-          </Field>
-          <Field label="Paper or variant">
-            <input maxLength={40} value={advanced.paperVariant} placeholder="22" onChange={(event) => setAdvanced((current) => ({ ...current, paperVariant: event.target.value }))} />
-          </Field>
         </div>
-        <Field label="Teacher brief" hint="Chapters, question types, learning goals or accommodations.">
-          <textarea maxLength={2000} value={teacherBrief} onChange={(event) => setTeacherBrief(event.target.value)} />
-        </Field>
-      </section>
+        <div className="paper-section-actions">
+          <Button variant="primary" onClick={() => setWorkspaceSection("feed")}>Continue to feed</Button>
+        </div>
+      </section> : null}
 
-      <section className="paper-section" aria-labelledby="paper-sources-heading">
+      {workspaceSection === "feed" ? <><section className="paper-section paper-workflow-section" aria-labelledby="paper-feed-heading">
         <div className="paper-section-head">
-          <h2 id="paper-sources-heading">Sources</h2>
+          <div><span className="eyebrow">Step 2</span><h2 id="paper-feed-heading">Feed</h2></div>
           <span className="paper-section-note">
             {referenceCount
               ? `${referenceCount} reference${referenceCount === 1 ? "" : "s"} selected`
-              : "No references yet"}
+              : "AI can work from your options alone"}
           </span>
         </div>
 
-        <Field label="How the sources are used">
+        <Field label="What should the paper focus on?" hint="Question types, learning goals, accommodations or anything the options do not cover.">
+          <textarea maxLength={2000} value={teacherBrief} placeholder="For example: include one data-response question and avoid logarithms." onChange={(event) => setTeacherBrief(event.target.value)} />
+        </Field>
+        <Field label="How should AI use the feed?">
           <select
             value={sourceMode}
             onChange={(event) => {
@@ -5500,6 +5506,14 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
             </span>
           </label>
         )}
+        <label className="check-field paper-rights">
+          <input
+            type="checkbox"
+            checked={advanced.includeDiagrams}
+            onChange={(event) => setAdvanced((current) => ({ ...current, includeDiagrams: event.target.checked }))}
+          />
+          <span>Allow questions that need a figure. You can attach the exact image in Editing.</span>
+        </label>
 
         <div className="paper-search">
           <Field label="Find an official paper online">
@@ -5522,12 +5536,6 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
             onClick={() => void searchOfficialPapers()}
           >
             {searching ? "Searching…" : "Search"}
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => void openExternalUrl(officialSourceUrl(board, syllabusCode, subject, advanced.year))}
-          >
-            Open board library
           </Button>
         </div>
         <p className="paper-help">
@@ -5602,30 +5610,6 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           </div>
         </div>
 
-        <details className="paper-advanced">
-          <summary>AI output allowance</summary>
-          <Field label="Response size" hint="Larger allowances cost more and take longer.">
-            <select
-              value={maxOutputTokens}
-              onChange={(event) => setAdvanced((current) => ({
-                ...current,
-                maxOutputTokens: normalizePaperOutputTokens(event.target.value),
-              }))}
-            >
-              {PAPER_OUTPUT_TOKEN_OPTIONS.map((option) => (
-                <option value={option.value} key={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </Field>
-          <label className="check-field">
-            <input
-              type="checkbox"
-              checked={advanced.includeDiagrams}
-              onChange={(event) => setAdvanced((current) => ({ ...current, includeDiagrams: event.target.checked }))}
-            />
-            <span>Allow questions that need a figure, and attach the figures yourself</span>
-          </label>
-        </details>
       </section>
 
       <div className="paper-action-bar">
@@ -5636,6 +5620,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
         >
           {busy ? "Creating paper…" : paper.questions.length ? "Create paper again" : "Create paper"}
         </Button>
+        <Button variant="secondary" onClick={() => setWorkspaceSection("editing")}>Open editing</Button>
         {paperId ? (
           <Button variant="ghost" disabled={busy || deleting} onClick={() => void deleteCurrentPaper()}>
             {deleting ? "Deleting…" : "Delete this paper"}
@@ -5647,14 +5632,39 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           </p>
         ) : null}
       </div>
+      </> : null}
 
-      <section className="paper-section paper-preview-section" aria-labelledby="paper-preview-heading">
+      {workspaceSection === "editing" ? <section className="paper-section paper-preview-section paper-workflow-section" aria-labelledby="paper-preview-heading">
         <div className="paper-section-head">
-          <h2 id="paper-preview-heading">{editorView === "question" ? "Question paper" : "Marking scheme"}</h2>
+          <div><span className="eyebrow">Step 3</span><h2 id="paper-preview-heading">Editing</h2></div>
           <span className="paper-section-note">
-            {paper.questions.length} question{paper.questions.length === 1 ? "" : "s"} · {paperTotalMarks(paper)} marks
+            {paperId ? "Saved to the school server as you work." : "Draft not saved yet."}
           </span>
         </div>
+
+        <div className="paper-editing-settings">
+          <Field label="Paper title">
+            <input maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} />
+          </Field>
+          <Field label="Total marks" hint={paper.questions.length ? `Questions currently add up to ${paperTotalMarks(paper)}.` : "Used when AI creates the paper."}>
+            <input type="number" min={1} max={300} value={totalMarks} onChange={(event) => setTotalMarks(Math.max(1, Math.min(300, Number(event.target.value) || 1)))} />
+          </Field>
+          <Field label="Page header" hint="Optional text above the paper title.">
+            <input maxLength={160} value={advanced.headerText ?? ""} placeholder="School name or examination series" onChange={(event) => setAdvanced((current) => ({ ...current, headerText: event.target.value }))} />
+          </Field>
+          <label className="check-field paper-repeat-setting">
+            <input type="checkbox" checked={Boolean(advanced.repeatHeader)} onChange={(event) => setAdvanced((current) => ({ ...current, repeatHeader: event.target.checked }))} />
+            <span>Repeat header on every page</span>
+          </label>
+          <Field label="Page footer" hint="Optional text beside the page number.">
+            <input maxLength={160} value={advanced.footerText ?? ""} placeholder="Confidential · Return to teacher" onChange={(event) => setAdvanced((current) => ({ ...current, footerText: event.target.value }))} />
+          </Field>
+          <label className="check-field paper-repeat-setting">
+            <input type="checkbox" checked={advanced.repeatFooter !== false} onChange={(event) => setAdvanced((current) => ({ ...current, repeatFooter: event.target.checked }))} />
+            <span>Repeat footer on every page</span>
+          </label>
+        </div>
+        {status ? <p className={/could not|must|unavailable|incomplete|confirm/i.test(status) ? "form-error" : "form-hint"}>{status}</p> : null}
 
         {paper.questions.length ? (
           <>
@@ -5719,11 +5729,26 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
             ) : null}
           </>
         ) : (
-          <EmptyState
-            icon="document"
-            title="No paper yet"
-            description="Set the paper details and sources above, then create the paper."
-          />
+          <div className="worksheet-canvas">
+            <article className="worksheet-page worksheet-blank">
+              <header className="worksheet-header">
+                {metadata.headerText ? <p className="worksheet-custom-header">{metadata.headerText}</p> : null}
+                <h1>{metadata.title}</h1>
+                <strong>{metadata.subject}</strong>
+                <p>{boardName(metadata.board)}{metadata.syllabusCode ? ` | Syllabus ${metadata.syllabusCode}` : ""}</p>
+              </header>
+              <div className="paper-blank-message">
+                <span className="eyebrow">Blank paper</span>
+                <h3>Your questions will appear here.</h3>
+                <p>Choose what the AI should use in Feed, or add a question by hand.</p>
+                <div>
+                  <Button variant="primary" onClick={() => setWorkspaceSection("feed")}>Open feed</Button>
+                  <Button variant="secondary" icon="plus" onClick={addBlankQuestion}>Add question</Button>
+                </div>
+              </div>
+              {metadata.footerText ? <footer className="worksheet-custom-footer">{metadata.footerText}</footer> : null}
+            </article>
+          </div>
         )}
         {busy ? (
           <div className="paper-generation-overlay" role="status" aria-live="polite">
@@ -5732,7 +5757,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
             <small>This may take a minute. The paper is checked before it is saved.</small>
           </div>
         ) : null}
-      </section>
+      </section> : null}
     </div>
   );
 }
