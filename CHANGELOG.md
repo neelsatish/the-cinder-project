@@ -6,6 +6,11 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.10.5
+
+- Removed all AI provider, model and API-key controls from Cinder Teacher. Only Cinder Host can configure the encrypted school key.
+- Added Host-side monthly and lifetime AI request and token totals, including paper searches and figure detection.
+
 ## 0.10.4
 
 - Moved the AI provider and API keys into Cinder Host, so the school sets them up once on the server and teachers never handle a key.

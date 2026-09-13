@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::error::{HostError, HostResult};
-use crate::routes::ai::load_ai;
+use crate::routes::ai::{load_ai, record_ai_usage};
 use crate::routes::classrooms::require_teacher_access;
 use crate::routes::files::{store_material, UploadQuery};
 use crate::AppState;
@@ -98,11 +98,12 @@ fn validate_source_url(raw: &str) -> HostResult<reqwest::Url> {
     Ok(url)
 }
 
-async fn google_client(state: &AppState) -> HostResult<GoogleClient> {
+async fn google_client(state: &AppState) -> HostResult<(GoogleClient, String)> {
     let secret = state.ai_key_secret;
     let stored = state.db(move |conn| load_ai(conn, &secret)).await?;
     let key = stored.google_key.ok_or(HostError::AiUnavailable)?;
-    Ok(GoogleClient::new(&key, &stored.google_model))
+    let model = stored.google_model;
+    Ok((GoogleClient::new(&key, &model), model))
 }
 
 async fn search(
@@ -114,11 +115,15 @@ async fn search(
     if req.query.chars().count() > MAX_SEARCH_QUERY_CHARS {
         return Err(HostError::BadRequest("That search is too long.".into()));
     }
-    let candidates = google_client(&state)
-        .await?
+    let (client, model) = google_client(&state).await?;
+    let (candidates, usage) = client
         .search_papers(&req.query)
         .await
         .map_err(|e| HostError::BadRequest(format!("{e:#}")))?;
+    let teacher_id = user.id();
+    state
+        .db(move |conn| record_ai_usage(conn, teacher_id, "paper_search", "google", &model, usage))
+        .await?;
 
     // A suggestion pointing somewhere Cinder will refuse to download is worse
     // than no suggestion, so it is dropped before the teacher sees it.
@@ -248,11 +253,24 @@ async fn figures(
         ));
     }
 
-    let figures = google_client(&state)
-        .await?
+    let (client, model) = google_client(&state).await?;
+    let (figures, usage) = client
         .find_figures(&req.pages)
         .await
         .map_err(|e| HostError::BadRequest(format!("{e:#}")))?;
+    let teacher_id = user.id();
+    state
+        .db(move |conn| {
+            record_ai_usage(
+                conn,
+                teacher_id,
+                "figure_detection",
+                "google",
+                &model,
+                usage,
+            )
+        })
+        .await?;
     Ok(Json(figures))
 }
 

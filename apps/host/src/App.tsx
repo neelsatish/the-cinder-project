@@ -12,6 +12,7 @@ type SetupResult = { recovery_code:string; bootstrap_pin:string|null };
 type AuditEntry = { id:number; action:string; detail:string; target_id:string|null; created_at:string };
 type AiSettings = { base_url?:string; model:string; has_key:boolean; reachable:boolean; has_google_key:boolean; google_model:string };
 type GoogleModel = { id:string; display_name:string; description:string };
+type AiUsage = { requests:number; input_tokens:number; output_tokens:number; lifetime_requests:number; lifetime_input_tokens:number; lifetime_output_tokens:number };
 
 const tabs: {id:Tab; label:string}[] = [
   {id:"dashboard",label:"Dashboard"},{id:"people",label:"People"},{id:"files",label:"Stored files"},{id:"backup",label:"Backup & recovery"},{id:"settings",label:"Settings"},
@@ -76,6 +77,7 @@ function Backup({token,running}:{token:string;running:boolean}){const [message,s
  */
 function AiCard({token}:{token:string}){
   const [settings,setSettings]=useState<AiSettings|null>(null);
+  const [usage,setUsage]=useState<AiUsage|null>(null);
   const [baseUrl,setBaseUrl]=useState("");
   const [model,setModel]=useState("");
   const [apiKey,setApiKey]=useState("");
@@ -87,8 +89,8 @@ function AiCard({token}:{token:string}){
 
   const load=useCallback(async()=>{
     try{
-      const result=await invoke<AiSettings>("ai_settings",{token});
-      setSettings(result);setBaseUrl(result.base_url??"");setModel(result.model);setGoogleModel(result.google_model);
+      const [result,usageResult]=await Promise.all([invoke<AiSettings>("ai_settings",{token}),invoke<AiUsage>("ai_usage",{token})]);
+      setSettings(result);setUsage(usageResult);setBaseUrl(result.base_url??"");setModel(result.model);setGoogleModel(result.google_model);
     }catch(e){setMessage(errorText(e))}
   },[token]);
   useEffect(()=>{void load()},[load]);
@@ -138,6 +140,7 @@ function AiCard({token}:{token:string}){
       <button className="secondary" disabled={busy||!settings?.has_google_key} onClick={()=>void loadModels()}>Check available models</button>
     </div>
     {settings&&<small className="card-note">{settings.base_url?(settings.reachable?"The text model answered.":"The text model did not answer."):"No text model is set, so papers cannot be written yet."}{settings.has_google_key?" Google key stored.":" No Google key, so finding papers and figures online is off."}</small>}
+    {usage&&<><div className="ai-usage"><Metric label="Requests this month" value={usage.requests}/><Metric label="Input tokens" value={usage.input_tokens}/><Metric label="Output tokens" value={usage.output_tokens}/></div><small className="card-note">Lifetime: {usage.lifetime_requests.toLocaleString()} requests · {usage.lifetime_input_tokens.toLocaleString()} input · {usage.lifetime_output_tokens.toLocaleString()} output tokens. Token totals use provider-reported values.</small></>}
     {message&&<pre className="notice">{message}</pre>}
   </Card>;
 }

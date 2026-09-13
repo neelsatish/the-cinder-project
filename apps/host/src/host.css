@@ -48,6 +48,7 @@ select,
 .notice { border-color: var(--primary); }
 .card-note { margin: 0; color: var(--text-soft); font-size: 12px; font-weight: 400; line-height: 1.5; }
 .card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-usage { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .host-shell nav button { color: var(--text-soft); }
 .host-shell nav button.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
 .server-chip i,
@@ -79,3 +80,4 @@ select,
 :root:not([data-theme="paper"]) .host-shell nav button.active { border-width: 1px; border-radius: var(--radius-sm); box-shadow: none; }
 .host-header-actions { display: flex !important; align-items: center; gap: 12px; }
 .host-header-actions .secondary { min-height: 36px; padding: 6px 12px; }
+@media(max-width:800px){.ai-usage{grid-template-columns:1fr}}

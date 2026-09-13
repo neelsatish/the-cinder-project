@@ -57,6 +57,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0012_question_papers",
         include_str!("../migrations/0012_question_papers.sql"),
     ),
+    (
+        "0013_ai_usage",
+        include_str!("../migrations/0013_ai_usage.sql"),
+    ),
 ];
 
 /// Opens (creating if needed) the database at `path` and brings it up to date.

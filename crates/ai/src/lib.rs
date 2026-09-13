@@ -16,6 +16,18 @@ pub mod grammar;
 
 const MAX_PROVIDER_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TokenUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextCompletion {
+    pub content: String,
+    pub usage: TokenUsage,
+}
+
 /// Handle to the local model. `Ai::disabled()` is a fully working no-op, so a
 /// student machine and a host without a model behave identically: the UI simply
 /// hides every AI action.
@@ -184,7 +196,7 @@ impl ChatClient {
         &self,
         messages: &[(String, String)],
         max_output_tokens: Option<u32>,
-    ) -> Result<String> {
+    ) -> Result<TextCompletion> {
         let mut payload = serde_json::json!({
             "model": self.model,
             "messages": messages
@@ -222,33 +234,51 @@ impl ChatClient {
             );
         }
 
-        #[derive(Deserialize)]
-        struct Choice {
-            message: Message,
-        }
-        #[derive(Deserialize)]
-        struct Message {
-            content: Option<String>,
-        }
-        #[derive(Deserialize)]
-        struct Completion {
-            choices: Vec<Choice>,
-        }
-
-        let parsed: Completion =
-            serde_json::from_str(&body).context("the AI sent a reply we could not read")?;
-        let content = parsed
-            .choices
-            .into_iter()
-            .next()
-            .and_then(|c| c.message.content)
-            .unwrap_or_default();
-
-        if content.trim().is_empty() {
-            bail!("the AI sent an empty reply");
-        }
-        Ok(content)
+        parse_chat_completion(&body)
     }
+}
+
+fn parse_chat_completion(body: &str) -> Result<TextCompletion> {
+    #[derive(Deserialize)]
+    struct Choice {
+        message: Message,
+    }
+    #[derive(Deserialize)]
+    struct Message {
+        content: Option<String>,
+    }
+    #[derive(Default, Deserialize)]
+    struct Usage {
+        #[serde(default)]
+        prompt_tokens: u64,
+        #[serde(default)]
+        completion_tokens: u64,
+    }
+    #[derive(Deserialize)]
+    struct Completion {
+        choices: Vec<Choice>,
+        #[serde(default)]
+        usage: Usage,
+    }
+
+    let parsed: Completion =
+        serde_json::from_str(body).context("the AI sent a reply we could not read")?;
+    let content = parsed
+        .choices
+        .into_iter()
+        .next()
+        .and_then(|choice| choice.message.content)
+        .unwrap_or_default();
+    if content.trim().is_empty() {
+        bail!("the AI sent an empty reply");
+    }
+    Ok(TextCompletion {
+        content,
+        usage: TokenUsage {
+            input_tokens: parsed.usage.prompt_tokens,
+            output_tokens: parsed.usage.completion_tokens,
+        },
+    })
 }
 
 pub(crate) async fn read_limited_response(
@@ -318,5 +348,20 @@ mod tests {
 
         let short = truncate_on_char_boundary("abc", 100);
         assert_eq!(short, "abc");
+    }
+
+    #[test]
+    fn chat_completion_keeps_provider_usage_when_present() {
+        let result = parse_chat_completion(
+            r#"{"choices":[{"message":{"content":"Done"}}],"usage":{"prompt_tokens":120,"completion_tokens":30}}"#,
+        )
+        .unwrap();
+        assert_eq!(result.content, "Done");
+        assert_eq!(result.usage.input_tokens, 120);
+        assert_eq!(result.usage.output_tokens, 30);
+
+        let without_usage =
+            parse_chat_completion(r#"{"choices":[{"message":{"content":"Still done"}}]}"#).unwrap();
+        assert_eq!(without_usage.usage, TokenUsage::default());
     }
 }

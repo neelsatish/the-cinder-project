@@ -43,7 +43,6 @@ import {
   type ClassroomTeachers,
   type DashboardStats,
   type GradeChange,
-  type AiSettings,
   type NavigationItem,
   type PaperCandidate,
   type Submission,
@@ -4634,62 +4633,6 @@ function PapersView({
 
 
 
-/// Both keys live on the school server, encrypted, and are never read back to a
-/// client — the form only reports whether one is stored.
-/// Read-only on purpose. The school's keys are set once in Cinder Host, so a
-/// teacher sees whether the paper creator is ready and who to ask if it is not.
-function AiStatusPanel({ api }: { api: CinderApi }) {
-  const [settings, setSettings] = useState<AiSettings | null>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    void api
-      .aiSettings()
-      .then(setSettings)
-      .catch(() => setError("The AI setup could not be read from the school server."));
-  }, [api]);
-
-  const writing = settings?.base_url
-    ? settings.reachable
-      ? { tone: "good" as const, label: "Ready" }
-      : { tone: "warning" as const, label: "Not answering" }
-    : { tone: "warning" as const, label: "Not set up" };
-  const finding = settings?.has_google_key
-    ? { tone: "good" as const, label: "Ready" }
-    : { tone: "warning" as const, label: "Not set up" };
-
-  return (
-    <Panel title="Paper creator" eyebrow="AI">
-      {error ? (
-        <p className="form-error">{error}</p>
-      ) : (
-        <>
-          <dl className="detail-list">
-            <div>
-              <dt>Writing papers</dt>
-              <dd>
-                <Badge tone={writing.tone}>{writing.label}</Badge>
-                {settings?.model ? <small> {settings.model}</small> : null}
-              </dd>
-            </div>
-            <div>
-              <dt>Finding papers and figures</dt>
-              <dd>
-                <Badge tone={finding.tone}>{finding.label}</Badge>
-                {settings?.has_google_key ? <small> {settings.google_model}</small> : null}
-              </dd>
-            </div>
-          </dl>
-          <p className="form-hint">
-            These are set up once in Cinder Host, on the computer running the school server. Ask
-            whoever looks after it if something here says it is not ready.
-          </p>
-        </>
-      )}
-    </Panel>
-  );
-}
-
 function initialPaperSpec(paper: SavedQuestionPaper | null): GeneratedPaper {
   if (!paper) return EMPTY_GENERATED_PAPER;
   try {
@@ -4761,7 +4704,6 @@ function QuestionPaperStudio({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<PaperCandidate[]>([]);
   const [searching, setSearching] = useState(false);
-  const [googleReady, setGoogleReady] = useState(false);
   const [showFigurePicker, setShowFigurePicker] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [questionCount, setQuestionCount] = useState(
@@ -4833,13 +4775,6 @@ function QuestionPaperStudio({
   useEffect(() => {
     if (!classroomId && classrooms[0]) setClassroomId(classrooms[0].id);
   }, [classroomId, classrooms]);
-
-  useEffect(() => {
-    void api
-      .aiSettings()
-      .then((settings) => setGoogleReady(settings.has_google_key))
-      .catch(() => setGoogleReady(false));
-  }, [api]);
 
   const buildSavedPaper = useCallback(
     (id: string, created: string): SavedQuestionPaper => {
@@ -5451,23 +5386,21 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
-                  if (googleReady && !searching) void searchOfficialPapers();
+                  if (!searching) void searchOfficialPapers();
                 }
               }}
             />
           </Field>
           <Button
             variant="secondary"
-            disabled={searching || !googleReady}
+            disabled={searching}
             onClick={() => void searchOfficialPapers()}
           >
             {searching ? "Searching…" : "Search"}
           </Button>
         </div>
         <p className="paper-help">
-          {googleReady
-            ? "Only an examination board's own site is searched, and only the paper you choose is downloaded."
-            : "Add a Google key in Settings to search for papers. You can still upload one below."}
+          Only an examination board's own site is searched, and only the paper you choose is downloaded.
         </p>
 
         {searchResults.length ? (
@@ -5648,7 +5581,6 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
                   id: question.id,
                   label: `${index + 1}. ${question.prompt.slice(0, 60)}`,
                 }))}
-                canDetect={googleReady}
                 onAttach={attachFigure}
                 onClose={() => setShowFigurePicker(false)}
               />
@@ -5762,7 +5694,6 @@ function SettingsView({
         <Panel title="Appearance" eyebrow="Theme">
           <ThemePicker />
         </Panel>
-        <AiStatusPanel api={api} />
         <Panel title="Teacher accounts" eyebrow="Security">
           <div className="teacher-account-list">
             {teachers.map((teacher) => (
