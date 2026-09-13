@@ -13,8 +13,6 @@ type Props = {
   api: CinderApi;
   sources: FigureSource[];
   questions: { id: string; label: string }[];
-  /** False when no Google key is configured; whole-page capture still works. */
-  canDetect: boolean;
   onAttach: (questionId: string, diagram: PaperDiagram) => void;
   onClose: () => void;
 };
@@ -65,7 +63,7 @@ function cropFromCanvas(canvas: HTMLCanvasElement, box: PaperFigure["box_2d"]) {
   return png.length <= MAX_DIAGRAM_CHARS ? png : crop.toDataURL("image/jpeg", 0.85);
 }
 
-export function FigurePicker({ api, sources, questions, canDetect, onAttach, onClose }: Props) {
+export function FigurePicker({ api, sources, questions, onAttach, onClose }: Props) {
   const [sourceId, setSourceId] = useState(sources[0]?.id ?? "");
   const [pageNumber, setPageNumber] = useState(1);
   const [pageCount, setPageCount] = useState(0);
@@ -207,17 +205,11 @@ export function FigurePicker({ api, sources, questions, canDetect, onAttach, onC
             </div>
 
             <div className="figure-picker-actions">
-              <Button variant="primary" onClick={() => void detect()} disabled={busy || !canDetect}>
+              <Button variant="primary" onClick={() => void detect()} disabled={busy}>
                 {busy ? "Working..." : "Find figures on this page"}
               </Button>
               <Button variant="secondary" onClick={useWholePage} disabled={busy}>Use the whole page</Button>
             </div>
-            {canDetect ? null : (
-              <p className="form-hint">
-                Add a Google key in Settings to find figures automatically. You can still attach a
-                whole page.
-              </p>
-            )}
 
             <div className="figure-picker-body">
               <div className="figure-picker-page" ref={preview} />

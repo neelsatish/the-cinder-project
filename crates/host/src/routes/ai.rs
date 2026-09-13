@@ -7,9 +7,10 @@
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use axum::extract::State;
-use axum::routing::{get, post};
+use axum::routing::post;
 use axum::{Json, Router};
-use cinder_ai::ChatClient;
+use chrono::Utc;
+use cinder_ai::{ChatClient, TokenUsage};
 use cinder_core::{AiSettings, ChatRequest, ChatResponse, ChatRole, SaveAiSettings};
 use rand::{rngs::OsRng, RngCore};
 use rusqlite::OptionalExtension;
@@ -19,11 +20,7 @@ use crate::error::{HostError, HostResult};
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        // Read-only: the school's keys are set in the Cinder Host app, against
-        // the database directly, so there is one place to configure them.
-        .route("/api/ai/settings", get(read_settings))
-        .route("/api/ai/chat", post(chat))
+    Router::new().route("/api/ai/chat", post(chat))
 }
 
 const KEY_BASE_URL: &str = "ai.base_url";
@@ -250,14 +247,30 @@ pub async fn visible_settings(stored: StoredAi) -> AiSettings {
     }
 }
 
-async fn read_settings(
-    State(state): State<AppState>,
-    user: CurrentUser,
-) -> HostResult<Json<AiSettings>> {
-    user.require_teacher()?;
-    let secret = state.ai_key_secret;
-    let stored = state.db(move |conn| load_ai(conn, &secret)).await?;
-    Ok(Json(visible_settings(stored).await))
+pub(crate) fn record_ai_usage(
+    conn: &rusqlite::Connection,
+    user_id: uuid::Uuid,
+    operation: &str,
+    provider: &str,
+    model: &str,
+    usage: TokenUsage,
+) -> HostResult<()> {
+    let to_sql = |tokens| i64::try_from(tokens).unwrap_or(i64::MAX);
+    conn.execute(
+        "INSERT INTO ai_usage
+            (user_id, operation, provider, model, input_tokens, output_tokens, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![
+            user_id.to_string(),
+            operation,
+            provider,
+            model,
+            to_sql(usage.input_tokens),
+            to_sql(usage.output_tokens),
+            Utc::now().to_rfc3339(),
+        ],
+    )?;
+    Ok(())
 }
 
 async fn chat(
@@ -346,18 +359,35 @@ async fn chat(
         messages.push((role.into(), message.content.clone()));
     }
 
-    let client = ChatClient::new(&base_url, api_key, model.as_deref().unwrap_or_default());
+    let model = model.unwrap_or_default();
+    let client = ChatClient::new(&base_url, api_key, &model);
     let max_output_tokens = req
         .max_output_tokens
         .map(|tokens| tokens.clamp(256, MAX_OUTPUT_TOKENS));
-    let content = client
+    let completion = client
         .complete(&messages, max_output_tokens)
         .await
         // The upstream message is the useful part ("model not found", "no
         // credit"), so pass it through rather than flattening to "AI failed".
         .map_err(|e| HostError::BadRequest(format!("{e:#}")))?;
+    let teacher_id = user.id();
+    let usage = completion.usage;
+    state
+        .db(move |conn| {
+            record_ai_usage(
+                conn,
+                teacher_id,
+                "text_generation",
+                "openai-compatible",
+                &model,
+                usage,
+            )
+        })
+        .await?;
 
-    Ok(Json(ChatResponse { content }))
+    Ok(Json(ChatResponse {
+        content: completion.content,
+    }))
 }
 
 #[cfg(test)]
@@ -415,6 +445,39 @@ mod tests {
         let stored = load_ai(&conn, &secret).unwrap();
         assert_eq!(stored.api_key.as_deref(), Some("text-key"));
         assert_eq!(stored.google_key, None);
+    }
+
+    #[test]
+    fn successful_ai_usage_is_recorded_and_summed() {
+        let pool = crate::db::open_in_memory().unwrap();
+        let conn = pool.get().unwrap();
+        let user_id = uuid::Uuid::new_v4();
+        conn.execute(
+            "INSERT INTO users (id, username, display_name, pw_hash, role, created_at)
+             VALUES (?1, 'teacher', 'Teacher', 'hash', 'teacher', ?2)",
+            rusqlite::params![user_id.to_string(), Utc::now().to_rfc3339()],
+        )
+        .unwrap();
+        record_ai_usage(
+            &conn,
+            user_id,
+            "text_generation",
+            "openai-compatible",
+            "model",
+            TokenUsage {
+                input_tokens: 120,
+                output_tokens: 30,
+            },
+        )
+        .unwrap();
+        let totals: (i64, i64, i64) = conn
+            .query_row(
+                "SELECT count(*), sum(input_tokens), sum(output_tokens) FROM ai_usage",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(totals, (1, 120, 30));
     }
 
     #[test]

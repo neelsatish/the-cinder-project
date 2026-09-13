@@ -1,5 +1,4 @@
 import type {
-  AiSettings,
   Assignment,
   AttendanceDay,
   AttendanceStatus,
@@ -739,10 +738,6 @@ export class CinderApi {
         base_updated_at: baseUpdatedAt,
       }),
     });
-  }
-
-  aiSettings() {
-    return this.request<AiSettings>("/api/ai/settings");
   }
 
   searchPapers(query: string) {

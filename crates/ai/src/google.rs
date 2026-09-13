@@ -12,7 +12,9 @@ use anyhow::{bail, Context, Result};
 use cinder_core::{GoogleModel, PaperCandidate, PaperFigure, PaperPageImage};
 use serde::Deserialize;
 
-use crate::{read_limited_response, upstream_error, MAX_PROVIDER_RESPONSE_BYTES};
+use crate::{
+    read_limited_response, upstream_error, TextCompletion, TokenUsage, MAX_PROVIDER_RESPONSE_BYTES,
+};
 
 const API_ROOT: &str = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -148,7 +150,7 @@ impl GoogleClient {
         Ok(models)
     }
 
-    pub async fn search_papers(&self, query: &str) -> Result<Vec<PaperCandidate>> {
+    pub async fn search_papers(&self, query: &str) -> Result<(Vec<PaperCandidate>, TokenUsage)> {
         let query = query.trim();
         if query.is_empty() {
             bail!("describe the paper you are looking for");
@@ -173,18 +175,25 @@ impl GoogleClient {
             "generationConfig": { "temperature": 0.2 },
         });
 
-        let text = self.generate(&body).await?;
-        let candidates: Vec<PaperCandidate> = serde_json::from_str(extract_json(&text))
-            .context("the AI did not return a usable list of papers")?;
+        let completion = self.generate(&body).await?;
+        let candidates: Vec<PaperCandidate> =
+            serde_json::from_str(extract_json(&completion.content))
+                .context("the AI did not return a usable list of papers")?;
 
-        Ok(candidates
-            .into_iter()
-            .filter(|candidate| !candidate.url.trim().is_empty())
-            .take(8)
-            .collect())
+        Ok((
+            candidates
+                .into_iter()
+                .filter(|candidate| !candidate.url.trim().is_empty())
+                .take(8)
+                .collect(),
+            completion.usage,
+        ))
     }
 
-    pub async fn find_figures(&self, pages: &[PaperPageImage]) -> Result<Vec<PaperFigure>> {
+    pub async fn find_figures(
+        &self,
+        pages: &[PaperPageImage],
+    ) -> Result<(Vec<PaperFigure>, TokenUsage)> {
         if pages.is_empty() {
             bail!("no pages were supplied");
         }
@@ -230,21 +239,24 @@ impl GoogleClient {
             },
         });
 
-        let text = self.generate(&body).await?;
-        let figures: Vec<PaperFigure> = serde_json::from_str(extract_json(&text))
+        let completion = self.generate(&body).await?;
+        let figures: Vec<PaperFigure> = serde_json::from_str(extract_json(&completion.content))
             .context("the AI did not return usable figure positions")?;
 
-        Ok(figures
-            .into_iter()
-            .filter(|figure| {
-                let [top, left, bottom, right] = figure.box_2d;
-                bottom > top && right > left && bottom <= 1000 && right <= 1000
-            })
-            .take(40)
-            .collect())
+        Ok((
+            figures
+                .into_iter()
+                .filter(|figure| {
+                    let [top, left, bottom, right] = figure.box_2d;
+                    bottom > top && right > left && bottom <= 1000 && right <= 1000
+                })
+                .take(40)
+                .collect(),
+            completion.usage,
+        ))
     }
 
-    async fn generate(&self, body: &serde_json::Value) -> Result<String> {
+    async fn generate(&self, body: &serde_json::Value) -> Result<TextCompletion> {
         let response = self
             .client
             .post(format!("{API_ROOT}/{}:generateContent", self.model))
@@ -267,46 +279,64 @@ impl GoogleClient {
             );
         }
 
-        #[derive(Deserialize)]
-        struct Part {
-            text: Option<String>,
-        }
-        #[derive(Deserialize)]
-        struct Content {
-            #[serde(default)]
-            parts: Vec<Part>,
-        }
-        #[derive(Deserialize)]
-        struct Candidate {
-            content: Option<Content>,
-        }
-        #[derive(Deserialize)]
-        struct Reply {
-            #[serde(default)]
-            candidates: Vec<Candidate>,
-        }
-
-        let parsed: Reply =
-            serde_json::from_str(&raw).context("Google sent a reply we could not read")?;
-        let text = parsed
-            .candidates
-            .into_iter()
-            .next()
-            .and_then(|candidate| candidate.content)
-            .map(|content| {
-                content
-                    .parts
-                    .into_iter()
-                    .filter_map(|part| part.text)
-                    .collect::<String>()
-            })
-            .unwrap_or_default();
-
-        if text.trim().is_empty() {
-            bail!("Google sent an empty reply");
-        }
-        Ok(text)
+        parse_generation_reply(&raw)
     }
+}
+
+fn parse_generation_reply(raw: &str) -> Result<TextCompletion> {
+    #[derive(Deserialize)]
+    struct Part {
+        text: Option<String>,
+    }
+    #[derive(Deserialize)]
+    struct Content {
+        #[serde(default)]
+        parts: Vec<Part>,
+    }
+    #[derive(Deserialize)]
+    struct Candidate {
+        content: Option<Content>,
+    }
+    #[derive(Default, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct UsageMetadata {
+        #[serde(default)]
+        prompt_token_count: u64,
+        #[serde(default)]
+        candidates_token_count: u64,
+    }
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Reply {
+        #[serde(default)]
+        candidates: Vec<Candidate>,
+        #[serde(default)]
+        usage_metadata: UsageMetadata,
+    }
+
+    let parsed: Reply =
+        serde_json::from_str(raw).context("Google sent a reply we could not read")?;
+    let usage = TokenUsage {
+        input_tokens: parsed.usage_metadata.prompt_token_count,
+        output_tokens: parsed.usage_metadata.candidates_token_count,
+    };
+    let content = parsed
+        .candidates
+        .into_iter()
+        .next()
+        .and_then(|candidate| candidate.content)
+        .map(|content| {
+            content
+                .parts
+                .into_iter()
+                .filter_map(|part| part.text)
+                .collect::<String>()
+        })
+        .unwrap_or_default();
+    if content.trim().is_empty() {
+        bail!("Google sent an empty reply");
+    }
+    Ok(TextCompletion { content, usage })
 }
 
 /// Models wrap JSON in prose or a fenced block often enough that trusting the
@@ -356,5 +386,16 @@ mod tests {
         for hostile in ["../../v1beta/models/x", "gemini:generateContent?key=leak"] {
             assert_eq!(GoogleClient::new("key", hostile).model, DEFAULT_MODEL);
         }
+    }
+
+    #[test]
+    fn generation_reply_keeps_google_usage_metadata() {
+        let result = parse_generation_reply(
+            r#"{"candidates":[{"content":{"parts":[{"text":"[]"}]}}],"usageMetadata":{"promptTokenCount":42,"candidatesTokenCount":7}}"#,
+        )
+        .unwrap();
+        assert_eq!(result.content, "[]");
+        assert_eq!(result.usage.input_tokens, 42);
+        assert_eq!(result.usage.output_tokens, 7);
     }
 }

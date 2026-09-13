@@ -124,6 +124,15 @@ struct AuditEntry {
     detail: String,
     created_at: String,
 }
+#[derive(Default, Serialize)]
+struct AiUsageSummary {
+    requests: i64,
+    input_tokens: i64,
+    output_tokens: i64,
+    lifetime_requests: i64,
+    lifetime_input_tokens: i64,
+    lifetime_output_tokens: i64,
+}
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BackupManifest {
@@ -1283,6 +1292,42 @@ async fn google_models(
 }
 
 #[tauri::command]
+fn ai_usage(admin: State<HostAdmin>, token: String) -> Result<AiUsageSummary, String> {
+    let config = authorised_config(&admin, &token)?;
+    let conn = database(&config)?;
+    let table_exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ai_usage')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if !table_exists {
+        return Ok(AiUsageSummary::default());
+    }
+    conn.query_row(
+        "SELECT
+            COALESCE(sum(CASE WHEN substr(created_at, 1, 7) = strftime('%Y-%m', 'now') THEN 1 ELSE 0 END), 0),
+            COALESCE(sum(CASE WHEN substr(created_at, 1, 7) = strftime('%Y-%m', 'now') THEN input_tokens ELSE 0 END), 0),
+            COALESCE(sum(CASE WHEN substr(created_at, 1, 7) = strftime('%Y-%m', 'now') THEN output_tokens ELSE 0 END), 0),
+            count(*), COALESCE(sum(input_tokens), 0), COALESCE(sum(output_tokens), 0)
+         FROM ai_usage",
+        [],
+        |row| {
+            Ok(AiUsageSummary {
+                requests: row.get(0)?,
+                input_tokens: row.get(1)?,
+                output_tokens: row.get(2)?,
+                lifetime_requests: row.get(3)?,
+                lifetime_input_tokens: row.get(4)?,
+                lifetime_output_tokens: row.get(5)?,
+            })
+        },
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn list_audit(admin: State<HostAdmin>, token: String) -> Result<Vec<AuditEntry>, String> {
     let config = authorised_config(&admin, &token)?;
     let conn = database(&config)?;
@@ -1380,6 +1425,7 @@ fn main() {
             ai_settings,
             save_ai_settings,
             google_models,
+            ai_usage,
             list_audit
         ])
         .run(tauri::generate_context!())

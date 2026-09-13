@@ -1,7 +1,7 @@
 {
   "name": "@cinder/forge",
   "private": true,
-  "version": "0.10.4",
+  "version": "0.10.5",
   "type": "module",
   "scripts": {
     "test": "node --experimental-strip-types --test checks/*.test.mjs",
@@ -12,7 +12,7 @@
     "app:build": "tauri build"
   },
   "dependencies": {
-    "@cinder/ui": "0.10.4",
+    "@cinder/ui": "0.10.5",
     "@fontsource/ubuntu": "^5.3.0",
     "@phosphor-icons/react": "^2.1.10",
     "@tauri-apps/api": "^2.8.0",

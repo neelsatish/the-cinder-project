@@ -244,15 +244,6 @@ export type NoteBody = {
   updated_at: string;
 };
 
-export type AiSettings = {
-  base_url?: string;
-  model: string;
-  has_key: boolean;
-  reachable: boolean;
-  has_google_key: boolean;
-  google_model: string;
-};
-
 export type PaperSourceMode = "adapt" | "excerpt" | "full_page";
 
 export type PaperCandidate = {
