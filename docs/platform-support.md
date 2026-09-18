@@ -71,8 +71,8 @@ update feeds, nothing else. Each app checks two feed addresses; the copy on the
 release page is the fallback for school networks that block
 `raw.githubusercontent.com`, so it must stay.
 
-The `Checks` workflow runs the same TypeScript, script and Rust tests on every
-pull request and on pushes to branches other than `main`, without building or
+The `Checks` workflow runs the same dependency audits and TypeScript, script
+and Rust tests on every pull request and on pushes to branches other than `main`, without building or
 signing anything, so a broken change is caught before it reaches a release.
 
 ## Versioning
