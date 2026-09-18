@@ -1,5 +1,7 @@
 # Cinder — brand guidelines
 
+![Cinder](cinder-logo-primary-ember-reduced.png)
+
 The single source of truth for the Cinder identity. Where this document and
 anything else disagree — the PDF reference, `product-overview.md`, a stylesheet —
 this document is correct and the other thing is a bug.
@@ -71,7 +73,8 @@ therefore load-bearing and worth stating exactly.
 | **Cinder Matchbox** | The offline classroom product — the thing that exists today. | Documentation, the pitch, release notes. |
 | **Cinder Teacher** | The teacher installer and its window. | The product itself: window titles, `.deb` metadata, download links. |
 | **Cinder Student** | The student installer and its window. | Same. |
-| **Cinder Forge** / **Forge MAX** | Planned Windows application for individuals. Not started. | Roadmap only. Do not present as available. |
+| **Cinder Host** | The school server installer and its window: accounts, files, backups, updates and AI settings. | Same as Teacher and Student. |
+| **Cinder Forge** / **Forge MAX** | Planned application for individuals. Not released. The `apps/forge` folder is a leftover name: that code ships as **Cinder Student**. | Roadmap only. Do not present as available. |
 | **Cinder Bonfire** | Planned school platform. Still under discussion. | Roadmap only. |
 
 Rules:
@@ -285,6 +288,8 @@ sizes above.
 ---
 
 ## 6. The lockups
+
+<img src="cinder-logo-dark-ember-reduced.png" alt="Cinder, dark lockup" width="360" /> <img src="cinder-app-icon-ember-reduced.png" alt="Cinder app icon" width="90" />
 
 Horizontal lockup: mark left, wordmark right, optically aligned.
 

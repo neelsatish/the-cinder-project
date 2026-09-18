@@ -7,6 +7,7 @@ cd "$REPO_DIR"
 
 case "$ROLE" in
   teacher) npm run app:dev --workspace @cinder/teacher ;;
-  student) npm run app:dev --workspace @cinder/student ;;
-  *) echo "Usage: $0 teacher|student" >&2; exit 2 ;;
+  student) npm run app:dev --workspace @cinder/forge ;;
+  host) npm run app:dev --workspace @cinder/host-app ;;
+  *) echo "Usage: $0 teacher|student|host" >&2; exit 2 ;;
 esac

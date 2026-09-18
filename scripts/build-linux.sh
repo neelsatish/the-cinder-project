@@ -11,12 +11,16 @@ cd "$REPO_DIR"
 
 npm run typecheck
 npm run test:gradebook-intent
+npm run test:paper-logic
+npm run test:forge-notes
 npm run audit:dependencies
 npm run build:student
 npm run build:teacher
+npm run build:host
 cargo fmt --all -- --check
 cargo test --workspace --locked
 npm run bundle:student
 npm run bundle:teacher
+npm run bundle:host
 
-echo "Cinder Student and Teacher installers are ready under target/release/bundle/."
+echo "Cinder Student, Teacher and Host installers are ready under target/release/bundle/."

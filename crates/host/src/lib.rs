@@ -136,6 +136,9 @@ fn cinder_cors() -> CorsLayer {
             HeaderValue::from_static("http://localhost:5174"),
             HeaderValue::from_static("http://127.0.0.1:5173"),
             HeaderValue::from_static("http://127.0.0.1:5174"),
+            // Cinder Student's dev server (apps/forge).
+            HeaderValue::from_static("http://localhost:5175"),
+            HeaderValue::from_static("http://127.0.0.1:5175"),
         ])
         .allow_methods([
             Method::GET,

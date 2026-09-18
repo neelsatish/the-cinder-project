@@ -1,5 +1,8 @@
 # Handoff — Cinder Matchbox
 
+> **Superseded.** This is the 0.9.0 handoff, kept as history. The current one is
+> [`handoff.md`](../handoff.md) at the repository root.
+
 Last updated 13 August 2026, at version **0.9.0**.
 
 For whoever picks this up next: a future you, a teammate, or an AI agent starting

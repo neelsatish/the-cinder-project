@@ -8,9 +8,10 @@
 </p>
 
 **Cinder Matchbox** turns school computers into a working digital classroom
-without an internet subscription or per-seat licence. **Cinder Teacher** runs on
-one computer and holds the classroom data. **Cinder Student** runs on student
-computers and connects to Teacher over the local network.
+without an internet subscription or per-seat licence. **Cinder Host** runs on one
+school computer and holds the school's data. **Cinder Teacher** and **Cinder
+Student** run on teacher and student computers and connect to Host over the
+local network.
 
 The project is free and open source under Apache 2.0.
 
@@ -24,12 +25,15 @@ systems in the same classroom.
 | --- | --- | --- |
 | **Teacher** | [Download Teacher Setup `.exe`](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Teacher-Windows-x86_64-Setup.exe) | [Teacher `.deb`](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Teacher-Linux-x86_64.deb) / [Teacher AppImage](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Teacher-Linux-x86_64.AppImage) |
 | **Student** | [Download Student Setup `.exe`](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Student-Windows-x86_64-Setup.exe) | [Student `.deb`](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Student-Linux-x86_64.deb) / [Student AppImage](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Student-Linux-x86_64.AppImage) |
+| **Host** (one per school) | [Download Host Setup `.exe`](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Host-Windows-x86_64-Setup.exe) | [Host `.deb`](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Host-Linux-x86_64.deb) / [Host AppImage](https://github.com/neelsatish/the-cinder-project/releases/latest/download/Cinder-Host-Linux-x86_64.AppImage) |
 
-[View all installers, checksums and release notes](https://github.com/neelsatish/the-cinder-project/releases/latest)
+[View all installers and release notes](https://github.com/neelsatish/the-cinder-project/releases/latest)
 
 On Windows, run the downloaded Setup file. Windows 11 already includes the
-WebView2 runtime used by Cinder. On Linux Mint, the `.deb` is recommended; open
-it and choose **Install Package**. AppImage is the portable alternative.
+WebView2 runtime used by Cinder. On Linux Mint, the AppImage is recommended
+because it updates itself; make it executable and open it. The `.deb` installs
+through **Install Package** instead, but has to be downloaded again for every
+update.
 
 Windows Setup installs and AppImages receive signed in-app updates from GitHub.
 The `.deb` package is updated by downloading the current release again.
@@ -42,14 +46,15 @@ valid update signature.
 
 ## How it works
 
-- Cinder Teacher stores the school database and serves an authenticated API on
-  TCP port `7373` over the classroom LAN.
-- Cinder Student contains student tools only and keeps local drafts available
-  during brief connection loss.
-- Teacher must be running for first sign-in, account verification and
-  synchronisation. Previously cached work remains available while it is offline.
-- Both computers must be on the same trusted LAN or Wi-Fi network. On Windows,
-  allow Cinder Teacher through the firewall for **Private networks only**.
+- Cinder Host stores the school database and serves an authenticated API on
+  TCP port `7373` (changeable in Host settings) over the school LAN. It also
+  manages accounts, stored files, backups and updates.
+- Cinder Teacher and Cinder Student sign in to Host. Student contains student
+  tools only and keeps local drafts available during brief connection loss.
+- Host must be running for sign-in, account verification and synchronisation.
+  Previously cached work remains available while it is offline.
+- Every computer must be on the same trusted LAN or Wi-Fi network. On Windows,
+  allow Cinder Host through the firewall for **Private networks only**.
 
 ## Main features
 
@@ -58,8 +63,12 @@ valid update signature.
 - Versioned submissions, teacher comments, published grades and grade history.
 - Per-school-day attendance.
 - Private notes organised by subject with a document-style editor.
-- Univer spreadsheet Gradebook with reviewed AI actions and CSV export.
-- Teacher-only AI assistance through an OpenAI-compatible provider.
+- Univer spreadsheet Gradebook with CSV export and printing.
+- Classroom quizzes and live-class sessions with join codes.
+- Question-paper builder with marking schemes kept on the teacher's copy.
+  Optional AI drafting and past-paper search use the school's own key, set up
+  once in Host; see [Security](docs/security.md) before turning it on.
+- Verified backup and restore in Host.
 - Reversible removal that preserves historical submissions and grades.
 
 ## Documentation
@@ -68,10 +77,10 @@ valid update signature.
 | --- | --- |
 | [Platform support](docs/platform-support.md) | Shared Windows/Linux architecture, builds and update rules |
 | [Security](docs/security.md) | Implemented protections, residual risks and deployment checklist |
-| [Handoff](docs/handoff.md) | Current product state and implementation history |
+| [Handoff](handoff.md) | Current product state, open decisions and working rules |
 | [Product overview](docs/product-overview.md) | Mission, principles and deliberate limits |
 | [Product and delivery plan](docs/product-plan.md) | Architecture, data rules and acceptance checklist |
-| [Backup and recovery](docs/backup-and-recovery.md) | Proposed backup model; not yet implemented |
+| [Backup and recovery](docs/backup-and-recovery.md) | Backup design; manual backup and restore are built, scheduled backups are not |
 | [Changelog](CHANGELOG.md) | Bullet-point release notes |
 
 ## Developer setup
@@ -98,8 +107,10 @@ npm.cmd ci
 .\scripts\build-windows.ps1
 ```
 
-Every push to `main` verifies and packages both operating systems. GitHub only
-publishes a release after the Windows and Linux jobs both pass.
+Every pull request runs the **Checks** workflow. Every push to `main` verifies
+and packages both operating systems, and GitHub publishes a release only after
+the Windows and Linux jobs both pass. See the release checklist in
+[Platform support](docs/platform-support.md).
 
 ## Security boundaries
 
@@ -113,10 +124,11 @@ publishes a release after the Windows and Linux jobs both pass.
   changed.
 - Personal notes are readable only by their owner unless submitted as work.
 - Student binaries do not include teacher administration or AI configuration.
+  AI keys are set only in Host and are never sent to Teacher or Student.
 - LAN traffic is HTTP in this version. Use Cinder only on an isolated, trusted
   school network, never public or guest Wi-Fi. See [Security](docs/security.md).
-- There is currently no backup or restore. The teacher computer's disk remains
-  the only copy of school data.
+- Backups are manual. Use Host's **Backup & recovery** to copy the school to a
+  separate drive regularly; until then the Host disk is the only copy.
 
 ## Licence
 

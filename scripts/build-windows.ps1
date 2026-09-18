@@ -14,6 +14,12 @@ try {
     npm.cmd run test:gradebook-intent
     if ($LASTEXITCODE -ne 0) { throw "Gradebook intent tests failed." }
 
+    npm.cmd run test:paper-logic
+    if ($LASTEXITCODE -ne 0) { throw "Paper logic tests failed." }
+
+    npm.cmd run test:forge-notes
+    if ($LASTEXITCODE -ne 0) { throw "Student notes tests failed." }
+
     npm.cmd run audit:dependencies
     if ($LASTEXITCODE -ne 0) { throw "The npm dependency audit failed." }
 
@@ -29,7 +35,10 @@ try {
     npm.cmd run bundle:windows:teacher
     if ($LASTEXITCODE -ne 0) { throw "Cinder Teacher packaging failed." }
 
-    Write-Host "Cinder Student and Teacher Windows installers are ready under target\release\bundle\nsis."
+    npm.cmd run bundle:windows:host
+    if ($LASTEXITCODE -ne 0) { throw "Cinder Host packaging failed." }
+
+    Write-Host "Cinder Student, Teacher and Host Windows installers are ready under target\release\bundle\nsis."
     Get-ChildItem "target\release\bundle\nsis" -File |
         Where-Object { $_.Name -match "(setup\.exe|setup\.exe\.sig)$" } |
         Select-Object Name, Length

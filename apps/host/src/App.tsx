@@ -12,7 +12,7 @@ type SetupResult = { recovery_code:string; bootstrap_pin:string|null };
 type AuditEntry = { id:number; action:string; detail:string; target_id:string|null; created_at:string };
 type AiSettings = { base_url?:string; model:string; has_key:boolean; reachable:boolean; has_google_key:boolean; google_model:string };
 type GoogleModel = { id:string; display_name:string; description:string };
-type AiUsage = { requests:number; input_tokens:number; output_tokens:number; lifetime_requests:number; lifetime_input_tokens:number; lifetime_output_tokens:number };
+type AiUsage = { requests:number; input_tokens:number; output_tokens:number; lifetime_requests:number; lifetime_input_tokens:number; lifetime_output_tokens:number; monthly_token_limit:number|null };
 
 const tabs: {id:Tab; label:string}[] = [
   {id:"dashboard",label:"Dashboard"},{id:"people",label:"People"},{id:"files",label:"Stored files"},{id:"backup",label:"Backup & recovery"},{id:"settings",label:"Settings"},
@@ -83,6 +83,7 @@ function AiCard({token}:{token:string}){
   const [apiKey,setApiKey]=useState("");
   const [googleKey,setGoogleKey]=useState("");
   const [googleModel,setGoogleModel]=useState("");
+  const [limit,setLimit]=useState("");
   const [models,setModels]=useState<GoogleModel[]>([]);
   const [message,setMessage]=useState("");
   const [busy,setBusy]=useState(false);
@@ -90,7 +91,7 @@ function AiCard({token}:{token:string}){
   const load=useCallback(async()=>{
     try{
       const [result,usageResult]=await Promise.all([invoke<AiSettings>("ai_settings",{token}),invoke<AiUsage>("ai_usage",{token})]);
-      setSettings(result);setUsage(usageResult);setBaseUrl(result.base_url??"");setModel(result.model);setGoogleModel(result.google_model);
+      setSettings(result);setUsage(usageResult);setLimit(usageResult.monthly_token_limit?.toString()??"");setBaseUrl(result.base_url??"");setModel(result.model);setGoogleModel(result.google_model);
     }catch(e){setMessage(errorText(e))}
   },[token]);
   useEffect(()=>{void load()},[load]);
@@ -104,9 +105,22 @@ function AiCard({token}:{token:string}){
         // Absent leaves a stored key alone; an empty box is not a deletion.
         api_key:apiKey.trim()?apiKey.trim():undefined,
         google_key:googleKey.trim()?googleKey.trim():undefined,
-        google_model:googleModel.trim()||undefined,
+        // Always sent, so an emptied box knowingly returns to the default model.
+        google_model:googleModel.trim(),
       }});
       setSettings(result);setApiKey("");setGoogleKey("");setMessage("Saved.");
+    }catch(e){setMessage(errorText(e))}finally{setBusy(false)}
+  }
+
+  async function saveLimit(){
+    const trimmed=limit.trim();
+    const value=trimmed?Number(trimmed):null;
+    if(value!==null&&(!Number.isInteger(value)||value<0)){setMessage("Enter a whole number of tokens, or leave it empty for no limit.");return}
+    setBusy(true);setMessage("");
+    try{
+      const result=await invoke<AiUsage>("save_ai_limit",{token,limit:value||null});
+      setUsage(result);setLimit(result.monthly_token_limit?.toString()??"");
+      setMessage(result.monthly_token_limit?"Monthly limit saved.":"Monthly limit removed.");
     }catch(e){setMessage(errorText(e))}finally{setBusy(false)}
   }
 
@@ -140,7 +154,7 @@ function AiCard({token}:{token:string}){
       <button className="secondary" disabled={busy||!settings?.has_google_key} onClick={()=>void loadModels()}>Check available models</button>
     </div>
     {settings&&<small className="card-note">{settings.base_url?(settings.reachable?"The text model answered.":"The text model did not answer."):"No text model is set, so papers cannot be written yet."}{settings.has_google_key?" Google key stored.":" No Google key, so finding papers and figures online is off."}</small>}
-    {usage&&<><div className="ai-usage"><Metric label="Requests this month" value={usage.requests}/><Metric label="Input tokens" value={usage.input_tokens}/><Metric label="Output tokens" value={usage.output_tokens}/></div><small className="card-note">Lifetime: {usage.lifetime_requests.toLocaleString()} requests · {usage.lifetime_input_tokens.toLocaleString()} input · {usage.lifetime_output_tokens.toLocaleString()} output tokens. Token totals use provider-reported values.</small></>}
+    {usage&&<><div className="ai-usage"><Metric label="Requests this month" value={usage.requests}/><Metric label="Input tokens" value={usage.input_tokens}/><Metric label="Output tokens" value={usage.output_tokens}/></div><AllowanceMeter used={usage.input_tokens+usage.output_tokens} limit={usage.monthly_token_limit}/><label>Monthly token limit<input type="number" min={0} step={1000} value={limit} placeholder="No limit" onChange={e=>setLimit(e.target.value)}/></label><div className="card-actions"><button className="secondary" disabled={busy} onClick={()=>void saveLimit()}>Save limit</button></div><small className="card-note">Lifetime: {usage.lifetime_requests.toLocaleString()} requests · {usage.lifetime_input_tokens.toLocaleString()} input · {usage.lifetime_output_tokens.toLocaleString()} output tokens. Token totals use provider-reported values.</small></>}
     {message&&<pre className="notice">{message}</pre>}
   </Card>;
 }
@@ -151,5 +165,12 @@ function AuditLog({token}:{token:string}){const [entries,setEntries]=useState<Au
 
 function Page({title,subtitle,children}:{title:string;subtitle:string;children?:React.ReactNode}){return <div className="page"><div className="page-title"><h1>{title}</h1><p>{subtitle}</p></div>{children}</div>}
 function Card({title,children}:{title:string;children:React.ReactNode}){return <section className="card"><h2>{title}</h2>{children}</section>}
+/** This month's tokens against the school's allowance; AI requests stop once it is reached. */
+function AllowanceMeter({used,limit}:{used:number;limit:number|null}){
+  if(!limit)return <small className="card-note">{used.toLocaleString()} tokens used this month. No monthly limit is set.</small>;
+  const share=Math.min(used/limit,1);
+  return <div className="allowance"><div className="allowance-bar" role="meter" aria-label="AI allowance used this month" aria-valuemin={0} aria-valuemax={limit} aria-valuenow={Math.min(used,limit)}><i style={{width:`${share*100}%`}} className={share>=1?"spent":share>=.8?"low":""}/></div><small className="card-note">{used.toLocaleString()} of {limit.toLocaleString()} tokens used this month.{share>=1?" The allowance is spent, so AI requests are paused until next month or until the limit is raised.":""}</small></div>;
+}
+
 function Metric({label,value}:{label:string;value:number}){return <div className="metric"><strong>{value}</strong><span>{label}</span></div>}
 function Row({label,value}:{label:string;value:string}){return <div className="detail-row"><span>{label}</span><strong title={value}>{value}</strong></div>}
