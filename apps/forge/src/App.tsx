@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppUpdater, BrandMark, ThemePicker } from "@cinder/ui";
 import {
   ArrowLeft,
@@ -33,11 +33,14 @@ import {
   type WidgetId,
 } from "./forgeData";
 import { clearAssets, useForgeTheme, writeAsset } from "./theme";
-import { DocumentEditor } from "./studio/DocumentEditor";
-import { PdfPane } from "./studio/PdfPane";
 import { StudentClassrooms } from "./classrooms/StudentClassrooms";
 import { LiveSessionBar, useStudentLiveSession } from "./classrooms/LiveSession";
 import "./studio/documents.css";
+
+// The editor pulls in Quill and KaTeX, and the PDF pane pdf.js; loading them on
+// first use keeps the student app quick to open on modest school machines.
+const DocumentEditor = lazy(() => import("./studio/DocumentEditor").then((module) => ({ default: module.DocumentEditor })));
+const PdfPane = lazy(() => import("./studio/PdfPane").then((module) => ({ default: module.PdfPane })));
 
 type PrimaryPage = "home" | "classrooms" | "live" | "library" | "studio";
 type Page = PrimaryPage | "settings";
@@ -571,9 +574,11 @@ function StudioNotesTab({ accountId, openDocumentId, notes, files, onAdd, onUpda
             </select>
           </label>
         </div>
-        <DocumentEditor key={selected.id} accountId={accountId} note={selected} onUpdate={onUpdate} onRemove={() => { onRemove(selected.id); setSelectedId(null); }} />
+        <Suspense fallback={<p className="studio-loading" role="status">Opening the editor…</p>}>
+          <DocumentEditor key={selected.id} accountId={accountId} note={selected} onUpdate={onUpdate} onRemove={() => { onRemove(selected.id); setSelectedId(null); }} />
+        </Suspense>
       </div>
-      {referenceId && <PdfPane key={referenceId} fileId={referenceId} storageKey={pdfAssetKey(accountId, referenceId)} name={files.find((file) => file.id === referenceId)?.name ?? "Reference"} onClose={() => setReferenceId(null)} />}
+      {referenceId && <Suspense fallback={null}><PdfPane key={referenceId} fileId={referenceId} storageKey={pdfAssetKey(accountId, referenceId)} name={files.find((file) => file.id === referenceId)?.name ?? "Reference"} onClose={() => setReferenceId(null)} /></Suspense>}
     </section>
   );
 }

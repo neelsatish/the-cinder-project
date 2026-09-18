@@ -6,5 +6,7 @@ export default defineConfig({
   clearScreen: false,
   server: { strictPort: true, host: "127.0.0.1", port: 5175 },
   envPrefix: ["VITE_", "TAURI_"],
-  build: { target: "es2021", minify: "esbuild", sourcemap: false },
+  // Installed desktop app loading from disk, not over a network: the lazily
+  // loaded editor and document libraries sit just above Vite's 500 kB web default.
+  build: { target: "es2021", minify: "esbuild", sourcemap: false, chunkSizeWarningLimit: 700 },
 });
