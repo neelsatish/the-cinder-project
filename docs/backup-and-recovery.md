@@ -1,6 +1,10 @@
 # Backup and recovery
 
-Status: **proposed** — this document exists to settle the decision.
+Status: **partly built.** Cinder Host 0.10.0 added manual backup and restore:
+**Backup & recovery** writes a verified copy of the database and every stored
+file to a chosen folder, and restores one with automatic rollback if the swap
+fails. Scheduled backups are not built; someone has to press the button. The
+text below is the original decision record and still describes the full target.
 
 ## The decision
 

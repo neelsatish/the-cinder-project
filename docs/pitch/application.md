@@ -1,5 +1,11 @@
 # Track 3 — Pitch Your Project: application answers
 
+> **Historical.** These answers were written for an August 2026 application and
+> describe the design at that time. Parts of it were never built: Cinder has no
+> offline AI model, and the released Student app does not turn reading into
+> flashcards. Use
+> `claim-ledger.md` for what is true today.
+
 **Project:** Cinder — a study lab built from e-waste, for a government school.
 **Deadline:** applications close **10 Aug**. Shortlist ~17 Aug. Panel pitch ~28 Aug.
 
