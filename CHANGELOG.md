@@ -10,6 +10,7 @@ who installed a `.deb` download the latest package again.
 
 - Cinder Host can set a monthly AI allowance. Settings → AI provider shows how much of this month's allowance is used, and AI requests pause once it is spent, until next month or until the limit is raised.
 - Past-paper downloads now refuse a redirect that drops from HTTPS to plain HTTP.
+- Updated the TLS library Host uses for AI requests and paper downloads to fix a published security flaw (RUSTSEC-2026-0285).
 - Cinder Student opens faster: the document editor and PDF viewer now load the first time they are used.
 - Removed leftover code from the gradebook AI assistant retired in 0.9.11 and split the Teacher app's largest file into Papers and Gradebook parts. Nothing visible changes.
 - Added a test that proves saved papers and marking schemes stay with the teacher who wrote them, and automatic checks on every pull request.
