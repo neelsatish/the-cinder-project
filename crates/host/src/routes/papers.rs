@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use crate::auth::CurrentUser;
 use crate::error::{HostError, HostResult};
-use crate::routes::ai::{load_ai, record_ai_usage};
+use crate::routes::ai::{load_ai, record_ai_usage, require_ai_allowance};
 use crate::routes::classrooms::require_teacher_access;
 use crate::routes::files::{store_material, UploadQuery};
 use crate::AppState;
@@ -100,7 +100,12 @@ fn validate_source_url(raw: &str) -> HostResult<reqwest::Url> {
 
 async fn google_client(state: &AppState) -> HostResult<(GoogleClient, String)> {
     let secret = state.ai_key_secret;
-    let stored = state.db(move |conn| load_ai(conn, &secret)).await?;
+    let stored = state
+        .db(move |conn| {
+            require_ai_allowance(conn)?;
+            load_ai(conn, &secret)
+        })
+        .await?;
     let key = stored.google_key.ok_or(HostError::AiUnavailable)?;
     let model = stored.google_model;
     Ok((GoogleClient::new(&key, &model), model))
@@ -151,8 +156,11 @@ async fn fetch_source(
             if attempt.previous().len() >= 5 {
                 return attempt.stop();
             }
+            // A redirect may not downgrade to plain HTTP either.
             match attempt.url().host_str() {
-                Some(host) if host_is_allowed(host) => attempt.follow(),
+                Some(host) if attempt.url().scheme() == "https" && host_is_allowed(host) => {
+                    attempt.follow()
+                }
                 _ => attempt.stop(),
             }
         }))
@@ -516,5 +524,122 @@ mod tests {
         assert!(validate(&paper(PaperSourceMode::Excerpt, false)).is_err());
         assert!(validate(&paper(PaperSourceMode::Excerpt, true)).is_ok());
         assert!(validate(&paper(PaperSourceMode::FullPage, false)).is_err());
+    }
+
+    fn user(id: Uuid, role: cinder_core::Role) -> CurrentUser {
+        CurrentUser(
+            cinder_core::User {
+                id,
+                username: id.to_string(),
+                display_name: "Test".into(),
+                role,
+                grade_level: None,
+                section: None,
+                roll_number: None,
+                must_change_password: false,
+                created_at: Utc::now(),
+            },
+            "token".into(),
+        )
+    }
+
+    /// A saved paper and its marking scheme are reachable only by the teacher
+    /// who wrote it: never by a student, never by another teacher.
+    #[tokio::test]
+    async fn marking_schemes_stay_with_the_teacher_who_wrote_them() {
+        use cinder_core::Role;
+        use std::sync::Arc;
+
+        let pool = crate::db::open_in_memory().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let (owner, other_teacher, student) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+        {
+            let conn = pool.get().unwrap();
+            for (id, role) in [
+                (owner, "teacher"),
+                (other_teacher, "teacher"),
+                (student, "student"),
+            ] {
+                conn.execute(
+                    "INSERT INTO users (id, username, display_name, pw_hash, role, created_at)
+                     VALUES (?1, ?1, 'Test', 'hash', ?2, ?3)",
+                    rusqlite::params![id.to_string(), role, Utc::now().to_rfc3339()],
+                )
+                .unwrap();
+            }
+        }
+        let state = AppState {
+            pool,
+            files_dir: directory.path().to_owned(),
+            ai: Arc::new(cinder_ai::Ai::disabled()),
+            ai_key_secret: [0; 32],
+        };
+        let paper_id = Uuid::new_v4();
+        let secret_point = "Award 1 mark for the balanced equation";
+        let request = SaveQuestionPaperRequest {
+            classroom_id: None,
+            title: "Paper 4".into(),
+            subject: "Chemistry".into(),
+            board: "CIE".into(),
+            syllabus_code: "0620".into(),
+            difficulty: 3,
+            source_mode: PaperSourceMode::Adapt,
+            rights_confirmed: false,
+            spec: serde_json::json!({"questions": [{"id": "q1", "prompt": "Balance it."}]}),
+            scheme: serde_json::json!({"q1": {"marking_points": [{"text": secret_point}]}}),
+            sources: serde_json::json!([]),
+            advanced: serde_json::json!({}),
+        };
+
+        let Json(saved) = update_paper(
+            State(state.clone()),
+            user(owner, Role::Teacher),
+            Path(paper_id),
+            Json(request.clone()),
+        )
+        .await
+        .unwrap();
+        assert!(saved.scheme.to_string().contains(secret_point));
+        // The spec, which is what a student-facing export serialises, never
+        // carries the scheme.
+        assert!(!saved.spec.to_string().contains(secret_point));
+
+        let student_user = || user(student, Role::Student);
+        assert!(matches!(
+            get_paper(State(state.clone()), student_user(), Path(paper_id)).await,
+            Err(HostError::Forbidden)
+        ));
+        assert!(matches!(
+            list_papers(State(state.clone()), student_user()).await,
+            Err(HostError::Forbidden)
+        ));
+
+        let intruder = || user(other_teacher, Role::Teacher);
+        assert!(matches!(
+            get_paper(State(state.clone()), intruder(), Path(paper_id)).await,
+            Err(HostError::NotFound(_))
+        ));
+        let Json(listed) = list_papers(State(state.clone()), intruder()).await.unwrap();
+        assert!(listed.is_empty());
+        // Reusing the id cannot overwrite or delete somebody else's paper.
+        assert!(matches!(
+            update_paper(
+                State(state.clone()),
+                intruder(),
+                Path(paper_id),
+                Json(request)
+            )
+            .await,
+            Err(HostError::NotFound(_))
+        ));
+        assert!(matches!(
+            delete_paper(State(state.clone()), intruder(), Path(paper_id)).await,
+            Err(HostError::NotFound(_))
+        ));
+
+        let Json(mine) = get_paper(State(state), user(owner, Role::Teacher), Path(paper_id))
+            .await
+            .unwrap();
+        assert!(mine.scheme.to_string().contains(secret_point));
     }
 }

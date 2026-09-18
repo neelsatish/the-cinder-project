@@ -132,6 +132,8 @@ struct AiUsageSummary {
     lifetime_requests: i64,
     lifetime_input_tokens: i64,
     lifetime_output_tokens: i64,
+    /// Input plus output tokens allowed per calendar month; `None` is no limit.
+    monthly_token_limit: Option<i64>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1295,6 +1297,29 @@ async fn google_models(
 fn ai_usage(admin: State<HostAdmin>, token: String) -> Result<AiUsageSummary, String> {
     let config = authorised_config(&admin, &token)?;
     let conn = database(&config)?;
+    usage_summary(&conn)
+}
+
+#[tauri::command]
+fn save_ai_limit(
+    admin: State<HostAdmin>,
+    token: String,
+    limit: Option<i64>,
+) -> Result<AiUsageSummary, String> {
+    let config = authorised_config(&admin, &token)?;
+    let conn = database(&config)?;
+    cinder_host::routes::ai::set_monthly_token_limit(&conn, limit).map_err(|e| e.to_string())?;
+    let describe = match limit.filter(|limit| *limit > 0) {
+        Some(limit) => format!("Monthly AI allowance set to {limit} tokens"),
+        None => "Monthly AI allowance removed".to_owned(),
+    };
+    audit(&conn, "ai.limit", Some("school"), None, &describe)?;
+    usage_summary(&conn)
+}
+
+fn usage_summary(conn: &Connection) -> Result<AiUsageSummary, String> {
+    let monthly_token_limit =
+        cinder_host::routes::ai::monthly_token_limit(conn).map_err(|e| e.to_string())?;
     let table_exists: bool = conn
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ai_usage')",
@@ -1303,7 +1328,10 @@ fn ai_usage(admin: State<HostAdmin>, token: String) -> Result<AiUsageSummary, St
         )
         .map_err(|error| error.to_string())?;
     if !table_exists {
-        return Ok(AiUsageSummary::default());
+        return Ok(AiUsageSummary {
+            monthly_token_limit,
+            ..AiUsageSummary::default()
+        });
     }
     conn.query_row(
         "SELECT
@@ -1321,6 +1349,7 @@ fn ai_usage(admin: State<HostAdmin>, token: String) -> Result<AiUsageSummary, St
                 lifetime_requests: row.get(3)?,
                 lifetime_input_tokens: row.get(4)?,
                 lifetime_output_tokens: row.get(5)?,
+                monthly_token_limit,
             })
         },
     )
@@ -1426,6 +1455,7 @@ fn main() {
             save_ai_settings,
             google_models,
             ai_usage,
+            save_ai_limit,
             list_audit
         ])
         .run(tauri::generate_context!())

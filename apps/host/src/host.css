@@ -49,6 +49,11 @@ select,
 .card-note { margin: 0; color: var(--text-soft); font-size: 12px; font-weight: 400; line-height: 1.5; }
 .card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .ai-usage { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.allowance { display: grid; gap: 6px; }
+.allowance-bar { height: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-raised); }
+.allowance-bar i { display: block; height: 100%; background: var(--success); }
+.allowance-bar i.low { background: var(--warning); }
+.allowance-bar i.spent { background: var(--danger); }
 .host-shell nav button { color: var(--text-soft); }
 .host-shell nav button.active { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
 .server-chip i,

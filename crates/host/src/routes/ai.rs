@@ -194,8 +194,10 @@ pub fn store_ai(
 ) -> HostResult<()> {
     let base_url = normalize_base_url(req.base_url)?;
     let model = req.model.trim().to_owned();
-    let google_model = req.google_model.unwrap_or_default().trim().to_owned();
-    for name in [&model, &google_model] {
+    // Absent leaves the stored Google model alone, like the keys below; an
+    // empty one falls back to the default.
+    let google_model = req.google_model.map(|name| name.trim().to_owned());
+    for name in [Some(&model), google_model.as_ref()].into_iter().flatten() {
         if name.chars().count() > MAX_MODEL_CHARS {
             return Err(HostError::BadRequest("The model name is too long.".into()));
         }
@@ -208,7 +210,9 @@ pub fn store_ai(
 
     put_setting(conn, KEY_BASE_URL, base_url.as_deref().unwrap_or(""))?;
     put_setting(conn, KEY_MODEL, &model)?;
-    put_setting(conn, KEY_GOOGLE_MODEL, &google_model)?;
+    if let Some(google_model) = &google_model {
+        put_setting(conn, KEY_GOOGLE_MODEL, google_model)?;
+    }
     // Absent means "leave the stored key alone", so the settings form can be
     // saved without the key being round-tripped through a client.
     for (setting, supplied) in [
@@ -245,6 +249,55 @@ pub async fn visible_settings(stored: StoredAi) -> AiSettings {
         has_google_key: stored.google_key.is_some(),
         google_model: stored.google_model,
     }
+}
+
+const KEY_MONTHLY_TOKEN_LIMIT: &str = "ai.monthly_token_limit";
+
+/// Input plus output tokens recorded this calendar month (UTC), all providers.
+pub fn tokens_this_month(conn: &rusqlite::Connection) -> HostResult<i64> {
+    Ok(conn.query_row(
+        "SELECT COALESCE(sum(input_tokens + output_tokens), 0) FROM ai_usage
+         WHERE substr(created_at, 1, 7) = strftime('%Y-%m', 'now')",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+/// The school's monthly token allowance, or `None` when there is no limit.
+pub fn monthly_token_limit(conn: &rusqlite::Connection) -> HostResult<Option<i64>> {
+    Ok(get_setting(conn, KEY_MONTHLY_TOKEN_LIMIT)?
+        .and_then(|value| value.parse::<i64>().ok())
+        .filter(|limit| *limit > 0))
+}
+
+/// `None` or zero removes the limit.
+pub fn set_monthly_token_limit(conn: &rusqlite::Connection, limit: Option<i64>) -> HostResult<()> {
+    if limit.is_some_and(|limit| limit < 0) {
+        return Err(HostError::BadRequest(
+            "The monthly limit cannot be negative.".into(),
+        ));
+    }
+    let stored = limit
+        .filter(|limit| *limit > 0)
+        .map(|limit| limit.to_string())
+        .unwrap_or_default();
+    put_setting(conn, KEY_MONTHLY_TOKEN_LIMIT, &stored)
+}
+
+/// Refuses a new AI request once the month's allowance is spent.
+// ponytail: checked before each request, so the request that crosses the limit
+// still completes; one request is bounded by MAX_OUTPUT_TOKENS and the size caps.
+pub(crate) fn require_ai_allowance(conn: &rusqlite::Connection) -> HostResult<()> {
+    if let Some(limit) = monthly_token_limit(conn)? {
+        if tokens_this_month(conn)? >= limit {
+            return Err(HostError::BadRequest(
+                "The school has used this month's AI allowance. Whoever runs Cinder Host can \
+                 raise it under Settings → AI provider."
+                    .into(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn record_ai_usage(
@@ -308,6 +361,7 @@ async fn chat(
     let secret = state.ai_key_secret;
     let config = state
         .db(move |conn| {
+            require_ai_allowance(conn)?;
             Ok((
                 get_setting(conn, KEY_BASE_URL)?,
                 get_setting(conn, KEY_MODEL)?,
@@ -445,6 +499,77 @@ mod tests {
         let stored = load_ai(&conn, &secret).unwrap();
         assert_eq!(stored.api_key.as_deref(), Some("text-key"));
         assert_eq!(stored.google_key, None);
+
+        // Saving without a Google model keeps the one already chosen.
+        store_ai(
+            &conn,
+            &secret,
+            SaveAiSettings {
+                base_url: None,
+                model: String::new(),
+                api_key: None,
+                google_key: None,
+                google_model: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            load_ai(&conn, &secret).unwrap().google_model,
+            "gemini-9.9-flash"
+        );
+    }
+
+    #[test]
+    fn a_spent_monthly_allowance_blocks_new_requests() {
+        let pool = crate::db::open_in_memory().unwrap();
+        let conn = pool.get().unwrap();
+        let user_id = uuid::Uuid::new_v4();
+        conn.execute(
+            "INSERT INTO users (id, username, display_name, pw_hash, role, created_at)
+             VALUES (?1, 'teacher', 'Teacher', 'hash', 'teacher', ?2)",
+            rusqlite::params![user_id.to_string(), Utc::now().to_rfc3339()],
+        )
+        .unwrap();
+        let spend = |tokens| {
+            record_ai_usage(
+                &conn,
+                user_id,
+                "paper_search",
+                "google",
+                "model",
+                TokenUsage {
+                    input_tokens: tokens,
+                    output_tokens: 0,
+                },
+            )
+            .unwrap()
+        };
+
+        // No limit set: anything goes.
+        spend(5_000);
+        assert!(require_ai_allowance(&conn).is_ok());
+
+        set_monthly_token_limit(&conn, Some(10_000)).unwrap();
+        assert_eq!(monthly_token_limit(&conn).unwrap(), Some(10_000));
+        assert!(require_ai_allowance(&conn).is_ok());
+        spend(5_000);
+        assert_eq!(tokens_this_month(&conn).unwrap(), 10_000);
+        assert!(matches!(
+            require_ai_allowance(&conn),
+            Err(HostError::BadRequest(_))
+        ));
+
+        // Last month's usage does not count against this month.
+        conn.execute(
+            "UPDATE ai_usage SET created_at = '2000-01-01T00:00:00+00:00'",
+            [],
+        )
+        .unwrap();
+        assert!(require_ai_allowance(&conn).is_ok());
+
+        set_monthly_token_limit(&conn, None).unwrap();
+        assert_eq!(monthly_token_limit(&conn).unwrap(), None);
+        assert!(set_monthly_token_limit(&conn, Some(-1)).is_err());
     }
 
     #[test]

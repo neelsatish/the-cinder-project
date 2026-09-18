@@ -1,7 +1,7 @@
 //! Private flashcard decks and manual cards.
 
 use axum::extract::{Path, State};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get};
 use axum::{Json, Router};
 use chrono::Utc;
 use cinder_core::{Card, CardOrigin, CreateCardRequest};
