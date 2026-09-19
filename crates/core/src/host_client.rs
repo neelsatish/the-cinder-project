@@ -49,6 +49,11 @@ pub enum HostRequestError {
          computer may be pretending to be it."
     )]
     IdentityChanged,
+    #[error(
+        "host_outdated: The school's Host computer is running an older Cinder Host. Update \
+         Cinder Host there first; this app then connects to it securely."
+    )]
+    HostOutdated,
     #[error("timeout: The Host did not respond in time.")]
     Timeout,
     #[error("offline: The Host is currently unreachable.")]
@@ -276,6 +281,35 @@ pub fn forget(dir: &Path, base_url: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+/// After a failed HTTPS request: is this a Cinder Host from before 0.10.7,
+/// which only speaks plain HTTP? Only the public health check is sent, with no
+/// credentials, and the real request is never retried over HTTP.
+async fn answers_as_old_host(url: &reqwest::Url) -> bool {
+    let mut probe = url.clone();
+    if probe.set_scheme("http").is_err() {
+        return false;
+    }
+    probe.set_path("/api/health");
+    probe.set_query(None);
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+    else {
+        return false;
+    };
+    let Ok(response) = client.get(probe).send().await else {
+        return false;
+    };
+    if !response.status().is_success() {
+        return false;
+    }
+    response
+        .json::<serde_json::Value>()
+        .await
+        .is_ok_and(|health| health["ok"] == true && health["version"].is_string())
+}
+
 pub struct HostResponse {
     pub status: u16,
     pub headers: Vec<(String, String)>,
@@ -309,7 +343,7 @@ pub async fn send(
         .min(MAX_TIMEOUT);
 
     let pinned = client_for(dir, &key)?;
-    let mut request = pinned.client.request(method, url).timeout(timeout);
+    let mut request = pinned.client.request(method, url.clone()).timeout(timeout);
     for (name, value) in &meta.headers {
         // The transport sets these itself; forwarding them could desync framing.
         if matches!(
@@ -335,8 +369,11 @@ pub async fn send(
                     .remove(&key);
                 return Err(HostRequestError::IdentityChanged);
             }
-            return Err(if error.is_timeout() {
-                HostRequestError::Timeout
+            if error.is_timeout() {
+                return Err(HostRequestError::Timeout);
+            }
+            return Err(if answers_as_old_host(&url).await {
+                HostRequestError::HostOutdated
             } else {
                 HostRequestError::Unreachable
             });

@@ -295,6 +295,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_host_that_only_speaks_plain_http_is_reported_as_outdated() {
+        let (school, pins) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let state = crate::AppState::open(school.path(), cinder_ai::Ai::disabled()).unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        // How Cinder Host 0.10.6 and earlier served: plain HTTP only.
+        tokio::spawn(async move { axum::serve(listener, crate::router(state)).await });
+        let result = send(pins.path(), &[], get(port, "/api/health"), vec![]).await;
+        assert!(
+            matches!(result, Err(HostRequestError::HostOutdated)),
+            "{:?}",
+            result.err()
+        );
+        assert!(!pins.path().join("trusted-hosts.json").exists());
+    }
+
+    #[tokio::test]
     async fn older_apps_on_other_computers_are_told_to_update() {
         use tower::ServiceExt;
         let response = Router::new()

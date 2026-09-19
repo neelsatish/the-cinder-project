@@ -725,7 +725,10 @@ dependencies = [
 name = "cinder-host-app"
 version = "0.10.6"
 dependencies = [
+ "aead",
+ "aes-gcm",
  "anyhow",
+ "argon2",
  "chrono",
  "cinder-ai",
  "cinder-core",

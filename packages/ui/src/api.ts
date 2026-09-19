@@ -81,15 +81,13 @@ async function hostFetch(
   try {
     raw = await Promise.race([sent, aborted]);
   } catch (error) {
-    // The native side reports "code: message"; a changed Host certificate
-    // must reach the person, not read as an ordinary connection failure.
+    // The native side reports "code: message". A changed certificate or an
+    // outdated Host must reach the person, not read as a lost connection.
     const text = String(error);
-    if (text.startsWith("host_identity_changed:"))
-      throw new ApiError(
-        "host_identity_changed",
-        text.slice("host_identity_changed:".length).trim(),
-        0,
-      );
+    const code = ["host_identity_changed", "host_outdated", "invalid"].find((known) =>
+      text.startsWith(`${known}:`),
+    );
+    if (code) throw new ApiError(code, text.slice(code.length + 1).trim(), 0);
     throw error;
   }
   const bytes = new Uint8Array(raw);
