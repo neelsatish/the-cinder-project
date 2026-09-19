@@ -1,15 +1,15 @@
 {
-  "version": "0.10.6",
-  "notes": "Cinder Matchbox 0.10.6",
-  "pub_date": "2026-09-18T13:23:23Z",
+  "version": "0.10.7",
+  "notes": "Cinder Matchbox 0.10.7",
+  "pub_date": "2026-09-19T16:12:10Z",
   "platforms": {
     "linux-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa09HUHRoQU9uS2hOV3pwcEdvRnhiUzErZTgzQWVJZkR3MmFJYVNlbUd4SHZRY1k0aHVFbGcrbnlZVFQ4d3hOaU5sRkY0US9tWmtQN1dYbmR5RmZKN0FvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NzM3NDIzCWZpbGU6Q2luZGVyIFRlYWNoZXJfMC4xMC42X2FtZDY0LkFwcEltYWdlCiszOVRVZDFZdjVSbnJRZDZQRjdRcXRVS0xyaG56K1JSWTQ0aldrSGEvNVpWSXQwSWJtLzdVWE9lWEFwUDBMcE5Nc0hObE1RRDM4ZWo2RDcwdVlURkFRPT0K",
-      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.10.6/Cinder-Teacher-Linux-x86_64.AppImage"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa0I4T09lU3RLcmdPWEc0MzB2V2l4UDZKVy84QXptV0kzOFNEMGhOZHphY2tSNjVIaHZKRzZuWjgxUHR6TFRNZHFsTHpJazMycnJjdUpiNERIT1pGbGd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5ODM0MDQxCWZpbGU6Q2luZGVyIFRlYWNoZXJfMC4xMC43X2FtZDY0LkFwcEltYWdlCnlIbWh3WHdhNGdXUlcvcVNFMnNDUzlUbitSa0NIckFhYlI3ck1aYTZjSXJ4Zm1DVW5BSk1uNnNybFMyQXp6Z1B5bnZlRWVMazZIUVdKc1hodGFKNkNRPT0K",
+      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.10.7/Cinder-Teacher-Linux-x86_64.AppImage"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa0pJT0ltL2xLTmtEVHVVdTJEZEZvRXNhZG9VbjlaRVJjYStjUjlDU3ZhV3VFZURWQXRDcE9BSitOQ1NVMW5UUWxkczFKOTkwa2FaWVpzNENzTHd0amdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NzM3NTUyCWZpbGU6Q2luZGVyIFRlYWNoZXJfMC4xMC42X3g2NC1zZXR1cC5leGUKSG9qaWxIYkoyVHU3TDFGOExGU1dWWmU0bU1UZnRjaXc3ZWxHRkdCOGpyVkl4TExyUVdWcUpSYlFLZnVKdnRGQ0xFWlp1MmlMRVBMdmk4MTFSUG9LQWc9PQo=",
-      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.10.6/Cinder-Teacher-Windows-x86_64-Setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa004SWFZNy9QT1pwNDN6U2t5TGRKTk1vY1daN3lyYXBmTmhlb0huOWVURHhyR3M4L1VvdzhEa2ZwaWpDdnl1ODBGbDRHZE9nSWg4STBvTThrbVJaR2dnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5ODMzNzIwCWZpbGU6Q2luZGVyIFRlYWNoZXJfMC4xMC43X3g2NC1zZXR1cC5leGUKMFRYV0d0NzJ1UVJxc3dEVDJ3OGM4YXg2dkVsTytHMDZ4czB1czBCVzdFQlhZV3pmbll4YWIxVTJ2ZHBMaG1sZ0gyNnFIQkZsQlc4eVFnZmF1NlJMRGc9PQo=",
+      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.10.7/Cinder-Teacher-Windows-x86_64-Setup.exe"
     }
   }
 }
