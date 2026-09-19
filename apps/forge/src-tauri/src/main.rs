@@ -20,12 +20,15 @@ fn main() {
             matchbox::load_config,
             matchbox::save_config,
             matchbox::validate_host_address,
+            matchbox::host_request,
+            matchbox::forget_host_identity,
             matchbox::discover_hosts,
             matchbox::load_secure_session,
             matchbox::save_secure_session,
             matchbox::clear_secure_session,
             matchbox::open_material,
         ])
+        .manage(cinder_core::host_client::PendingHost::default())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;

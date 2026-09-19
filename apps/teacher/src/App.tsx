@@ -428,6 +428,9 @@ export function App() {
 
   const saveConnection = async (nextUrl: string, nextLabel: string) => {
     const normalized = await normalizeHostAddress(nextUrl);
+    // Saving the address is the one deliberate way to trust a Host again, for
+    // example after the school replaces its Host computer.
+    if (isTauri()) await invoke("forget_host_identity", { baseUrl: normalized });
     if (!(await probeHost(normalized)))
       throw new Error("No Cinder Host answered at that address.");
     const nextApi = new CinderApi(normalized);

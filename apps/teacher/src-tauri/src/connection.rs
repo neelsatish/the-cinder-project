@@ -104,8 +104,46 @@ pub fn save_config(app: tauri::AppHandle, mut config: TeacherConfig) -> Result<(
 }
 
 #[tauri::command]
-pub fn validate_host_address(base_url: String) -> Result<String, String> {
-    normalize_host_url(&base_url)
+pub fn validate_host_address(
+    pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
+    base_url: String,
+) -> Result<String, String> {
+    let normalized = normalize_host_url(&base_url)?;
+    pending.set(&normalized);
+    Ok(normalized)
+}
+
+/// Sends one classroom request to Cinder Host over pinned HTTPS. The webview
+/// frames the request (see `cinder_core::host_client`) and gets a framed
+/// response back, so large uploads and downloads stay raw bytes.
+#[tauri::command]
+pub async fn host_request(
+    app: tauri::AppHandle,
+    pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
+    request: tauri::ipc::Request<'_>,
+) -> Result<tauri::ipc::Response, String> {
+    let tauri::ipc::InvokeBody::Raw(raw) = request.body() else {
+        return Err("invalid: The request could not be read.".into());
+    };
+    let (meta, body) =
+        cinder_core::host_client::unframe_request(raw.clone()).map_err(|e| e.to_string())?;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let allowed = pending.allowed(read_config(&dir).host_url);
+    let response = cinder_core::host_client::send(&dir, &allowed, meta, body)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(cinder_core::host_client::frame(
+        &response,
+    )))
+}
+
+/// Stops trusting the certificate remembered for this Host, so the next
+/// connection trusts the one it presents. Called only when a person saves the
+/// Host address in School connection.
+#[tauri::command]
+pub fn forget_host_identity(app: tauri::AppHandle, base_url: String) -> Result<(), String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    cinder_core::host_client::forget(&dir, &base_url).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

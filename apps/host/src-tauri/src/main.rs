@@ -84,6 +84,8 @@ struct Dashboard {
     duplicate_references: i64,
     last_backup: Option<String>,
     bootstrap_pin: Option<String>,
+    /// Short form of the Host certificate fingerprint that apps pin.
+    security_code: Option<String>,
 }
 #[derive(Serialize)]
 struct Person {
@@ -154,6 +156,17 @@ fn random_code(length: usize) -> String {
         .take(length)
         .map(char::from)
         .collect()
+}
+/// The TLS identity lives beside the Host's own settings, not in the school
+/// data folder, so a school reset or restore does not change it and every app
+/// that already trusts this Host keeps trusting it.
+fn tls_identity(admin: &HostAdmin) -> Result<cinder_host::tls::TlsIdentity, String> {
+    let dir = admin
+        .config_path
+        .parent()
+        .ok_or("Host configuration path has no parent.")?
+        .join("tls");
+    cinder_host::tls::load_or_create_identity(&dir).map_err(|e| e.to_string())
 }
 fn config_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
@@ -291,7 +304,7 @@ fn lan_url(bind: IpAddr, port: u16) -> String {
     } else {
         bind
     };
-    format!("http://{ip}:{port}")
+    format!("https://{ip}:{port}")
 }
 fn blob_path(root: &Path, sha: &str) -> PathBuf {
     root.join(&sha[..2]).join(sha)
@@ -493,12 +506,13 @@ async fn start_server(admin: State<'_, HostAdmin>, token: String) -> Result<(), 
         .map_err(|e| e.to_string())?;
     let bootstrap_pin =
         cinder_host::routes::auth::prepare_bootstrap_pin(&state.pool).map_err(|e| e.to_string())?;
+    let identity = tls_identity(&admin)?;
     let listener =
         cinder_host::bind(SocketAddr::new(config.bind, config.port)).map_err(|e| e.to_string())?;
     let (stop, stopped) = oneshot::channel();
     let task = tokio::spawn(async move {
         let advertised = cinder_host::discovery::advertise(config.port, &config.school_name).ok();
-        let _ = cinder_host::serve_on_with_shutdown(state, listener, async {
+        let _ = cinder_host::serve_on_with_shutdown(state, listener, identity, async {
             let _ = stopped.await;
         })
         .await;
@@ -573,7 +587,7 @@ fn dashboard(admin: State<HostAdmin>, token: String) -> Result<Dashboard, String
         .map_err(|_| "Host state is unavailable.".to_owned())?
         .bootstrap_pin
         .clone();
-    Ok(Dashboard { running, school_name: config.school_name.clone(), lan_url: lan_url(config.bind,config.port), data_dir: config.data_dir.display().to_string(), database_bytes: data_size(&config.data_dir.join("cinder.db")), files_bytes: data_size(&files_dir), teachers: count("SELECT count(*) FROM users WHERE role='teacher' AND disabled_at IS NULL")?, students: count("SELECT count(*) FROM users WHERE role='student' AND disabled_at IS NULL")?, classrooms: count("SELECT count(*) FROM classrooms WHERE archived_at IS NULL")?, files: count("SELECT count(*) FROM files")?, trashed_files: count("SELECT count(*) FROM trashed_files")?, missing_blobs: missing, orphaned_blobs: orphaned, duplicate_references: count("SELECT COALESCE(sum(n-1),0) FROM (SELECT count(*) n FROM files GROUP BY sha256 HAVING n>1)")?, last_backup: conn.query_row("SELECT value FROM school_settings WHERE key='last_backup'",[],|r|r.get(0)).optional().map_err(|e|e.to_string())?, bootstrap_pin })
+    Ok(Dashboard { running, school_name: config.school_name.clone(), lan_url: lan_url(config.bind,config.port), data_dir: config.data_dir.display().to_string(), database_bytes: data_size(&config.data_dir.join("cinder.db")), files_bytes: data_size(&files_dir), teachers: count("SELECT count(*) FROM users WHERE role='teacher' AND disabled_at IS NULL")?, students: count("SELECT count(*) FROM users WHERE role='student' AND disabled_at IS NULL")?, classrooms: count("SELECT count(*) FROM classrooms WHERE archived_at IS NULL")?, files: count("SELECT count(*) FROM files")?, trashed_files: count("SELECT count(*) FROM trashed_files")?, missing_blobs: missing, orphaned_blobs: orphaned, duplicate_references: count("SELECT COALESCE(sum(n-1),0) FROM (SELECT count(*) n FROM files GROUP BY sha256 HAVING n>1)")?, last_backup: conn.query_row("SELECT value FROM school_settings WHERE key='last_backup'",[],|r|r.get(0)).optional().map_err(|e|e.to_string())?, bootstrap_pin, security_code: tls_identity(&admin).ok().map(|identity| identity.display_fingerprint()) })
 }
 fn collect_blob_names(path: &Path, out: &mut Vec<String>) {
     if let Ok(entries) = fs::read_dir(path) {

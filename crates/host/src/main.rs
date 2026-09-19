@@ -26,6 +26,7 @@ async fn main() -> Result<()> {
     let options = parse_options(std::env::args_os().skip(1))?;
     let state = AppState::open(&options.data_dir, Ai::disabled())?;
     let bootstrap_pin = cinder_host::routes::auth::prepare_bootstrap_pin(&state.pool)?;
+    let identity = cinder_host::tls::load_or_create_identity(&options.data_dir.join("tls"))?;
     let listener = cinder_host::bind(SocketAddr::new(options.bind, options.port))?;
     let port = listener.local_addr()?.port();
     let advertised = discovery::advertise(port, &options.name)
@@ -34,14 +35,15 @@ async fn main() -> Result<()> {
 
     println!("Cinder Host data: {}", options.data_dir.display());
     match lan_ip(options.bind) {
-        Some(ip) => println!("Cinder Host LAN URL: http://{ip}:{port}"),
-        None => println!("Cinder Host LAN URL: http://<this-computer-ip>:{port}"),
+        Some(ip) => println!("Cinder Host LAN URL: https://{ip}:{port}"),
+        None => println!("Cinder Host LAN URL: https://<this-computer-ip>:{port}"),
     }
+    println!("Host security code: {}", identity.display_fingerprint());
     if let Some(pin) = bootstrap_pin {
         println!("First-school setup PIN (expires in 15 minutes): {pin}");
     }
 
-    let result = cinder_host::serve_on(state, listener).await;
+    let result = cinder_host::serve_on(state, listener, identity).await;
     if let Some(daemon) = advertised {
         let _ = daemon.shutdown();
     }

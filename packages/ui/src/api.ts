@@ -40,6 +40,70 @@ import type {
 } from "./types";
 import { isCinderHealthResponse } from "./health";
 
+function inTauri() {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+/**
+ * Sends a request to Cinder Host. In the installed apps it goes through the
+ * native side, which speaks HTTPS pinned to the Host's certificate; page script
+ * cannot reach the network itself. In a plain browser (local development only)
+ * it is an ordinary fetch, which Host answers over HTTP for this computer only.
+ */
+async function hostFetch(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  if (!inTauri()) return fetch(url, init);
+  const request = new Request(url, { ...init, signal: undefined });
+  const headers: [string, string][] = [];
+  request.headers.forEach((value, name) => headers.push([name, value]));
+  const body = new Uint8Array(await request.arrayBuffer());
+  const head = new TextEncoder().encode(
+    // The native limit is a little longer, so the page's own timer decides
+    // and reports a timeout rather than a lost connection.
+    JSON.stringify({ url, method: request.method, headers, timeoutMs: timeoutMs + 2_000 }),
+  );
+  const framed = new Uint8Array(4 + head.length + body.length);
+  new DataView(framed.buffer).setUint32(0, head.length);
+  framed.set(head, 4);
+  framed.set(body, 4 + head.length);
+
+  const { invoke } = await import("@tauri-apps/api/core");
+  const sent = invoke<ArrayBuffer>("host_request", framed);
+  const aborted = new Promise<never>((_, reject) => {
+    init.signal?.addEventListener("abort", () =>
+      reject(new DOMException("Aborted", "AbortError")),
+    );
+  });
+  let raw: ArrayBuffer;
+  try {
+    raw = await Promise.race([sent, aborted]);
+  } catch (error) {
+    // The native side reports "code: message"; a changed Host certificate
+    // must reach the person, not read as an ordinary connection failure.
+    const text = String(error);
+    if (text.startsWith("host_identity_changed:"))
+      throw new ApiError(
+        "host_identity_changed",
+        text.slice("host_identity_changed:".length).trim(),
+        0,
+      );
+    throw error;
+  }
+  const bytes = new Uint8Array(raw);
+  const headLength = new DataView(raw).getUint32(0);
+  const meta = JSON.parse(
+    new TextDecoder().decode(bytes.subarray(4, 4 + headLength)),
+  ) as { status: number; headers: [string, string][] };
+  const nullBody = [101, 204, 205, 304].includes(meta.status);
+  return new Response(nullBody ? null : bytes.slice(4 + headLength), {
+    status: meta.status,
+    headers: meta.headers,
+  });
+}
+
 export class ApiError extends Error {
   constructor(
     readonly code: string,
@@ -87,12 +151,13 @@ export class CinderApi {
     const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}${path}`, {
-        ...init,
-        headers,
-        signal: controller.signal,
-      });
-    } catch {
+      response = await hostFetch(
+        `${this.baseUrl}${path}`,
+        { ...init, headers, signal: controller.signal },
+        timeoutMs,
+      );
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
       throw new ApiError(
         controller.signal.aborted ? "timeout" : "offline",
         controller.signal.aborted
@@ -696,11 +761,13 @@ export class CinderApi {
     const timeout = window.setTimeout(() => controller.abort(), 60_000);
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/api/files/${id}`, {
-        headers,
-        signal: controller.signal,
-      });
-    } catch {
+      response = await hostFetch(
+        `${this.baseUrl}/api/files/${id}`,
+        { headers, signal: controller.signal },
+        60_000,
+      );
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
       throw new ApiError(
         controller.signal.aborted ? "timeout" : "offline",
         controller.signal.aborted
