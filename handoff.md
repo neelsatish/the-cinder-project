@@ -1,6 +1,6 @@
 # Cinder Project — handoff
 
-**Last updated:** 19 September 2026, at release **0.10.7** (PR #10).
+**Last updated:** 19 September 2026, at release **0.10.7**.
 
 **Repository:** `https://github.com/neelsatish/the-cinder-project`, working branch
 `release-work`, released from `main`.
@@ -45,8 +45,9 @@ for any public claim. Update this file when you resolve a conflict.
 - The updater signing key is a GitHub secret plus one local file on the
   maintainer's machine. Keep an offline backup. Never generate a replacement;
   installed apps would reject it.
-- PR #1 to #9 are merged. PR #10 (0.10.7: encrypted classroom traffic and
-  backups) is open. It changes the connection: update Cinder Host first.
+- PR #1 to #10 are merged; 0.10.7 is released. It changed the connection
+  (HTTPS with a pinned certificate): 0.10.7 apps and older Hosts cannot talk to
+  each other, so Cinder Host must be updated first.
 
 Verification commands:
 
