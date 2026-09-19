@@ -1,6 +1,6 @@
 # Cinder Project — handoff
 
-**Last updated:** 18 September 2026, at release **0.10.6**.
+**Last updated:** 19 September 2026, at release **0.10.7** (PR #10).
 
 **Repository:** `https://github.com/neelsatish/the-cinder-project`, working branch
 `release-work`, released from `main`.
@@ -45,8 +45,8 @@ for any public claim. Update this file when you resolve a conflict.
 - The updater signing key is a GitHub secret plus one local file on the
   maintainer's machine. Keep an offline backup. Never generate a replacement;
   installed apps would reject it.
-- PR #1 to #9 are merged. Backend security work for 0.10.7 is on the
-  `backend-security` branch until it is merged.
+- PR #1 to #9 are merged. PR #10 (0.10.7: encrypted classroom traffic and
+  backups) is open. It changes the connection: update Cinder Host first.
 
 Verification commands:
 
@@ -55,6 +55,7 @@ npm run typecheck
 npm run test:gradebook-intent
 npm run test:paper-logic
 npm run test:forge-notes
+npm run test:host-transport
 cargo fmt --all -- --check
 cargo test --workspace --locked
 ```
