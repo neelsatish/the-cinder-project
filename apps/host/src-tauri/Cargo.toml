@@ -27,9 +27,13 @@ tokio.workspace = true
 rusqlite.workspace = true
 chrono.workspace = true
 rand.workspace = true
-sha2 = "0.10"
-hex = "0.4"
+sha2.workspace = true
+hex.workspace = true
 tempfile = "3"
+aes-gcm.workspace = true
+# STREAM chunking for backup files that do not fit in memory.
+aead = { version = "0.5", default-features = false, features = ["alloc", "stream"] }
+argon2.workspace = true
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

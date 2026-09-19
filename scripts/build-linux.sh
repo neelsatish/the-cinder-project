@@ -13,6 +13,7 @@ npm run typecheck
 npm run test:gradebook-intent
 npm run test:paper-logic
 npm run test:forge-notes
+npm run test:host-transport
 npm run audit:dependencies
 npm run build:student
 npm run build:teacher

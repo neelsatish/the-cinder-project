@@ -280,6 +280,9 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
 
   async function saveConnection(nextUrl: string, nextLabel: string) {
     const normalized = await normalizeHostAddress(nextUrl);
+    // Saving the address is the one deliberate way to trust a Host again, for
+    // example after the school replaces its Host computer.
+    if (isTauri()) await invoke("forget_host_identity", { baseUrl: normalized });
     if (!(await probeHost(normalized))) throw new Error("No Cinder Host answered at that address.");
     const label = nextLabel.trim() || "Student device";
     if (isTauri()) await invoke("save_config", { config: { host_url: normalized, device_label: label } });

@@ -39,6 +39,8 @@ import type {
   User,
 } from "./types";
 import { isCinderHealthResponse } from "./health";
+import { hostFetch, HostTransportError } from "./hostTransport";
+
 
 export class ApiError extends Error {
   constructor(
@@ -87,12 +89,14 @@ export class CinderApi {
     const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}${path}`, {
-        ...init,
-        headers,
-        signal: controller.signal,
-      });
-    } catch {
+      response = await hostFetch(
+        `${this.baseUrl}${path}`,
+        { ...init, headers, signal: controller.signal },
+        timeoutMs,
+      );
+    } catch (error) {
+      if (error instanceof HostTransportError)
+        throw new ApiError(error.code, error.message, 0);
       throw new ApiError(
         controller.signal.aborted ? "timeout" : "offline",
         controller.signal.aborted
@@ -696,11 +700,14 @@ export class CinderApi {
     const timeout = window.setTimeout(() => controller.abort(), 60_000);
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/api/files/${id}`, {
-        headers,
-        signal: controller.signal,
-      });
-    } catch {
+      response = await hostFetch(
+        `${this.baseUrl}/api/files/${id}`,
+        { headers, signal: controller.signal },
+        60_000,
+      );
+    } catch (error) {
+      if (error instanceof HostTransportError)
+        throw new ApiError(error.code, error.message, 0);
       throw new ApiError(
         controller.signal.aborted ? "timeout" : "offline",
         controller.signal.aborted

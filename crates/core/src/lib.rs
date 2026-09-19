@@ -7,6 +7,7 @@
 
 pub mod api;
 pub mod classroom;
+pub mod host_client;
 pub mod model;
 pub mod paper;
 pub mod quiz;

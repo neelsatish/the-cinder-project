@@ -8,7 +8,9 @@ pub mod auth;
 pub mod db;
 pub mod discovery;
 pub mod error;
+pub mod rate_limit;
 pub mod routes;
+pub mod tls;
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -19,6 +21,7 @@ use axum::http::{header, HeaderValue, Method};
 use axum::Router;
 use cinder_ai::Ai;
 use tower_http::cors::CorsLayer;
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
 
 #[derive(Clone)]
@@ -121,6 +124,28 @@ pub fn router(state: AppState) -> Router {
         // Only packaged Cinder webviews and the two local development servers
         // may call the classroom host. A random website opened on a lab machine
         // must not be able to probe login or recovery endpoints on the LAN.
+        .layer(axum::middleware::from_fn({
+            let limiter = rate_limit::AuthLimiter::default();
+            move |request, next| rate_limit::limit_auth(limiter.clone(), request, next)
+        }))
+        // Responses carry school records: never cache them, never sniff a
+        // download into something executable, never frame the API.
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_FRAME_OPTIONS,
+            HeaderValue::from_static("DENY"),
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::REFERRER_POLICY,
+            HeaderValue::from_static("no-referrer"),
+        ))
         .layer(cinder_cors())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -174,8 +199,12 @@ pub fn bind(addr: SocketAddr) -> Result<std::net::TcpListener> {
 }
 
 /// Serves on an already-bound listener until the process is asked to stop.
-pub async fn serve_on(state: AppState, listener: std::net::TcpListener) -> Result<()> {
-    serve_on_with_shutdown(state, listener, shutdown_signal()).await
+pub async fn serve_on(
+    state: AppState,
+    listener: std::net::TcpListener,
+    identity: tls::TlsIdentity,
+) -> Result<()> {
+    serve_on_with_shutdown(state, listener, identity, shutdown_signal()).await
 }
 
 /// Serves on an already-bound listener until the supplied shutdown future
@@ -183,6 +212,7 @@ pub async fn serve_on(state: AppState, listener: std::net::TcpListener) -> Resul
 pub async fn serve_on_with_shutdown<F>(
     state: AppState,
     listener: std::net::TcpListener,
+    identity: tls::TlsIdentity,
     shutdown: F,
 ) -> Result<()>
 where
@@ -194,15 +224,9 @@ where
     let bound = listener.local_addr()?;
     tracing::info!(%bound, "host listening");
 
-    axum::serve(
-        listener,
-        router(state).into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown)
-    .await
-    .context("serving")?;
-
-    Ok(())
+    tls::serve(listener, router(state), identity, shutdown)
+        .await
+        .context("serving")
 }
 
 async fn shutdown_signal() {

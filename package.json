@@ -1,7 +1,7 @@
 {
   "name": "cinder",
   "private": true,
-  "version": "0.10.6",
+  "version": "0.10.7",
   "license": "Apache-2.0",
   "workspaces": [
     "apps/student",
@@ -27,6 +27,7 @@
     "test:gradebook-intent": "node --experimental-strip-types --test scripts/gradebook-intent.test.mjs",
     "test:paper-logic": "node --experimental-strip-types --test scripts/paper-logic.test.mjs",
     "test:forge-notes": "node --experimental-strip-types --test scripts/forge-notes.test.mjs",
+    "test:host-transport": "node --experimental-strip-types --test scripts/host-transport.test.mjs",
     "bundle:student": "npm run app:build --workspace @cinder/forge",
     "bundle:teacher": "npm run app:build --workspace @cinder/teacher",
     "bundle:forge": "npm run app:build --workspace @cinder/forge",

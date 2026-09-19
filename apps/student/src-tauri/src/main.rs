@@ -35,12 +35,14 @@ fn main() {
             commands::load_config,
             commands::save_config,
             commands::validate_host_address,
+            commands::host_request,
             commands::discover_hosts,
             commands::open_material,
             commands::load_secure_session,
             commands::save_secure_session,
             commands::clear_secure_session,
         ])
+        .manage(cinder_core::host_client::PendingHost::default())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             cinder_core::migrate_legacy_app_data(&data_dir, "student")?;
@@ -122,8 +124,36 @@ mod commands {
     }
 
     #[tauri::command]
-    pub fn validate_host_address(base_url: String) -> Result<String, String> {
-        normalize_classroom_url(&base_url)
+    pub fn validate_host_address(
+        pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
+        base_url: String,
+    ) -> Result<String, String> {
+        let normalized = normalize_classroom_url(&base_url)?;
+        pending.set(&normalized);
+        Ok(normalized)
+    }
+
+    // Legacy student app, no longer released: kept compiling against the same
+    // pinned transport as Cinder Student so the shared API client works in it.
+    #[tauri::command]
+    pub async fn host_request(
+        app: tauri::AppHandle,
+        pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
+        request: tauri::ipc::Request<'_>,
+    ) -> Result<tauri::ipc::Response, String> {
+        let tauri::ipc::InvokeBody::Raw(raw) = request.body() else {
+            return Err("invalid: The request could not be read.".into());
+        };
+        let (meta, body) =
+            cinder_core::host_client::unframe_request(raw.clone()).map_err(|e| e.to_string())?;
+        let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        let allowed = pending.allowed(StudentConfig::load(&dir).host_url);
+        let response = cinder_core::host_client::send(&dir, &allowed, meta, body)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(tauri::ipc::Response::new(cinder_core::host_client::frame(
+            &response,
+        )))
     }
 
     #[tauri::command]

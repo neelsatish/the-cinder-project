@@ -57,6 +57,7 @@ jobs:
           npm run test:gradebook-intent
           npm run test:paper-logic
           npm run test:forge-notes
+          npm run test:host-transport
           npm run audit:dependencies
 
       - name: Rust checks

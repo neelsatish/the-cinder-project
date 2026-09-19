@@ -20,6 +20,9 @@ try {
     npm.cmd run test:forge-notes
     if ($LASTEXITCODE -ne 0) { throw "Student notes tests failed." }
 
+    npm.cmd run test:host-transport
+    if ($LASTEXITCODE -ne 0) { throw "Host transport tests failed." }
+
     npm.cmd run audit:dependencies
     if ($LASTEXITCODE -ne 0) { throw "The npm dependency audit failed." }
 

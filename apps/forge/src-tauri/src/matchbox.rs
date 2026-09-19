@@ -138,8 +138,46 @@ pub fn save_config(app: tauri::AppHandle, mut config: MatchboxConfig) -> Result<
 }
 
 #[tauri::command]
-pub fn validate_host_address(base_url: String) -> Result<String, String> {
-    normalize_classroom_url(&base_url)
+pub fn validate_host_address(
+    pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
+    base_url: String,
+) -> Result<String, String> {
+    let normalized = normalize_classroom_url(&base_url)?;
+    pending.set(&normalized);
+    Ok(normalized)
+}
+
+/// Sends one classroom request to Cinder Host over pinned HTTPS. The webview
+/// frames the request (see `cinder_core::host_client`) and gets a framed
+/// response back, so large uploads and downloads stay raw bytes.
+#[tauri::command]
+pub async fn host_request(
+    app: tauri::AppHandle,
+    pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
+    request: tauri::ipc::Request<'_>,
+) -> Result<tauri::ipc::Response, String> {
+    let tauri::ipc::InvokeBody::Raw(raw) = request.body() else {
+        return Err("invalid: The request could not be read.".into());
+    };
+    let (meta, body) =
+        cinder_core::host_client::unframe_request(raw.clone()).map_err(|e| e.to_string())?;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let allowed = pending.allowed(read_config(&dir).host_url);
+    let response = cinder_core::host_client::send(&dir, &allowed, meta, body)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(cinder_core::host_client::frame(
+        &response,
+    )))
+}
+
+/// Stops trusting the certificate remembered for this Host, so the next
+/// connection trusts the one it presents. Called only when a person saves the
+/// Host address in School connection.
+#[tauri::command]
+pub fn forget_host_identity(app: tauri::AppHandle, base_url: String) -> Result<(), String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    cinder_core::host_client::forget(&dir, &base_url).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -153,6 +191,7 @@ pub async fn discover_hosts() -> Result<Vec<String>, String> {
 #[tauri::command]
 pub async fn open_material(
     app: tauri::AppHandle,
+    pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
     base_url: String,
     token: String,
     file_id: String,
@@ -163,37 +202,44 @@ pub async fn open_material(
     }
 
     let url = material_url(&base_url, &file_id)?;
-    let response = reqwest::Client::new()
-        .get(url)
-        .bearer_auth(token)
-        .send()
-        .await
-        .map_err(|error| format!("Cinder Host could not be reached: {error}"))?;
-    if !response.status().is_success() {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    let allowed = pending.allowed(read_config(&dir).host_url);
+    let response = cinder_core::host_client::send(
+        &dir,
+        &allowed,
+        cinder_core::host_client::RequestMeta {
+            url: url.to_string(),
+            method: "GET".into(),
+            headers: vec![("authorization".into(), format!("Bearer {token}"))],
+            timeout_ms: Some(120_000),
+        },
+        Vec::new(),
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    if !(200..300).contains(&response.status) {
         return Err(format!(
             "The material could not be downloaded ({})",
-            response.status()
+            response.status
         ));
     }
-
-    let content_type = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default()
-        .to_owned();
-    let header_name = response
-        .headers()
-        .get(reqwest::header::CONTENT_DISPOSITION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(file_name_from_disposition)
-        .map(str::to_owned);
-    if response
-        .content_length()
-        .is_some_and(|size| size > cinder_core::MAX_UPLOAD_BYTES as u64)
-    {
+    if response.body.len() > cinder_core::MAX_UPLOAD_BYTES {
         return Err("The material is larger than Cinder's download limit.".into());
     }
+    let header = |name: &str| {
+        response
+            .headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    };
+    let content_type = header("content-type").unwrap_or_default().to_owned();
+    let header_name = header("content-disposition")
+        .and_then(file_name_from_disposition)
+        .map(str::to_owned);
 
     let cache_dir = app
         .path()
@@ -218,40 +264,10 @@ pub async fn open_material(
     let safe_name = sanitize_file_name(&chosen_name);
     let path = cache_dir.join(format!("{file_id}-{safe_name}"));
     let temporary = cache_dir.join(format!(".{file_id}-{}.download", uuid::Uuid::new_v4()));
-    let mut file = tokio::fs::File::create(&temporary)
-        .await
-        .map_err(|error| error.to_string())?;
-    use tokio::io::AsyncWriteExt;
-    let mut response = response;
-    let mut received = 0usize;
-    loop {
-        let chunk = match response.chunk().await {
-            Ok(Some(chunk)) => chunk,
-            Ok(None) => break,
-            Err(error) => {
-                drop(file);
-                let _ = tokio::fs::remove_file(&temporary).await;
-                return Err(format!("The material download was interrupted: {error}"));
-            }
-        };
-        received = received.saturating_add(chunk.len());
-        if received > cinder_core::MAX_UPLOAD_BYTES {
-            drop(file);
-            let _ = tokio::fs::remove_file(&temporary).await;
-            return Err("The material is larger than Cinder's download limit.".into());
-        }
-        if let Err(error) = file.write_all(&chunk).await {
-            drop(file);
-            let _ = tokio::fs::remove_file(&temporary).await;
-            return Err(error.to_string());
-        }
-    }
-    if let Err(error) = file.flush().await {
-        drop(file);
+    if let Err(error) = tokio::fs::write(&temporary, &response.body).await {
         let _ = tokio::fs::remove_file(&temporary).await;
         return Err(error.to_string());
     }
-    drop(file);
     let _ = tokio::fs::remove_file(&path).await;
     if let Err(error) = tokio::fs::rename(&temporary, &path).await {
         let _ = tokio::fs::remove_file(&temporary).await;

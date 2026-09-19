@@ -23,12 +23,15 @@ fn main() {
             connection::load_config,
             connection::save_config,
             connection::validate_host_address,
+            connection::host_request,
+            connection::forget_host_identity,
             write_text_export,
             write_binary_export,
             load_secure_session,
             save_secure_session,
             clear_secure_session,
         ])
+        .manage(cinder_core::host_client::PendingHost::default())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             cinder_core::migrate_legacy_app_data(&data_dir, "teacher")?;
