@@ -1,15 +1,15 @@
 {
-  "version": "0.10.6",
-  "notes": "Cinder Host 0.10.6",
-  "pub_date": "2026-09-18T13:23:23Z",
+  "version": "0.10.7",
+  "notes": "Cinder Host 0.10.7",
+  "pub_date": "2026-09-19T16:12:10Z",
   "platforms": {
     "linux-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa01ZL3QrSElYaDMrbktEajZlNDY3b3pjc2xSMTNnT3ExZkNXN1VoejV1ZEgwSE9pMjFid2ZQWS9UZ1JQTGoxQi90WitxMk1EZFovdDdTc1hoRmw0cUFNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NzM3Njc0CWZpbGU6Q2luZGVyIEhvc3RfMC4xMC42X2FtZDY0LkFwcEltYWdlCmM0V3JibHhCeFljZDVWeEkwM2R3c1hsZUlDeEMvSmRVNGFUWVJVSWdjczc0czJIY0djVVdRRDdFTk9mUUNLVWI4OTNQM21JbXNNSlcwSXB6VmJsWkRnPT0K",
-      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.10.6/Cinder-Host-Linux-x86_64.AppImage"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa0lwUDRpM0FMUTJ4bG5zd1p0bysxZmhQazYrWC9VNkMrS2ZUQ29QWEtqbU9PanZoOFhZWnA2MmdER2VjNFNOVUxycTFjejVQeUhCWlNGNW5VYnduUHdVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5ODM0MzA2CWZpbGU6Q2luZGVyIEhvc3RfMC4xMC43X2FtZDY0LkFwcEltYWdlCjZUN0xrbnlTRVlYSldIa0lVeUd0a1JsVFJVT2lRTmYyZnkzL1JadWJiQ2FKMFArY29ZQ1dKNWFhRm5sNzE5UUk2YnlHSjlIdWtLQVd1Wk1kVXp0ckFnPT0K",
+      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.10.7/Cinder-Host-Linux-x86_64.AppImage"
     },
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa0RrclRjV0xmM2cycTNiMmVURCtQaTllTEQ0Q0dhVHI0UHcvMC8vczJjSmdmZzl5eVNvSm5md3p3QzlXZWV2S2ZSTHhzQ0xxcDluODFPbElyN09ocUFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5NzM3Nzg3CWZpbGU6Q2luZGVyIEhvc3RfMC4xMC42X3g2NC1zZXR1cC5leGUKeFdrY0t0cExmUEtFMUVjeFNvZ0Qxalp3T056eGNiODVVc0JYR2JHYmdCamkxM3FucmVRZVJjZ0lHMGFkYjNzaU82SmpabjNUTXNaUlJ0UFo5bVZHQWc9PQo=",
-      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.10.6/Cinder-Host-Windows-x86_64-Setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSYTZnTVo4eHBUa09oRFlBNnQwa0Y1VlJpNGZ5QWdJTEtuZlZ5dFNibVBvWm1yZHlvUVVvRmRZTzYvb0REWm5ydC91aUNqb0VQMjN0SzB3aHc4YXRPYzRhOFR5bkFYQWdnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5ODMzOTA5CWZpbGU6Q2luZGVyIEhvc3RfMC4xMC43X3g2NC1zZXR1cC5leGUKaDdyTkJUd3FkMEhsTEZUQWk3QkJmaHV2Q3A1N1ZXSFBqSnh4cVVEWmFpR0x3Y1FCZEg1QW5pSHdrZnRxVXBlSzFOOHJxUTk0WEd3NEN3YW5kcWxGQ0E9PQo=",
+      "url": "https://github.com/neelsatish/the-cinder-project/releases/download/matchbox-v0.10.7/Cinder-Host-Windows-x86_64-Setup.exe"
     }
   }
 }
