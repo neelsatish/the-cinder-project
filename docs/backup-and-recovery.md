@@ -1,10 +1,11 @@
 # Backup and recovery
 
-Status: **partly built.** Cinder Host 0.10.0 added manual backup and restore:
-**Backup & recovery** writes a verified copy of the database and every stored
-file to a chosen folder, and restores one with automatic rollback if the swap
-fails. Scheduled backups are not built; someone has to press the button. The
-text below is the original decision record and still describes the full target.
+Status: **built for one Host.** Cinder Host 0.10.0 added backup and restore with
+automatic rollback. Since 0.10.7 every backup is encrypted and verified, backups
+run while the server is serving, and Host can make one daily to a chosen folder
+and keep the newest N. What is not built: backups when Cinder Host is closed,
+and any copy that leaves the building by itself. How the encryption works is in
+[Security](security.md). The text below is the original decision record.
 
 ## The decision
 

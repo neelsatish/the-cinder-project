@@ -33,8 +33,13 @@ supported:
   Cinnamon, in any mix.
 
 All Teacher and Student machines must be able to reach the Host computer on its
-TCP port (`7373` unless changed in Host settings). Windows users should allow
-Cinder Host on Private networks only when the firewall asks.
+TCP port (`7373` unless changed in Host settings), which speaks HTTPS since
+0.10.7. Windows users should allow Cinder Host on Private networks only when the
+firewall asks.
+
+Apps from 0.10.7 on cannot talk to a Host on 0.10.6 or earlier, and older apps
+cannot talk to a 0.10.7 Host; each says which side needs updating. Update Cinder
+Host first.
 
 ## Local builds
 
@@ -87,7 +92,8 @@ goes up and the commit lands on `main`.
 ## Release checklist
 
 1. Bump every version location together (see Versioning) and add the
-   `CHANGELOG.md` entry.
+   `CHANGELOG.md` entry. In `Cargo.lock`, change only the `cinder-*` packages:
+   a third-party crate can share the old version number (`blake2` 0.10.6 did).
 2. Open a pull request from `release-work` and wait for **Checks** to pass.
 3. Merge to `main`. The release workflow builds, signs and publishes; it takes
    about 20 minutes.

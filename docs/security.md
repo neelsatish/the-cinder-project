@@ -1,7 +1,7 @@
 # Security review
 
 This review was written for Cinder Matchbox 0.8.0 (12 August 2026) and brought up
-to date for 0.10.6 (18 September 2026). Since 0.10.0 the school database and the
+to date for 0.10.7 (19 September 2026). Since 0.10.0 the school database and the
 classroom API live on the **Cinder Host** computer, not on a Teacher computer;
 where older wording below says "Teacher database" or "Teacher computer", read
 Host. It is an engineering security review, not an independent penetration test
@@ -14,6 +14,8 @@ or a promise that the application has no vulnerabilities.
 - Passwords and recovery codes are hashed with Argon2id and a unique random
   salt. Plaintext passwords are not stored.
 - Login failures are account-rate-limited after five incorrect attempts.
+- Each computer may send at most 30 sign-in, PIN and recovery requests a minute
+  (0.10.7), so one machine cannot try a few passwords against every account.
 - Account, password, recovery and device-label input lengths are bounded before
   expensive password hashing or database writes.
 - Session tokens contain 256 bits of OS-generated randomness. Only SHA-256
@@ -40,6 +42,21 @@ not protect data after an attacker gains the signed-in OS account, administrator
 access or physical access to an unlocked computer.
 
 ### Network and AI boundaries
+
+- Classroom traffic is HTTPS (0.10.7). Cinder Host creates its own certificate
+  once, keeps it outside the school-data folder, and shows a short security
+  code for it. Each app trusts the certificate it sees the first time it
+  reaches a Host address and refuses any other for that address afterwards, so
+  a device on the LAN cannot read or alter traffic or pose as the Host. See
+  "First contact is trusted" below for the one gap.
+- Apps never let page script reach the network. Every classroom request goes
+  through the app's native side, which only contacts the saved Host, one being
+  set up, or the same computer. Webview security policies no longer allow direct
+  connections to the Host.
+- Plain HTTP on the Host's port is answered only for the Host computer itself
+  (local development). Any other computer gets "update this app".
+- API responses carry `Cache-Control: no-store`, `X-Content-Type-Options:
+  nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`.
 
 - CORS permits packaged Cinder origins and local development origins only. A
   normal website cannot use a student's browser session to call the classroom
@@ -92,22 +109,22 @@ access or physical access to an unlocked computer.
 
 ## Residual risks
 
-### Classroom LAN traffic is not encrypted
+### First contact is trusted
 
-The current classroom API uses HTTP so donated computers can discover and use a
-Teacher host without certificate administration. CORS does not encrypt traffic
-and does not stop a malicious device already on the LAN. Such a device may be
-able to observe credentials, bearer tokens or school data in transit.
+An app trusts the Host certificate it sees the first time it connects to an
+address, and again after someone re-saves the address in School connection. A
+device already impersonating the Host at that exact moment would be trusted
+instead. Apps do not yet show the Host's security code for a person to compare
+at first contact; until they do:
 
-Until authenticated TLS pairing is implemented:
+- connect apps for the first time on a network you control;
+- if an app reports that the Host's certificate changed and the school has not
+  replaced or reset its Host computer, do not re-save the address; find out why;
+- keep using a dedicated classroom router, never public or guest Wi-Fi, and
+  approve Cinder Host for Private networks only.
 
-- Use a dedicated, trusted classroom router or access point.
-- Do not use public, hotel, cafe or guest Wi-Fi.
-- Keep untrusted personal devices off the classroom network.
-- On Windows, approve Cinder Teacher for Private networks only, never Public.
-
-Authenticated local TLS with device pairing is the highest-priority network
-hardening item for a wider deployment.
+Apps updated to 0.10.7 cannot talk to a Host still on 0.10.6 or earlier; they
+say so and ask for the Host to be updated. Update Cinder Host first.
 
 ### The initial Windows installer is not Authenticode-signed
 
@@ -120,19 +137,32 @@ large public rollout.
 
 ### School records are not a fully encrypted database
 
-API credentials and app sessions are protected, but names, submissions, grades
-and saved question papers in the Host's SQLite database are not independently
-encrypted. Enable BitLocker on Windows or
-full-disk encryption on Linux where hardware and school policy permit it. Lock
-the Teacher OS account whenever the machine is unattended.
+API credentials, app sessions and every backup are encrypted, but names,
+submissions, grades and saved question papers in the Host's live SQLite
+database are not. Enable BitLocker on Windows or full-disk encryption on Linux
+where hardware and school policy permit it, and lock the Host's OS account
+whenever the machine is unattended.
 
-### Backups are manual
+Encrypting the live database (SQLCipher) was considered and not adopted: it
+needs OpenSSL built from source on every Windows and Linux build machine, and
+the key would sit on the same disk it protects unless the Host asked for a
+password at every start. Full-disk encryption protects the same disk without
+those costs.
 
-Cinder Host 0.10.0 added **Backup & recovery**: it writes a verified copy of the
-database and every stored file to a folder the administrator chooses, and can
-restore one, rolling back automatically if the swap fails. Backups are not
-scheduled; nothing is copied unless someone presses the button. Keep a recent
-backup on a separate drive. See [backup and recovery](backup-and-recovery.md).
+### Backups
+
+Since 0.10.7 every backup is encrypted (AES-256-GCM, file by file, each file
+bound to its name) and read back to verify it before it counts. The backup key
+is kept by Cinder Host in secure storage so backups run unattended, and each
+backup carries it locked with the Host password and with the recovery code, so a
+replacement Host computer can restore it. Anyone holding a backup drive without
+one of those cannot read it. Backups made before 0.10.7 are not encrypted;
+delete them once a new encrypted backup exists.
+
+Cinder Host can make a daily backup to a chosen folder and keep the newest N.
+It runs only while Cinder Host is open, and a backup on the same disk as the
+Host protects against mistakes, not against the disk failing: point it at a
+second drive. See [backup and recovery](backup-and-recovery.md).
 
 ### AI provider terms are unresolved
 
@@ -164,8 +194,11 @@ with its own terms, which the school should check for the provider it picks.
 - Keep Teacher recovery codes offline and physically secured.
 - Use unique permanent passwords; a four-digit PIN is only for first sign-in.
 - Place the classroom on an isolated LAN and block guest devices.
+- Update Cinder Host before Teacher and Student apps when a release changes the
+  connection (0.10.7 does).
 - AI is optional. If it is used, configure it in Host with HTTPS, set a monthly
   token allowance, and read "AI provider terms are unresolved" above first.
 - Keep Windows, Linux Mint and Cinder updated.
-- Take a Host backup to a separate drive before term starts, and restore one on
-  a spare machine at least once to prove it works.
+- Turn on daily backups to a second drive, and restore one on a spare machine
+  at least once to prove it works. Keep the Host recovery code offline: with
+  the Host password, it is what opens backups on a new computer.

@@ -31,7 +31,7 @@ for any public claim. Update this file when you resolve a conflict.
 
 ## 2. Repository and release state
 
-- Every app, the shared UI package and the Rust workspace are at **0.10.6**.
+- Every app, the shared UI package and the Rust workspace are at **0.10.7**.
   They move together; see **Versioning** in `docs/platform-support.md`.
 - Releases: bump every version location, merge `release-work` to `main`, and the
   `Cross-platform installers` workflow builds, signs and publishes Windows and
@@ -45,7 +45,8 @@ for any public claim. Update this file when you resolve a conflict.
 - The updater signing key is a GitHub secret plus one local file on the
   maintainer's machine. Keep an offline backup. Never generate a replacement;
   installed apps would reject it.
-- There is no open pull request. PR #1 to #7 are merged.
+- PR #1 to #9 are merged. Backend security work for 0.10.7 is on the
+  `backend-security` branch until it is merged.
 
 Verification commands:
 
@@ -104,9 +105,14 @@ Details: "AI provider terms are unresolved" in `docs/security.md`.
 
 ## 5. Known gaps and decisions still open
 
-- **Scheduled backups** are not built. Backups are manual from Host.
-- **LAN traffic is plain HTTP.** Use an isolated classroom network. Authenticated
-  local TLS with device pairing is the top network-hardening item.
+- **First contact is trusted.** Classroom traffic is pinned HTTPS since 0.10.7,
+  but apps trust whatever certificate they meet first. Host shows its security
+  code; Teacher and Student should show it at first connection and on
+  "certificate changed", and treat `host_identity_changed` and `host_outdated`
+  errors as their own screen rather than "offline". That is UI work.
+- **Live database is not encrypted** (backups are). Recommend BitLocker/LUKS;
+  SQLCipher was rejected, see `docs/security.md`.
+- **Daily backups run only while Cinder Host is open.**
 - **No Authenticode certificate**, so Windows shows an unknown-publisher warning.
 - **`.deb` installs do not self-update**; AppImage and Windows Setup do. README
   recommends the AppImage on Mint for that reason.
@@ -129,6 +135,9 @@ Details: "AI provider terms are unresolved" in `docs/security.md`.
 | Area | Files |
 | --- | --- |
 | Host server routes | `crates/host/src/routes/*.rs` (one file per area) |
+| Classroom HTTPS | `crates/host/src/tls.rs` (Host certificate, listener), `crates/core/src/host_client.rs` (pinned client used by every app), `packages/ui/src/hostTransport.ts` (webview side) |
+| Sign-in rate limit | `crates/host/src/rate_limit.rs` |
+| Backup encryption and daily backups | `apps/host/src-tauri/src/backup_crypto.rs`, backup functions in `apps/host/src-tauri/src/main.rs`, `apps/host/src/AutoBackup.tsx` |
 | Host desktop app | `apps/host/src-tauri/src/main.rs` (backup, restore, AI settings, usage), `apps/host/src/App.tsx` |
 | Teacher shell and most views | `apps/teacher/src/App.tsx` |
 | Teacher Papers | `apps/teacher/src/PapersView.tsx`, `paperLogic.ts`, `paperLibrary.ts`, `paperExport.ts`, `FigurePicker.tsx` |

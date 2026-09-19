@@ -117,8 +117,8 @@ pub fn validate_host_address(
 /// frames the request (see `cinder_core::host_client`) and gets a framed
 /// response back, so large uploads and downloads stay raw bytes.
 #[tauri::command]
-pub async fn host_request(
-    app: tauri::AppHandle,
+pub async fn host_request<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
     request: tauri::ipc::Request<'_>,
 ) -> Result<tauri::ipc::Response, String> {
@@ -205,5 +205,110 @@ mod tests {
         assert!(normalize_host_url("ftp://192.168.1.20:7373").is_err());
         assert!(normalize_host_url("https://school.example.com/cinder").is_err());
         assert!(normalize_host_url("https://user@school.example.com").is_err());
+    }
+}
+
+#[cfg(test)]
+mod ipc_tests {
+    use tauri::ipc::{CallbackFn, InvokeBody, InvokeResponseBody};
+    use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, INVOKE_KEY};
+    use tauri::webview::InvokeRequest;
+    use tauri::Manager;
+
+    /// Frames a request exactly as packages/ui/src/hostTransport.ts does.
+    fn framed(url: &str) -> Vec<u8> {
+        let head = serde_json::json!({
+            "url": url, "method": "GET", "headers": [["accept", "application/json"]],
+            "timeoutMs": 5000,
+        })
+        .to_string();
+        let mut raw = (head.len() as u32).to_be_bytes().to_vec();
+        raw.extend_from_slice(head.as_bytes());
+        raw
+    }
+
+    fn invoke(body: Vec<u8>) -> InvokeRequest {
+        InvokeRequest {
+            cmd: "host_request".into(),
+            callback: CallbackFn(0),
+            error: CallbackFn(1),
+            url: if cfg!(windows) {
+                "http://tauri.localhost"
+            } else {
+                "tauri://localhost"
+            }
+            .parse()
+            .unwrap(),
+            body: InvokeBody::Raw(body),
+            headers: Default::default(),
+            invoke_key: INVOKE_KEY.to_string(),
+        }
+    }
+
+    /// Starts a real Cinder Host with TLS on its own runtime; returns its port.
+    fn start_host(school: &std::path::Path) -> u16 {
+        let state = cinder_host::AppState::open(school, cinder_ai::Ai::disabled()).unwrap();
+        let identity = cinder_host::tls::load_or_create_identity(&school.join("tls")).unwrap();
+        let listener = cinder_host::bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(cinder_host::serve_on_with_shutdown(
+                    state,
+                    listener,
+                    identity,
+                    std::future::pending(),
+                ))
+        });
+        port
+    }
+
+    #[test]
+    fn the_webview_reaches_a_real_host_through_ipc_and_pinned_https() {
+        let school = tempfile::tempdir().unwrap();
+        let port = start_host(school.path());
+
+        let mut context = mock_context(noop_assets());
+        // A throwaway identifier: the command writes its pin file under it.
+        context.config_mut().identifier = format!("org.cinder.test.{}", uuid::Uuid::new_v4());
+        let app = mock_builder()
+            .manage(cinder_core::host_client::PendingHost::default())
+            .invoke_handler(tauri::generate_handler![super::host_request])
+            .build(context)
+            .unwrap();
+        let data_dir = app.path().app_data_dir().unwrap();
+        let webview = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .unwrap();
+
+        let response = get_ipc_response(
+            &webview,
+            invoke(framed(&format!("http://127.0.0.1:{port}/api/health"))),
+        );
+        let InvokeResponseBody::Raw(raw) = response.unwrap() else {
+            panic!("the response must be raw bytes, not JSON");
+        };
+        let head_len = u32::from_be_bytes(raw[..4].try_into().unwrap()) as usize;
+        let head: serde_json::Value = serde_json::from_slice(&raw[4..4 + head_len]).unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&raw[4 + head_len..]).unwrap();
+        assert_eq!(head["status"], 200);
+        assert_eq!(body["ok"], true);
+        assert!(
+            data_dir.join("trusted-hosts.json").exists(),
+            "first contact pins"
+        );
+
+        // Only the saved Host, one being set up, or this computer is reachable.
+        let refused =
+            get_ipc_response(&webview, invoke(framed("http://192.0.2.1:7373/api/health")));
+        assert!(refused
+            .unwrap_err()
+            .as_str()
+            .is_some_and(|error| error.starts_with("invalid:")));
+        let garbled = get_ipc_response(&webview, invoke(vec![0, 0, 0, 9, b'{']));
+        assert!(garbled.is_err());
+
+        let _ = std::fs::remove_dir_all(data_dir);
     }
 }

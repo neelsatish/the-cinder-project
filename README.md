@@ -46,9 +46,9 @@ valid update signature.
 
 ## How it works
 
-- Cinder Host stores the school database and serves an authenticated API on
-  TCP port `7373` (changeable in Host settings) over the school LAN. It also
-  manages accounts, stored files, backups and updates.
+- Cinder Host stores the school database and serves an authenticated HTTPS API
+  on TCP port `7373` (changeable in Host settings) over the school LAN. It also
+  manages accounts, stored files, encrypted backups and updates.
 - Cinder Teacher and Cinder Student sign in to Host. Student contains student
   tools only and keeps local drafts available during brief connection loss.
 - Host must be running for sign-in, account verification and synchronisation.
@@ -68,7 +68,7 @@ valid update signature.
 - Question-paper builder with marking schemes kept on the teacher's copy.
   Optional AI drafting and past-paper search use the school's own key, set up
   once in Host; see [Security](docs/security.md) before turning it on.
-- Verified backup and restore in Host.
+- Encrypted, verified backups in Host, by hand or daily, and restore.
 - Reversible removal that preserves historical submissions and grades.
 
 ## Documentation
@@ -80,7 +80,7 @@ valid update signature.
 | [Handoff](handoff.md) | Current product state, open decisions and working rules |
 | [Product overview](docs/product-overview.md) | Mission, principles and deliberate limits |
 | [Product and delivery plan](docs/product-plan.md) | Architecture, data rules and acceptance checklist |
-| [Backup and recovery](docs/backup-and-recovery.md) | Backup design; manual backup and restore are built, scheduled backups are not |
+| [Backup and recovery](docs/backup-and-recovery.md) | Backup design; encrypted manual and daily backups and restore are built |
 | [Changelog](CHANGELOG.md) | Bullet-point release notes |
 
 ## Developer setup
@@ -125,10 +125,12 @@ the Windows and Linux jobs both pass. See the release checklist in
 - Personal notes are readable only by their owner unless submitted as work.
 - Student binaries do not include teacher administration or AI configuration.
   AI keys are set only in Host and are never sent to Teacher or Student.
-- LAN traffic is HTTP in this version. Use Cinder only on an isolated, trusted
-  school network, never public or guest Wi-Fi. See [Security](docs/security.md).
-- Backups are manual. Use Host's **Backup & recovery** to copy the school to a
-  separate drive regularly; until then the Host disk is the only copy.
+- Classroom traffic is HTTPS. Each app pins the Host's own certificate the
+  first time it connects and refuses any other, and page script cannot reach
+  the network except through that check. Still use an isolated, trusted school
+  network, never public or guest Wi-Fi. See [Security](docs/security.md).
+- Backups are encrypted and verified. Turn on daily backups to a second drive
+  in Host's **Backup & recovery**; until then the Host disk is the only copy.
 
 ## Licence
 

@@ -6,6 +6,15 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## 0.10.7
+
+- **Update Cinder Host first.** Apps from this version cannot talk to an older Host, and older apps cannot talk to this Host; each says what needs updating.
+- Classroom traffic is now encrypted. Cinder Host makes its own security certificate and shows a short security code for it. Each app trusts that certificate the first time it connects and refuses any other, so another device on the network cannot read the traffic or pretend to be the Host. Re-saving the Host address in School connection trusts a replaced Host.
+- Apps no longer let their pages reach the network directly; every classroom request goes through the app itself, and only to the school's own Host.
+- Backups are now encrypted and checked after writing. They open with the Host password or recovery code, including on a replacement Host computer. Older backups still restore.
+- Backups no longer need the server stopped, and Cinder Host can make one every day to a chosen folder and keep the newest ones.
+- Sign-in, PIN and recovery attempts are limited per computer, and Host replies are marked never to be cached.
+
 ## 0.10.6
 
 - Cinder Host can set a monthly AI allowance. Settings → AI provider shows how much of this month's allowance is used, and AI requests pause once it is spent, until next month or until the limit is raised.

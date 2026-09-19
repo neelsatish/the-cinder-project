@@ -24,5 +24,14 @@ anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+# Runs the real host_request command through Tauri's IPC against a real Host.
+tauri = { version = "2", features = ["test"] }
+cinder-host.workspace = true
+cinder-ai.workspace = true
+tokio.workspace = true
+tempfile = "3"
+uuid.workspace = true
+
 [features]
 custom-protocol = ["tauri/custom-protocol"]
