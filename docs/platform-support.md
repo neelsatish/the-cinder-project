@@ -1,6 +1,6 @@
 # Platform support
 
-Cinder Matchbox 0.10.6 supports 64-bit Windows 11 and 64-bit Linux Mint Cinnamon.
+Cinder Matchbox 0.10.7 supports 64-bit Windows 11 and 64-bit Linux Mint Cinnamon.
 Host, Teacher and Student are separate apps, but each has one shared source
 implementation for both operating systems.
 

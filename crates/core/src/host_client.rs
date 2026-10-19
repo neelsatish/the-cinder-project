@@ -2,10 +2,8 @@
 //!
 //! Host generates its own self-signed certificate, so there is no certificate
 //! authority to check against. Instead an app trusts the certificate it sees the
-//! first time it reaches a Host address and refuses any other certificate for
-//! that address afterwards, the way SSH treats a new server. Re-trusting a Host
-//! (a replaced or reset Host computer) happens only when a person re-enters its
-//! address; see [`forget`].
+//! first time only after a person compares its security code with Cinder Host.
+//! A different certificate is refused until a person verifies the new code.
 //!
 //! The webview never talks to the network itself: every classroom request goes
 //! through [`send`], so a certificate check cannot be skipped by page script.
@@ -20,7 +18,7 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::crypto::CryptoProvider;
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, SignatureScheme};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 const PIN_FILE: &str = "trusted-hosts.json";
@@ -42,6 +40,10 @@ pub struct RequestMeta {
 
 #[derive(Debug, thiserror::Error)]
 pub enum HostRequestError {
+    #[error(
+        "host_untrusted: Compare the Host security code in School connection before signing in."
+    )]
+    Untrusted,
     #[error(
         "host_identity_changed: This Host's security certificate is not the one this app \
          trusted. If your school replaced or reset its Host computer, open School connection \
@@ -247,6 +249,126 @@ fn decode_pin(hex_pin: &str) -> Option<[u8; 32]> {
     hex::decode(hex_pin).ok()?.try_into().ok()
 }
 
+#[derive(Debug, Serialize)]
+pub struct HostIdentity {
+    pub fingerprint: String,
+    pub code: String,
+    pub status: &'static str,
+}
+
+/// Reads the certificate on a public health request without saving trust or sending credentials.
+pub async fn inspect(
+    dir: &Path,
+    allowed: &[String],
+    base_url: &str,
+) -> Result<HostIdentity, HostRequestError> {
+    let mut url = https_url(base_url)?;
+    if !is_allowed(&url, allowed) {
+        return Err(HostRequestError::Invalid(
+            "This app only talks to its own Cinder Host.".into(),
+        ));
+    }
+    let key = origin(&url)
+        .ok_or_else(|| HostRequestError::Invalid("The Host address has no port.".into()))?;
+    url.set_path("/api/health");
+    url.set_query(None);
+    let probe = build_client(None)?;
+    let response = match probe
+        .client
+        .get(url.clone())
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(error) if error.is_timeout() => return Err(HostRequestError::Timeout),
+        Err(_) => {
+            return Err(if answers_as_old_host(&url).await {
+                HostRequestError::HostOutdated
+            } else {
+                HostRequestError::Unreachable
+            })
+        }
+    };
+    if !response.status().is_success() {
+        return Err(HostRequestError::Invalid(
+            "The server did not identify as Cinder Host.".into(),
+        ));
+    }
+    let mut response = response;
+    let mut health_bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| HostRequestError::Unreachable)?
+    {
+        if health_bytes.len().saturating_add(chunk.len()) > 4_096 {
+            return Err(HostRequestError::Invalid(
+                "The Host health reply was too large.".into(),
+            ));
+        }
+        health_bytes.extend_from_slice(&chunk);
+    }
+    if !serde_json::from_slice::<serde_json::Value>(&health_bytes)
+        .is_ok_and(|health| health["ok"] == true && health["version"].is_string())
+    {
+        return Err(HostRequestError::Invalid(
+            "The server did not identify as Cinder Host.".into(),
+        ));
+    }
+    let seen = probe
+        .verifier
+        .seen
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .ok_or_else(|| {
+            HostRequestError::Invalid("The Host certificate could not be read.".into())
+        })?;
+    let expected = read_pins(dir).get(&key).and_then(|pin| decode_pin(pin));
+    let fingerprint = hex::encode(seen);
+    let code = fingerprint
+        .as_bytes()
+        .chunks(4)
+        .take(8)
+        .map(|chunk| String::from_utf8_lossy(chunk).to_uppercase())
+        .collect::<Vec<_>>()
+        .join(" ");
+    Ok(HostIdentity {
+        fingerprint,
+        code,
+        status: match expected {
+            Some(pin) if pin == seen => "trusted",
+            Some(_) => "changed",
+            None => "new",
+        },
+    })
+}
+
+/// Pins only the certificate whose full fingerprint the person just compared.
+pub async fn trust(
+    dir: &Path,
+    allowed: &[String],
+    base_url: &str,
+    fingerprint: &str,
+) -> Result<(), HostRequestError> {
+    let identity = inspect(dir, allowed, base_url).await?;
+    if identity.fingerprint != fingerprint {
+        return Err(HostRequestError::IdentityChanged);
+    }
+    let key = origin(&https_url(base_url)?)
+        .ok_or_else(|| HostRequestError::Invalid("The Host address has no port.".into()))?;
+    let mut pins = read_pins(dir);
+    pins.insert(key.clone(), fingerprint.to_owned());
+    write_pins(dir, &pins).map_err(|error| {
+        HostRequestError::Invalid(format!("The Host could not be trusted: {error}"))
+    })?;
+    clients()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .remove(&key);
+    Ok(())
+}
+
 /// Cached clients keep connections alive between requests; one per Host.
 fn clients() -> &'static Mutex<HashMap<String, Arc<Pinned>>> {
     static CLIENTS: OnceLock<Mutex<HashMap<String, Arc<Pinned>>>> = OnceLock::new();
@@ -342,6 +464,13 @@ pub async fn send(
         .unwrap_or(Duration::from_secs(30))
         .min(MAX_TIMEOUT);
 
+    if read_pins(dir)
+        .get(&key)
+        .and_then(|pin| decode_pin(pin))
+        .is_none()
+    {
+        return Err(HostRequestError::Untrusted);
+    }
     let pinned = client_for(dir, &key)?;
     let mut request = pinned.client.request(method, url.clone()).timeout(timeout);
     for (name, value) in &meta.headers {
@@ -379,24 +508,6 @@ pub async fn send(
             });
         }
     };
-
-    // First contact: remember the certificate this Host presented.
-    if pinned.verifier.expected.is_none() {
-        let seen = *pinned
-            .verifier
-            .seen
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        if let Some(seen) = seen {
-            let mut pins = read_pins(dir);
-            pins.insert(key.clone(), hex::encode(seen));
-            write_pins(dir, &pins).map_err(|error| {
-                HostRequestError::Invalid(format!("The Host could not be trusted: {error}"))
-            })?;
-            let mut cache = clients().lock().unwrap_or_else(|error| error.into_inner());
-            cache.insert(key.clone(), Arc::new(build_client(Some(seen))?));
-        }
-    }
 
     let status = response.status().as_u16();
     let headers = response

@@ -5,6 +5,7 @@ export * from "./documentBridge";
 export * from "./editor";
 export * from "./external";
 export * from "./health";
+export * from "./hostIdentity";
 export * from "./icons";
 export * from "./types";
 export * from "./updater";

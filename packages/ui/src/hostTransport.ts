@@ -8,7 +8,7 @@
  * Host answers over HTTP for this computer only.
  */
 
-/** A failure the native side named: a changed certificate, an outdated Host. */
+/** A failure the native side named: untrusted or changed certificate, outdated Host. */
 export class HostTransportError extends Error {
   readonly code: string;
 
@@ -19,7 +19,7 @@ export class HostTransportError extends Error {
   }
 }
 
-const NAMED_FAILURES = ["host_identity_changed", "host_outdated", "invalid"];
+const NAMED_FAILURES = ["host_untrusted", "host_identity_changed", "host_outdated", "invalid"];
 
 function inTauri() {
   return (

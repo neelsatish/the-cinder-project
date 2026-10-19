@@ -27,7 +27,10 @@ import {
   PageHeader,
   Panel,
   probeHost,
+  hostCodesMatch,
+  inspectHostIdentity,
   saveSessionValue,
+  trustHostIdentity,
   ThemePicker,
   type Assignment,
   type AttendanceDay,
@@ -43,6 +46,7 @@ import {
   type StudyNode,
   type TeacherInvitePin,
   type User,
+  type HostIdentity,
 } from "@cinder/ui";
 import { LiveSessionControls } from "./LiveSessionControls";
 import { QuizManager } from "./QuizManager";
@@ -274,6 +278,14 @@ export function App() {
         setDeviceLabel(config.device_label ?? "Teacher computer");
         setApi(activeApi);
         setConnectionOpen(isTauri() && !config.host_url && !session);
+        if (isTauri()) {
+          try {
+            const identity = await inspectHostIdentity(host);
+            if (identity.status !== "trusted" && isCurrent()) setConnectionOpen(true);
+          } catch {
+            // The normal connection error remains available when Host is offline.
+          }
+        }
         let hostNeedsSetup = false;
         try {
           const status = await activeApi.authStatus();
@@ -281,9 +293,10 @@ export function App() {
           if (!isCurrent()) return;
           setNeedsSetup(status.needs_setup);
           setOnline(true);
-        } catch {
+        } catch (failure) {
           if (isCurrent()) {
             setOnline(false);
+            if (failure instanceof ApiError && ["host_identity_changed", "host_untrusted"].includes(failure.code)) setConnectionOpen(true);
             if (session) {
               setUser(session.user);
               rememberAccount(session.user.username);
@@ -363,6 +376,7 @@ export function App() {
         )
           return;
         setOnline(false);
+        if (failure instanceof ApiError && ["host_identity_changed", "host_untrusted"].includes(failure.code)) setConnectionOpen(true);
         if (!(failure instanceof ApiError) || !failure.offline) {
           resetWorkspace();
           api.setToken(null);
@@ -426,11 +440,22 @@ export function App() {
     await Promise.all([remoteLogout, clearSessionValue(SESSION_KEYS)]);
   };
 
-  const saveConnection = async (nextUrl: string, nextLabel: string) => {
+  const saveConnection = async (nextUrl: string, nextLabel: string, fingerprint?: string) => {
     const normalized = await normalizeHostAddress(nextUrl);
-    // Saving the address is the one deliberate way to trust a Host again, for
-    // example after the school replaces its Host computer.
-    if (isTauri()) await invoke("forget_host_identity", { baseUrl: normalized });
+    let identityReplaced = false;
+    if (isTauri()) {
+      const identity = await inspectHostIdentity(normalized);
+      if (identity.status !== "trusted") {
+        if (identity.fingerprint !== fingerprint)
+          throw new Error("Check the Host security code before saving this connection.");
+        resetWorkspace();
+        api.setToken(null);
+        setUser(null);
+        await clearSessionValue(SESSION_KEYS, true);
+        await trustHostIdentity(normalized, identity.fingerprint);
+        identityReplaced = true;
+      }
+    }
     if (!(await probeHost(normalized)))
       throw new Error("No Cinder Host answered at that address.");
     const nextApi = new CinderApi(normalized);
@@ -440,15 +465,17 @@ export function App() {
       await invoke("save_config", {
         config: { host_url: normalized, device_label: label },
       });
-    const changedServer = normalized !== baseUrl;
+    const changedServer = normalized !== baseUrl || identityReplaced;
     if (changedServer) {
-      const remoteLogout = user
+      const remoteLogout = user && !identityReplaced
         ? api.logout().catch(() => undefined)
         : Promise.resolve(undefined);
-      resetWorkspace();
-      api.setToken(null);
-      setUser(null);
-      await Promise.all([remoteLogout, clearSessionValue(SESSION_KEYS)]);
+      if (!identityReplaced) {
+        resetWorkspace();
+        api.setToken(null);
+        setUser(null);
+        await Promise.all([remoteLogout, clearSessionValue(SESSION_KEYS)]);
+      }
     }
     setBaseUrl(normalized);
     setDeviceLabel(label);
@@ -645,13 +672,27 @@ function HostConnectionModal({
   baseUrl: string;
   deviceLabel: string;
   onClose: () => void;
-  onSave: (url: string, label: string) => Promise<void>;
+  onSave: (url: string, label: string, fingerprint?: string) => Promise<void>;
 }) {
   const [url, setUrl] = useState(baseUrl);
   const [label, setLabel] = useState(deviceLabel);
   const [found, setFound] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [identity, setIdentity] = useState<HostIdentity | null>(null);
+  const [checkedUrl, setCheckedUrl] = useState("");
+  const [hostCode, setHostCode] = useState("");
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    void normalizeHostAddress(baseUrl)
+      .then((address) => inspectHostIdentity(address).then((result) => {
+        if (!cancelled) { setIdentity(result); setCheckedUrl(baseUrl.trim()); }
+      }))
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [baseUrl]);
 
   const discover = async () => {
     setBusy(true);
@@ -684,7 +725,19 @@ function HostConnectionModal({
           setBusy(true);
           setError("");
           try {
-            await onSave(url, label);
+            let inspected = identity;
+            if (isTauri() && (!inspected || checkedUrl !== url.trim())) {
+              const address = await normalizeHostAddress(url);
+              inspected = await inspectHostIdentity(address);
+              setIdentity(inspected);
+              setCheckedUrl(url.trim());
+              if (inspected.status !== "trusted") return;
+            }
+            if (inspected && inspected.status !== "trusted" && !hostCodesMatch(hostCode, inspected.code)) {
+              setError("Enter the security code shown on Cinder Host. If it differs, ask your school administrator before connecting.");
+              return;
+            }
+            await onSave(url, label, inspected?.status === "trusted" ? undefined : inspected?.fingerprint);
           } catch (failure) {
             setError(
               failure instanceof Error ? failure.message : "Connection failed.",
@@ -700,7 +753,7 @@ function HostConnectionModal({
         {found.length ? (
           <div className="host-list">
             {found.map((host) => (
-              <button type="button" key={host} onClick={() => setUrl(host)}>
+              <button type="button" key={host} onClick={() => { setUrl(host); setIdentity(null); setHostCode(""); }}>
                 {host}
               </button>
             ))}
@@ -712,16 +765,26 @@ function HostConnectionModal({
         >
           <input
             value={url}
-            onChange={(event) => setUrl(event.target.value)}
+            onChange={(event) => { setUrl(event.target.value); setIdentity(null); setHostCode(""); }}
             autoComplete="url"
           />
         </Field>
         <Field label="This computer name">
           <input value={label} onChange={(event) => setLabel(event.target.value)} />
         </Field>
+        {identity && identity.status !== "trusted" && checkedUrl === url.trim() ? (
+          <div className="host-security-review" role="group" aria-label="Verify Host security code">
+            <strong>{identity.status === "changed" ? "Host certificate changed" : "First connection to this Host"}</strong>
+            <p>{identity.status === "changed" ? "Stop if your school did not replace or reset Cinder Host. Otherwise, compare this code with the Host computer before trusting it." : "Compare this code with “Host security code” on the Cinder Host computer. Only continue if they match."}</p>
+            <code>{identity.code}</code>
+            <Field label="Code shown on Cinder Host">
+              <input value={hostCode} onChange={(event) => setHostCode(event.target.value)} autoComplete="off" spellCheck={false} />
+            </Field>
+          </div>
+        ) : null}
         {error ? <p className="form-error">{error}</p> : null}
         <Button variant="primary" type="submit" disabled={busy || !url.trim()}>
-          {busy ? "Checking…" : "Save connection"}
+          {busy ? "Checking…" : identity?.status !== "trusted" && isTauri() ? "Verify and save connection" : "Save connection"}
         </Button>
       </form>
     </Modal>

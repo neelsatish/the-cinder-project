@@ -22,6 +22,8 @@ fn main() {
             matchbox::validate_host_address,
             matchbox::host_request,
             matchbox::forget_host_identity,
+            matchbox::inspect_host_identity,
+            matchbox::trust_host_identity,
             matchbox::discover_hosts,
             matchbox::load_secure_session,
             matchbox::save_secure_session,

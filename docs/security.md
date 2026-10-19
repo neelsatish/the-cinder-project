@@ -45,7 +45,7 @@ access or physical access to an unlocked computer.
 
 - Classroom traffic is HTTPS (0.10.7). Cinder Host creates its own certificate
   once, keeps it outside the school-data folder, and shows a short security
-  code for it. Each app trusts the certificate it sees the first time it
+  code for it. In released 0.10.7, each app trusts the certificate it sees the first time it
   reaches a Host address and refuses any other for that address afterwards, so
   a device on the LAN cannot read or alter traffic or pose as the Host. See
   "First contact is trusted" below for the one gap.
@@ -109,19 +109,25 @@ access or physical access to an unlocked computer.
 
 ## Residual risks
 
-### First contact is trusted
+### First contact in released 0.10.7 is trusted
 
 An app trusts the Host certificate it sees the first time it connects to an
 address, and again after someone re-saves the address in School connection. A
 device already impersonating the Host at that exact moment would be trusted
 instead. Apps do not yet show the Host's security code for a person to compare
-at first contact; until they do:
+at first contact; until the next release:
 
 - connect apps for the first time on a network you control;
 - if an app reports that the Host's certificate changed and the school has not
   replaced or reset its Host computer, do not re-save the address; find out why;
 - keep using a dedicated classroom router, never public or guest Wi-Fi, and
   approve Cinder Host for Private networks only.
+
+Unreleased branch work changes this: Teacher and Student show the code and
+require a person to compare it with Cinder Host and type the matching code
+before the certificate is pinned. A changed certificate gets the same check;
+re-trusting it clears the old signed-in session. These protections require the
+next release and must be tested on Windows and Linux before deployment.
 
 Apps updated to 0.10.7 cannot talk to a Host still on 0.10.6 or earlier; they
 say so and ask for the Host to be updated. Update Cinder Host first.

@@ -892,6 +892,28 @@ textarea::placeholder {
 .modal-content {
   padding: 20px;
 }
+.host-security-review {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 2px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: var(--surface-low);
+}
+.host-security-review > strong { font-size: 16px; }
+.host-security-review > p { margin: 0; color: var(--text-soft); line-height: 1.5; }
+.host-security-review > code {
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-lowest);
+  color: var(--text);
+  font: 700 16px/1.5 Consolas, ui-monospace, monospace;
+  letter-spacing: .04em;
+  user-select: all;
+}
 .auth-screen {
   position: relative;
   width: 100%;

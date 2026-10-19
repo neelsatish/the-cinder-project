@@ -11,6 +11,7 @@ globalThis.__TAURI_INTERNALS__ = {
 const { hostFetch, HostTransportError } = await import(
   "../packages/ui/src/hostTransport.ts"
 );
+const { clearSessionValue } = await import("../packages/ui/src/session.ts");
 
 const HOST = "http://192.168.1.20:7373";
 
@@ -84,7 +85,7 @@ test("binary replies and empty replies come back as real Responses", async () =>
 });
 
 test("named native failures reach the page; others stay connection errors", async () => {
-  for (const code of ["host_identity_changed", "host_outdated"]) {
+  for (const code of ["host_untrusted", "host_identity_changed", "host_outdated"]) {
     handler = async () => {
       throw `${code}: Explained for the person.`;
     };
@@ -103,6 +104,14 @@ test("named native failures reach the page; others stay connection errors", asyn
     hostFetch(`${HOST}/api/health`, {}, 1_000),
     (error) => !(error instanceof HostTransportError),
   );
+});
+
+test("replacing a Host cannot proceed if the saved session cannot be cleared", async () => {
+  handler = async (command) => {
+    assert.equal(command, "clear_secure_session");
+    throw new Error("secure storage unavailable");
+  };
+  await assert.rejects(clearSessionValue(["test-session"], true), /secure storage unavailable/);
 });
 
 test("the page's own timeout wins over a request that never answers", async () => {

@@ -1,6 +1,6 @@
 # Cinder Project — handoff
 
-**Last updated:** 19 September 2026, at release **0.10.7**.
+**Last updated:** 23 September 2026, after release **0.10.7**.
 
 **Repository:** `https://github.com/neelsatish/the-cinder-project`, working branch
 `release-work`, released from `main`.
@@ -107,11 +107,13 @@ Details: "AI provider terms are unresolved" in `docs/security.md`.
 
 ## 5. Known gaps and decisions still open
 
-- **First contact is trusted.** Classroom traffic is pinned HTTPS since 0.10.7,
-  but apps trust whatever certificate they meet first. Host shows its security
-  code; Teacher and Student should show it at first connection and on
-  "certificate changed", and treat `host_identity_changed` and `host_outdated`
-  errors as their own screen rather than "offline". That is UI work.
+- **Unreleased certificate-verification work is in this branch.** Teacher and
+  Student now display the Host security code at first contact and after a
+  certificate change, require a matching code typed from Cinder Host before
+  trusting it, and clear the previous session when replacing the certificate.
+  This is not in the published 0.10.7 installers. Test on actual Windows and
+  Linux devices before the next release. `host_outdated` still deserves a
+  dedicated connection screen rather than a generic connection error.
 - **Live database is not encrypted** (backups are). Recommend BitLocker/LUKS;
   SQLCipher was rejected, see `docs/security.md`.
 - **Daily backups run only while Cinder Host is open.**
@@ -131,6 +133,8 @@ Details: "AI provider terms are unresolved" in `docs/security.md`.
   `docs/forge-english-learning-plan.md` and `docs/matchbox-rgh-week-goal.md`
   are plans and are labelled as such; none of them is shipped behaviour.
 - **Android/tablets** are not supported. Schools have asked.
+- **Consolidated work inventory:** `docs/MASTER_BACKLOG.md` distinguishes
+  shipped features, next-release work, pilot validation and separate ideas.
 
 ## 6. Where things live
 

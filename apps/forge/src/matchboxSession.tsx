@@ -11,7 +11,11 @@ import {
   clearSessionValue,
   loadSessionValue,
   probeHost,
+  hostCodesMatch,
+  inspectHostIdentity,
   saveSessionValue,
+  trustHostIdentity,
+  type HostIdentity,
   type User,
 } from "@cinder/ui";
 import {
@@ -137,6 +141,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
           return false;
         if (failure instanceof ApiError && failure.offline) {
           setOnline(false);
+          if (["host_identity_changed", "host_untrusted"].includes(failure.code)) setConnectionOpen(true);
           return false;
         }
         sessionGeneration.current += 1;
@@ -181,6 +186,14 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
         setBaseUrl(nextUrl);
         setDeviceLabel(config.device_label ?? "Student device");
         setApi(nextApi);
+        if (isTauri()) {
+          try {
+            const identity = await inspectHostIdentity(nextUrl);
+            if (identity.status !== "trusted" && !cancelled) setConnectionOpen(true);
+          } catch {
+            // School connection can retry when Host is available.
+          }
+        }
         if (stored) {
           setUser(stored.user);
           setToken(stored.token);
@@ -191,6 +204,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
             setOnline(true);
             await saveSessionValue(SESSION_KEYS, JSON.stringify({ ...stored, user: current }));
           } catch (failure) {
+            if (failure instanceof ApiError && ["host_identity_changed", "host_untrusted"].includes(failure.code) && !cancelled) setConnectionOpen(true);
             if (failure instanceof ApiError && !failure.offline) {
               sessionGeneration.current += 1;
               refreshInFlight.current = null;
@@ -278,15 +292,29 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
     void remoteLogout;
   }
 
-  async function saveConnection(nextUrl: string, nextLabel: string) {
+  async function saveConnection(nextUrl: string, nextLabel: string, fingerprint?: string) {
     const normalized = await normalizeHostAddress(nextUrl);
-    // Saving the address is the one deliberate way to trust a Host again, for
-    // example after the school replaces its Host computer.
-    if (isTauri()) await invoke("forget_host_identity", { baseUrl: normalized });
+    let identityReplaced = false;
+    if (isTauri()) {
+      const identity = await inspectHostIdentity(normalized);
+      if (identity.status !== "trusted") {
+        if (identity.fingerprint !== fingerprint)
+          throw new Error("Check the Host security code before saving this connection.");
+        sessionGeneration.current += 1;
+        refreshInFlight.current = null;
+        api.setToken(null);
+        setToken(null);
+        setUser(null);
+        setTemporaryPassword("");
+        await clearSessionValue(SESSION_KEYS, true);
+        await trustHostIdentity(normalized, identity.fingerprint);
+        identityReplaced = true;
+      }
+    }
     if (!(await probeHost(normalized))) throw new Error("No Cinder Host answered at that address.");
     const label = nextLabel.trim() || "Student device";
     if (isTauri()) await invoke("save_config", { config: { host_url: normalized, device_label: label } });
-    if (normalized === baseUrl) {
+    if (normalized === baseUrl && !identityReplaced) {
       setDeviceLabel(label);
       setOnline(true);
       setConnectionOpen(false);
@@ -294,16 +322,18 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
     }
 
     setLoading(true);
-    const remoteLogout = user && online
+    const remoteLogout = user && online && !identityReplaced
       ? api.logout().catch(() => undefined)
       : Promise.resolve(undefined);
-    sessionGeneration.current += 1;
-    refreshInFlight.current = null;
-    api.setToken(null);
-    setToken(null);
-    setUser(null);
-    setTemporaryPassword("");
-    await clearSessionValue(SESSION_KEYS);
+    if (!identityReplaced) {
+      sessionGeneration.current += 1;
+      refreshInFlight.current = null;
+      api.setToken(null);
+      setToken(null);
+      setUser(null);
+      setTemporaryPassword("");
+      await clearSessionValue(SESSION_KEYS);
+    }
 
     const nextApi = new CinderApi(normalized);
     setBaseUrl(normalized);
@@ -371,13 +401,27 @@ function ConnectionModal({ baseUrl, deviceLabel, onClose, onSave }: {
   baseUrl: string;
   deviceLabel: string;
   onClose: () => void;
-  onSave: (url: string, label: string) => Promise<void>;
+  onSave: (url: string, label: string, fingerprint?: string) => Promise<void>;
 }) {
   const [url, setUrl] = useState(baseUrl);
   const [label, setLabel] = useState(deviceLabel);
   const [found, setFound] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [identity, setIdentity] = useState<HostIdentity | null>(null);
+  const [checkedUrl, setCheckedUrl] = useState("");
+  const [hostCode, setHostCode] = useState("");
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    void normalizeHostAddress(baseUrl)
+      .then((address) => inspectHostIdentity(address).then((result) => {
+        if (!cancelled) { setIdentity(result); setCheckedUrl(baseUrl.trim()); }
+      }))
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [baseUrl]);
 
   async function discover() {
     setBusy(true);
@@ -385,8 +429,8 @@ function ConnectionModal({ baseUrl, deviceLabel, onClose, onSave }: {
     try {
       const hosts = isTauri() ? await invoke<string[]>("discover_hosts") : [DEV_HOST];
       setFound(hosts);
-      if (hosts[0]) setUrl(hosts[0]);
-      if (!hosts.length) setError("No teacher app was found automatically. Enter its address below.");
+      if (hosts[0]) { setUrl(hosts[0]); setIdentity(null); setHostCode(""); }
+      if (!hosts.length) setError("No Cinder Host was found automatically. Enter its address below.");
     } catch {
       setError("Automatic discovery was unavailable. Enter the address manually.");
     } finally {
@@ -395,21 +439,45 @@ function ConnectionModal({ baseUrl, deviceLabel, onClose, onSave }: {
   }
 
   return (
-    <Modal title="School connection" description="Connect to the Cinder Teacher app on the school network." onClose={onClose}>
+    <Modal title="School connection" description="Connect to the Cinder Host computer on the school network." onClose={onClose}>
       <form className="form-stack" onSubmit={async (event) => {
         event.preventDefault();
         setBusy(true);
         setError("");
-        try { await onSave(url, label); }
+        try {
+          let inspected = identity;
+          if (isTauri() && (!inspected || checkedUrl !== url.trim())) {
+            const address = await normalizeHostAddress(url);
+            inspected = await inspectHostIdentity(address);
+            setIdentity(inspected);
+            setCheckedUrl(url.trim());
+            if (inspected.status !== "trusted") return;
+          }
+          if (inspected && inspected.status !== "trusted" && !hostCodesMatch(hostCode, inspected.code)) {
+            setError("Enter the security code shown on Cinder Host. If it differs, ask your school administrator before connecting.");
+            return;
+          }
+          await onSave(url, label, inspected?.status === "trusted" ? undefined : inspected?.fingerprint);
+        }
         catch (failure) { setError(failure instanceof Error ? failure.message : "Connection failed."); }
         finally { setBusy(false); }
       }}>
-        <Button type="button" onClick={() => void discover()} disabled={busy}>Find teacher computer</Button>
-        {found.length > 1 ? <div className="host-list">{found.map((host) => <button type="button" key={host} onClick={() => setUrl(host)}>{host}</button>)}</div> : null}
-        <Field label="Teacher app address" hint="Example: http://192.168.1.20:7373"><input value={url} onChange={(event) => setUrl(event.target.value)} /></Field>
+        <Button type="button" onClick={() => void discover()} disabled={busy}>Find Cinder Host</Button>
+        {found.length > 1 ? <div className="host-list">{found.map((host) => <button type="button" key={host} onClick={() => { setUrl(host); setIdentity(null); setHostCode(""); }}>{host}</button>)}</div> : null}
+        <Field label="Cinder Host address" hint="Example: http://192.168.1.20:7373"><input value={url} onChange={(event) => { setUrl(event.target.value); setIdentity(null); setHostCode(""); }} /></Field>
         <Field label="This device name"><input value={label} onChange={(event) => setLabel(event.target.value)} /></Field>
+        {identity && identity.status !== "trusted" && checkedUrl === url.trim() ? (
+          <div className="host-security-review" role="group" aria-label="Verify Host security code">
+            <strong>{identity.status === "changed" ? "Host certificate changed" : "First connection to this Host"}</strong>
+            <p>{identity.status === "changed" ? "Stop if your school did not replace or reset Cinder Host. Otherwise, compare this code with the Host computer before trusting it." : "Compare this code with “Host security code” on the Cinder Host computer. Only continue if they match."}</p>
+            <code>{identity.code}</code>
+            <Field label="Code shown on Cinder Host">
+              <input value={hostCode} onChange={(event) => setHostCode(event.target.value)} autoComplete="off" spellCheck={false} />
+            </Field>
+          </div>
+        ) : null}
         {error ? <p className="form-error">{error}</p> : null}
-        <Button variant="primary" type="submit" disabled={busy || !url.trim()}>{busy ? "Checking…" : "Save connection"}</Button>
+        <Button variant="primary" type="submit" disabled={busy || !url.trim()}>{busy ? "Checking…" : identity?.status !== "trusted" && isTauri() ? "Verify and save connection" : "Save connection"}</Button>
       </form>
     </Modal>
   );
