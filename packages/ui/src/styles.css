@@ -990,6 +990,31 @@ textarea::placeholder {
   color: var(--muted);
   line-height: 1.5;
 }
+.host-outdated-card ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.5;
+}
+.host-outdated-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 10px 10px 10px 16px;
+  transform: translateX(-50%);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  line-height: 1.45;
+}
 .account-switcher {
   display: grid;
   gap: 9px;

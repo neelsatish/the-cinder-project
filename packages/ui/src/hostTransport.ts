@@ -19,6 +19,11 @@ export class HostTransportError extends Error {
   }
 }
 
+/** True when the native side reported a Host too old to speak HTTPS (an ApiError code or a raw invoke error). */
+export function isHostOutdated(error: unknown) {
+  return (error as { code?: unknown } | null)?.code === "host_outdated" || String(error).startsWith("host_outdated:");
+}
+
 const NAMED_FAILURES = ["host_untrusted", "host_identity_changed", "host_outdated", "invalid"];
 
 function inTauri() {

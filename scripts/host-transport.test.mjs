@@ -123,3 +123,12 @@ test("the page's own timeout wins over a request that never answers", async () =
     { name: "AbortError" },
   );
 });
+
+test("an outdated Host is recognised from page and raw native errors", async () => {
+  const { isHostOutdated } = await import("../packages/ui/src/hostTransport.ts");
+  assert.equal(isHostOutdated(new HostTransportError("host_outdated", "Update Host.")), true);
+  assert.equal(isHostOutdated("host_outdated: Update Host."), true);
+  assert.equal(isHostOutdated(new HostTransportError("host_untrusted", "Check the code.")), false);
+  assert.equal(isHostOutdated("offline"), false);
+  assert.equal(isHostOutdated(null), false);
+});

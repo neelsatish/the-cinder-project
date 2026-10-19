@@ -435,6 +435,64 @@ export function LoginScreen({
   );
 }
 
+/** Replaces sign-in when the Host is older than this app: nothing works until Host is updated. */
+export function HostOutdatedScreen({
+  appName,
+  baseUrl,
+  onOpenConnection,
+}: {
+  appName: string;
+  baseUrl: string;
+  onOpenConnection: () => void;
+}) {
+  return (
+    <div className="auth-screen">
+      <div className="auth-visual">
+        <BrandMark size={64} />
+        <p className="eyebrow">School connection</p>
+        <h1>Update Cinder Host first.</h1>
+        <p>
+          Cinder Host at {baseUrl} is an older version. This {appName} connects securely and
+          cannot talk to it until Host is updated.
+        </p>
+      </div>
+      <div className="auth-card host-outdated-card" role="alert">
+        <div className="auth-heading">
+          <span className="role-chip">Host update needed</span>
+          <h2>On the Host computer</h2>
+        </div>
+        <ol>
+          <li>Open Cinder Host.</li>
+          <li>Go to Settings, then Application updates, and install the update.</li>
+          <li>Return here and select Check again.</li>
+        </ol>
+        <p className="form-hint">
+          If you cannot update Host yourself, ask whoever looks after it at your school.
+        </p>
+        <Button variant="primary" onClick={() => window.location.reload()}>
+          Check again
+        </Button>
+        <button className="auth-secondary-action" type="button" onClick={onOpenConnection}>
+          School connection
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Non-blocking version for people already signed in, so open work stays mounted. */
+export function HostOutdatedNotice({ onOpenConnection }: { onOpenConnection: () => void }) {
+  return (
+    <div className="host-outdated-notice" role="status">
+      <span>
+        <strong>Cinder Host needs updating.</strong> Nothing will sync until it is updated on the
+        Host computer.
+      </span>
+      <Button onClick={onOpenConnection}>School connection</Button>
+    </div>
+  );
+}
+
 export function PasswordChange({
   currentPassword,
   onChange,

@@ -1,6 +1,6 @@
 # Cinder work inventory
 
-Updated 23 September 2026. This is an inventory of recorded work and decisions,
+Updated 19 October 2026. This is an inventory of recorded work and decisions,
 not a promise that every idea should ship. **Released** means present in the
 published Matchbox 0.10.7 installers; **branch** means implemented here but not
 released; **open** needs work or field evidence; **decision** needs a product
@@ -37,8 +37,10 @@ turning any row into a public claim.
   matching code; clear the old session after accepting a replacement. Test the
   flow on actual Windows and Linux computers and an unexpected certificate
   before releasing it. Released 0.10.7 still uses trust on first contact.
-- **Open:** Give an outdated Host (`host_outdated`) a dedicated update-Host-first
-  connection screen. Keep the incompatible-version explanation visible.
+- **Branch:** An outdated Host (`host_outdated`) now replaces sign-in with an
+  update-Host-first screen in Teacher and Student; people already signed in get
+  a non-blocking notice so open work is not lost. Test against a real 0.10.6
+  Host on Windows and Linux before releasing it.
 - **Open:** Review every Host, Teacher and Student screen at realistic window
   sizes: hierarchy, spacing, consistent labels and controls, useful empty/
   loading/error states, keyboard/focus, contrast, reduced motion, and print

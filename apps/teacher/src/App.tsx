@@ -29,6 +29,9 @@ import {
   probeHost,
   hostCodesMatch,
   inspectHostIdentity,
+  isHostOutdated,
+  HostOutdatedNotice,
+  HostOutdatedScreen,
   saveSessionValue,
   trustHostIdentity,
   ThemePicker,
@@ -137,6 +140,7 @@ export function App() {
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
   const [connectionOpen, setConnectionOpen] = useState(false);
+  const [hostOutdated, setHostOutdated] = useState(false);
   const [knownAccounts, setKnownAccounts] = useState<string[]>(() => {
     try {
       const value = JSON.parse(
@@ -282,8 +286,9 @@ export function App() {
           try {
             const identity = await inspectHostIdentity(host);
             if (identity.status !== "trusted" && isCurrent()) setConnectionOpen(true);
-          } catch {
+          } catch (failure) {
             // The normal connection error remains available when Host is offline.
+            if (isHostOutdated(failure) && isCurrent()) setHostOutdated(true);
           }
         }
         let hostNeedsSetup = false;
@@ -296,6 +301,7 @@ export function App() {
         } catch (failure) {
           if (isCurrent()) {
             setOnline(false);
+            if (isHostOutdated(failure)) setHostOutdated(true);
             if (failure instanceof ApiError && ["host_identity_changed", "host_untrusted"].includes(failure.code)) setConnectionOpen(true);
             if (session) {
               setUser(session.user);
@@ -376,6 +382,7 @@ export function App() {
         )
           return;
         setOnline(false);
+        if (isHostOutdated(failure)) setHostOutdated(true);
         if (failure instanceof ApiError && ["host_identity_changed", "host_untrusted"].includes(failure.code)) setConnectionOpen(true);
         if (!(failure instanceof ApiError) || !failure.offline) {
           resetWorkspace();
@@ -394,6 +401,10 @@ export function App() {
       window.clearInterval(timer);
     };
   }, [api, loadWorkspace, online, rememberAccount, resetWorkspace, user]);
+
+  useEffect(() => {
+    if (online) setHostOutdated(false);
+  }, [online]);
 
   const login = async (username: string, password: string) => {
     const generation = resetWorkspace();
@@ -486,6 +497,7 @@ export function App() {
   };
 
   const startupView = teacherStartupView(needsSetup, Boolean(user));
+  const showHostOutdated = hostOutdated && !online;
 
   if (loading)
     return (
@@ -509,6 +521,24 @@ export function App() {
         >
           Change Cinder Host
         </button>
+        {connectionOpen ? (
+          <HostConnectionModal
+            baseUrl={baseUrl}
+            deviceLabel={deviceLabel}
+            onClose={() => setConnectionOpen(false)}
+            onSave={saveConnection}
+          />
+        ) : null}
+      </>
+    );
+  if (startupView === "sign-in" && showHostOutdated)
+    return (
+      <>
+        <HostOutdatedScreen
+          appName="Cinder Teacher"
+          baseUrl={baseUrl}
+          onOpenConnection={() => setConnectionOpen(true)}
+        />
         {connectionOpen ? (
           <HostConnectionModal
             baseUrl={baseUrl}
@@ -650,6 +680,9 @@ export function App() {
           onCurrentDeleted={() => void logout()}
           onForgetAccount={forgetAccount}
         />
+      ) : null}
+      {showHostOutdated ? (
+        <HostOutdatedNotice onOpenConnection={() => setConnectionOpen(true)} />
       ) : null}
       {connectionOpen ? (
         <HostConnectionModal

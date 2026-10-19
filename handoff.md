@@ -1,6 +1,6 @@
 # Cinder Project — handoff
 
-**Last updated:** 23 September 2026, after release **0.10.7**.
+**Last updated:** 19 October 2026, after release **0.10.7**.
 
 **Repository:** `https://github.com/neelsatish/the-cinder-project`, working branch
 `release-work`, released from `main`.
@@ -112,8 +112,11 @@ Details: "AI provider terms are unresolved" in `docs/security.md`.
   certificate change, require a matching code typed from Cinder Host before
   trusting it, and clear the previous session when replacing the certificate.
   This is not in the published 0.10.7 installers. Test on actual Windows and
-  Linux devices before the next release. `host_outdated` still deserves a
-  dedicated connection screen rather than a generic connection error.
+  Linux devices before the next release. An outdated Host (`host_outdated`)
+  also has its own update-Host-first screen in place of sign-in, and a
+  non-blocking notice for people already signed in (`HostOutdatedScreen` and
+  `HostOutdatedNotice` in `packages/ui/src/components.tsx`). Not yet tried
+  against a real 0.10.6 Host.
 - **Live database is not encrypted** (backups are). Recommend BitLocker/LUKS;
   SQLCipher was rejected, see `docs/security.md`.
 - **Daily backups run only while Cinder Host is open.**

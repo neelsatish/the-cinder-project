@@ -13,6 +13,9 @@ import {
   probeHost,
   hostCodesMatch,
   inspectHostIdentity,
+  isHostOutdated,
+  HostOutdatedNotice,
+  HostOutdatedScreen,
   saveSessionValue,
   trustHostIdentity,
   type HostIdentity,
@@ -88,6 +91,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
   const [online, setOnline] = useState(false);
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [connectionOpen, setConnectionOpen] = useState(false);
+  const [hostOutdated, setHostOutdated] = useState(false);
   const [knownAccounts, setKnownAccounts] = useState(readKnownAccounts);
   const sessionGeneration = useRef(0);
   const refreshInFlight = useRef<{
@@ -141,6 +145,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
           return false;
         if (failure instanceof ApiError && failure.offline) {
           setOnline(false);
+          if (isHostOutdated(failure)) setHostOutdated(true);
           if (["host_identity_changed", "host_untrusted"].includes(failure.code)) setConnectionOpen(true);
           return false;
         }
@@ -190,8 +195,9 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
           try {
             const identity = await inspectHostIdentity(nextUrl);
             if (identity.status !== "trusted" && !cancelled) setConnectionOpen(true);
-          } catch {
+          } catch (failure) {
             // School connection can retry when Host is available.
+            if (isHostOutdated(failure) && !cancelled) setHostOutdated(true);
           }
         }
         if (stored) {
@@ -204,6 +210,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
             setOnline(true);
             await saveSessionValue(SESSION_KEYS, JSON.stringify({ ...stored, user: current }));
           } catch (failure) {
+            if (isHostOutdated(failure) && !cancelled) setHostOutdated(true);
             if (failure instanceof ApiError && ["host_identity_changed", "host_untrusted"].includes(failure.code) && !cancelled) setConnectionOpen(true);
             if (failure instanceof ApiError && !failure.offline) {
               sessionGeneration.current += 1;
@@ -237,6 +244,11 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
     );
     return () => window.clearInterval(timer);
   }, [online, refresh, token, user]);
+
+  useEffect(() => {
+    if (online) setHostOutdated(false);
+  }, [online]);
+  const showHostOutdated = hostOutdated && !online;
 
   async function login(username: string, password: string) {
     const generation = sessionGeneration.current + 1;
@@ -346,6 +358,12 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
   }
 
   if (loading) return <div className="matchbox-boot">Starting Cinder Student…</div>;
+  if (!user && showHostOutdated) return (
+    <>
+      <HostOutdatedScreen appName="Cinder Student" baseUrl={baseUrl} onOpenConnection={() => setConnectionOpen(true)} />
+      {connectionOpen ? <ConnectionModal baseUrl={baseUrl} deviceLabel={deviceLabel} onClose={() => setConnectionOpen(false)} onSave={saveConnection} /> : null}
+    </>
+  );
   if (!user) return (
     <>
       <LoginScreen
@@ -392,6 +410,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
           setTemporaryPassword("");
         }} />
       ) : null}
+      {showHostOutdated ? <HostOutdatedNotice onOpenConnection={() => setConnectionOpen(true)} /> : null}
       {connectionOpen ? <ConnectionModal baseUrl={baseUrl} deviceLabel={deviceLabel} onClose={() => setConnectionOpen(false)} onSave={saveConnection} /> : null}
     </>
   );
