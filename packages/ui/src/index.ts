@@ -11,3 +11,4 @@ export * from "./types";
 export * from "./updater";
 export * from "./session";
 export * from "./theme";
+export * from "./format";
