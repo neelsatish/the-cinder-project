@@ -92,7 +92,7 @@ export function LiveSessionControls({ api, classroomId, assignments = [] }: { ap
       <Panel title="Start a live class">
         <div className="inline-form">
           <Field label="Length">
-            <select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>{[5, 10, 15, 20, 25, 30].map((minutes) => <option value={minutes} key={minutes}>{minutes} minutes</option>)}</select>
+            <select value={duration} onChange={(event) => setDuration(Number(event.target.value))}>{[10, 15, 20, 30, 40, 50, 60].map((minutes) => <option value={minutes} key={minutes}>{minutes} minutes</option>)}</select>
           </Field>
           <Button type="button" variant="primary" disabled={busy} onClick={() => void start()}>{busy ? "Starting…" : "Start live class"}</Button>
         </div>

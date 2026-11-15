@@ -769,6 +769,9 @@ function QuestionPaperStudio({
   onCreateNew: () => void;
 }) {
   const [materials, setMaterials] = useState<StudyNode[]>([]);
+  // null until known; an older Host without the route is treated as unknown, not off.
+  const [aiStatus, setAiStatus] = useState<{ drafting: boolean; search: boolean } | null>(null);
+  useEffect(() => { void api.aiStatus().then(setAiStatus).catch(() => setAiStatus(null)); }, [api]);
   const [selected, setSelected] = useState<string[]>([]);
   const [localFiles, setLocalFiles] = useState<File[]>([]);
   const [paperId, setPaperId] = useState(activePaper?.id ?? "");
@@ -1485,14 +1488,16 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           </Field>
           <Button
             variant="secondary"
-            disabled={searching}
+            disabled={searching || aiStatus?.search === false}
             onClick={() => void searchOfficialPapers()}
           >
             {searching ? "Searching…" : "Search"}
           </Button>
         </div>
         <p className="paper-help">
-          Only an examination board's own site is searched, and only the paper you choose is downloaded.
+          {aiStatus?.search === false
+            ? "Searching online needs a Google key in Cinder Host, Settings. You can still add PDFs from this computer or the classroom."
+            : "Only an examination board's own site is searched, and only the paper you choose is downloaded."}
         </p>
 
         {searchResults.length ? (
@@ -1563,11 +1568,14 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
 
       </section>
 
+      {aiStatus?.drafting === false ? (
+        <p className="notice">AI drafting is not set up on Cinder Host, so you write this paper yourself. Whoever runs Cinder Host can turn it on in Settings.</p>
+      ) : null}
       <div className="paper-action-bar">
         <Button
           variant="primary"
           onClick={() => void generate()}
-          disabled={busy || !title.trim() || !classroomId}
+          disabled={busy || !title.trim() || !classroomId || aiStatus?.drafting === false}
         >
           {busy ? "Drafting…" : paper.questions.length ? "Draft again with AI" : "Draft with AI"}
         </Button>

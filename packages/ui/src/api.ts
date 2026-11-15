@@ -792,6 +792,11 @@ export class CinderApi {
     return this.request<void>(`/api/papers/${id}`, { method: "DELETE" });
   }
 
+  /** Whether AI drafting and paper search are set up on Host. Older Hosts answer 404. */
+  aiStatus() {
+    return this.request<{ drafting: boolean; search: boolean }>("/api/ai/status", {}, 4_000);
+  }
+
   chat(messages: ChatMessage[], context?: string, maxOutputTokens?: number) {
     return this.request<{ content: string }>(
       "/api/ai/chat",

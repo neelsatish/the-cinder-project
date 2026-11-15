@@ -52,9 +52,10 @@ async fn start(
     state
         .db(move |conn| {
             validate_module(&req.module_id, &req.module_name)?;
-            if !(5..=30).contains(&req.duration_minutes) {
+            // Up to a full lesson; schools run 35 to 60 minute periods.
+            if !(5..=60).contains(&req.duration_minutes) {
                 return Err(HostError::BadRequest(
-                    "Session duration must be between 5 and 30 minutes.".into(),
+                    "A live class can last from 5 to 60 minutes.".into(),
                 ));
             }
             require_teacher_access(conn, req.classroom_id, teacher_id)?;
