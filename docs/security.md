@@ -75,7 +75,9 @@ access or physical access to an unlocked computer.
   classroom data.
 - AI is configured only in Cinder Host. Teacher and Student apps have no key or
   provider field, the classroom API has no route that reads or changes AI
-  settings, and keys are never sent to any client.
+  settings, and keys are never sent to any client. The one AI route besides
+  chat, the teacher-only `GET /api/ai/status`, returns two booleans (drafting
+  and search set up or not) and nothing else.
 - The only AI feature is the teacher-only paper creator (0.10.2). It sends the
   teacher's own instructions, text taken from source papers the teacher chose,
   a paper-search description and, for figure capture, images of source pages.

@@ -6,6 +6,25 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
+## Unreleased
+
+Not yet in a published installer. The version is still 0.10.7.
+
+- One look across Cinder Host, Teacher and Student: a quiet sidebar beside the page, Ember as the accent in Light and Dark, plain headings and no explanatory filler. The Paper theme is retired; anyone using it gets Light.
+- Fixed: students could not answer quizzes. Every answer failed to save since 0.10.0.
+- Fixed: opening a quiz could show a server error when two start requests arrived together.
+- Fixed: the Gradebook spreadsheet stayed blank; it now also opens on a classroom that has assignments.
+- Fixed: cancelling a quiz mark in Teacher recorded 0 points. Written answers are now marked in the page.
+- Fixed: Teacher's register used the UTC date, so early in the morning it opened on yesterday.
+- Fixed: handed-in work lost its line breaks.
+- Cinder Student: Home lists the work and quizzes still to do and offers to join a live class; notes sit in a list beside the editor; Start writing on an assignment opens a note for it, and the assignment shows exactly what was handed in; marks appear in the Work and Marks lists. The notification bell (which never showed anything), the home widgets and the floating timer are gone; the study timer lives in the sidebar.
+- Cinder Teacher: assignments show how many students handed in and what is left to mark, list who has not handed in, and open marking with previous/next and a save-as-draft option; Mark everyone present on the register; Reset sign-in for a student from the classroom; Change password in Settings; quizzes are set as homework from their own dialog. PDFs open inside the app on Windows and Linux alike.
+- Papers says when AI drafting or online search is not set up on Cinder Host instead of failing after a click.
+- Live classes can last up to 60 minutes.
+- Cinder Host: no more pop-up prompts. Editing people, resetting sign-in, disabling a teacher (with the replacement chosen from a list), renaming files, emptying Trash, restoring and resetting use in-app dialogs, and recovery codes and PINs appear in a dialog of their own.
+- Teacher and Student show the Host security code at first contact and after a certificate change, and need the matching code before trusting it (from earlier work on this branch).
+- An outdated Cinder Host gets its own update-Host-first screen in Teacher and Student (from earlier work on this branch).
+
 ## 0.10.7
 
 - **Update Cinder Host first.** Apps from this version cannot talk to an older Host, and older apps cannot talk to this Host; each says what needs updating.

@@ -25,10 +25,10 @@ turning any row into a public claim.
   0.10.7 Host-first rollout, HTTPS with certificate pinning, sign-in rate
   limits, encrypted verified backups and a daily backup option while Host is
   running. (`CHANGELOG.md` 0.10.7, `docs/platform-support.md`)
-- Shared Light, Dark and Paper themes. Light-first, minimal and legible on
-  modest computers remains the design preference; do not mistake older
-  Warm Frost / Ember Glass explorations for the current requirement.
-  (`CHANGELOG.md` 0.10.0, `design/brand/BRAND.md`)
+- Shared Light and Dark themes (Paper retired on the branch, November 2026).
+  Light-first, minimal and legible on modest computers remains the design
+  preference; do not mistake older Warm Frost / Ember Glass explorations for
+  the current requirement. (`CHANGELOG.md`, `design/brand/BRAND.md`)
 
 ## 2. Next Matchbox release — finish before calling it ready
 
@@ -41,12 +41,11 @@ turning any row into a public claim.
   update-Host-first screen in Teacher and Student; people already signed in get
   a non-blocking notice so open work is not lost. Test against a real 0.10.6
   Host on Windows and Linux before releasing it.
-- **Open:** Review every Host, Teacher and Student screen at realistic window
-  sizes: hierarchy, spacing, consistent labels and controls, useful empty/
-  loading/error states, keyboard/focus, contrast, reduced motion, and print
-  output. Test Light, Dark and Paper on modest hardware; fix observed issues
-  rather than replacing the entire design speculatively. (`handoff.md`,
-  `docs/CINDER_APP_SPEC.md`, `design/brand/BRAND.md`)
+- **Branch (`claude/ui-rework-5f8e74`):** UI rework of all three apps onto one
+  design system, with the screen audit and its status in
+  `docs/superpowers/specs/2026-11-15-ui-audit.md`. Still open: try it on
+  modest hardware, on Linux Mint, and in the installed apps (keyboard/focus,
+  print output, the Host security-code flow).
 - **Branch:** The dead gradebook AI hooks were removed. The unreleased legacy
   `apps/student` is kept by decision. Neither is a user-facing change.
   (`handoff.md`)

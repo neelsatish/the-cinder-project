@@ -1,6 +1,7 @@
 # Cinder Project — handoff
 
-**Last updated:** 19 October 2026, after release **0.10.7**.
+**Last updated:** 16 November 2026, after the UI rework on branch
+`claude/ui-rework-5f8e74`. Last release: **0.10.7**.
 
 **Repository:** `https://github.com/neelsatish/the-cinder-project`, working branch
 `release-work`, released from `main`.
@@ -57,6 +58,23 @@ for any public claim. Update this file when you resolve a conflict.
   nothing has been tested on a second device, on Linux, or against a real
   0.10.6 Host. Next step: test, then push, open a PR, and decide the version
   bump (a release decision for the maintainer).
+- **UI rework, 16 November 2026 (branch `claude/ui-rework-5f8e74`, built on
+  `release-work`, not pushed, version unchanged):** all three apps now share
+  one design system in `packages/ui` (Ember accent, Light and Dark; Paper
+  retired), a sidebar-and-page layout, British dates and no filler copy. It
+  also fixes students being unable to answer quizzes (broken since 0.10.0),
+  a blank Gradebook, a quiz-start race, and cancelling a quiz mark saving 0,
+  and adds the features listed under Unreleased in `CHANGELOG.md`. The screen
+  audit and the commit that resolved each finding are in
+  `docs/superpowers/specs/2026-11-15-ui-audit.md`; larger ideas left for
+  later are in `docs/future-features.md`. Checked in a browser against a
+  seeded test Host, not yet in the installed apps, on Linux or on a second
+  device. Unsigned Windows installers were built locally for review only.
+- **Test data:** `node scripts/seed-test-data.mjs <empty folder>` fills a new
+  Host data folder with a labelled Cinder Test School through the classroom
+  API. The test passwords are in the script. The maintainer's earlier app
+  data was moved to `Cinder-archive-2026-11-15/app-data-before-rework` (with a
+  README on restoring it).
 - `docs/research/host-ai-2026-10-19.md` is planning research on running AI on
   the school Host (model and hardware options). Nothing was benchmarked or
   built; it is not a product commitment.
@@ -86,12 +104,15 @@ cargo test --workspace --locked
 | Name | What it is | Source |
 | --- | --- | --- |
 | **Cinder Host** | One per school. Runs the classroom server (port 7373 by default) and holds the database and files. Manages people, stored files, backups, updates, school reset and AI settings. | `apps/host`, `crates/host` |
-| **Cinder Teacher** | Teacher app: Overview, Classrooms (Overview, Students, Materials, Assignments, Attendance, Live tabs), Gradebook, Papers, Settings. | `apps/teacher` |
-| **Cinder Student** | Student app: classrooms, assignments, quizzes, live sessions, notes and documents, PDF reader, timers. | `apps/forge` (the folder keeps an old name) |
+| **Cinder Teacher** | Teacher app: Overview, Classrooms (Assignments, Students, Materials, Quizzes, Register, Live class tabs), Gradebook, Papers, Settings. | `apps/teacher` |
+| **Cinder Student** | Student app: Home (work to do), Classrooms (Work, Quizzes, Materials, Marks), Live class, Notes, Library (PDFs), Settings, a study timer in the sidebar. | `apps/forge` (the folder keeps an old name) |
 | Legacy student app | Replaced at 0.9.11 and no longer released. Still in the npm workspace and version-bumped. | `apps/student` |
 | **Cinder Forge**, **Forge MAX**, **Cinder Bonfire** | Roadmap names only. Not released; never present them as available. | — |
 
-Shared code: `packages/ui` (design system, API client, updater panel),
+Shared code: `packages/ui` (the single design system: tokens and components
+in `styles.css` and `components.tsx`, the pdf.js viewer at `@cinder/ui/pdf`,
+British date helpers, the API client, the updater panel; app stylesheets hold
+layout only),
 `crates/core` (types, secure storage; TypeScript bindings are generated into
 `crates/core/bindings`), `crates/ai` (AI provider clients).
 
@@ -100,9 +121,10 @@ Shared code: `packages/ui` (design system, API client, updater panel),
 - AI is optional and teacher-only. The only AI feature is the **paper creator**
   in Teacher → Papers: it drafts question papers and marking schemes, searches
   for official past papers and finds figures on their pages.
-- Keys and models are set only in **Host → Settings → AI provider**. The
-  classroom API has no route that reads or changes AI settings. Teacher and
-  Student never see a key.
+- Keys and models are set only in **Host → Settings → AI for the paper
+  creator**. The classroom API has no route that reads or changes AI settings;
+  the teacher-only `GET /api/ai/status` reports only whether drafting and
+  search are set up. Teacher and Student never see a key.
 - Paper writing uses an OpenAI-compatible text model. Paper search and figure
   capture use a Google key; the Google model is picked from the list the key
   can reach.
@@ -172,11 +194,13 @@ Details: "AI provider terms are unresolved" in `docs/security.md`.
 | Sign-in rate limit | `crates/host/src/rate_limit.rs` |
 | Backup encryption and daily backups | `apps/host/src-tauri/src/backup_crypto.rs`, backup functions in `apps/host/src-tauri/src/main.rs`, `apps/host/src/AutoBackup.tsx` |
 | Host desktop app | `apps/host/src-tauri/src/main.rs` (backup, restore, AI settings, usage), `apps/host/src/App.tsx` |
-| Teacher shell and most views | `apps/teacher/src/App.tsx` |
+| Teacher shell and sign-in | `apps/teacher/src/App.tsx` |
+| Teacher views | `apps/teacher/src/views/` (Overview, Classrooms, Assignments, Attendance, Settings) |
 | Teacher Papers | `apps/teacher/src/PapersView.tsx`, `paperLogic.ts`, `paperLibrary.ts`, `paperExport.ts`, `FigurePicker.tsx` |
 | Teacher Gradebook | `apps/teacher/src/GradebookView.tsx`, `UniverGradebook.tsx` |
 | Teacher quizzes and live classes | `apps/teacher/src/QuizManager.tsx`, `LiveSessionControls.tsx` |
 | Student app | `apps/forge/src/App.tsx`, `classrooms/`, `studio/` (editor and PDF pane load on first use) |
+| Test data | `scripts/seed-test-data.mjs` |
 | Release pipeline | `.github/workflows/release-installers.yml`, `.github/workflows/checks.yml` |
 | Security review | `docs/security.md` |
 | Platform, versioning, release checklist | `docs/platform-support.md` |
