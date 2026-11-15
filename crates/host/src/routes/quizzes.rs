@@ -290,11 +290,14 @@ async fn save_response(
         return Err(HostError::Forbidden);
     }
     let sid = student.id();
-    state.db(move|conn|{
-        ensure_attempt_writable(conn,id,sid)?; let (kind,key,max)=question_key(conn,id,question_id)?; let (points,auto)=objective_points(kind,&key,&req.answer,max); let now=Utc::now().to_rfc3339();
-        conn.execute("INSERT INTO quiz_responses(id,attempt_id,question_id,answer_json,points,feedback,auto_graded,graded_at,updated_at) VALUES(?1,?2,?3,?4,?5,'',?6,?7,?7) ON CONFLICT(attempt_id,question_id) DO UPDATE SET answer_json=excluded.answer_json,points=excluded.points,feedback='',auto_graded=excluded.auto_graded,graded_at=excluded.graded_at,updated_at=excluded.updated_at",rusqlite::params![Uuid::new_v4().to_string(),id.to_string(),question_id.to_string(),serde_json::to_string(&req.answer).unwrap(),points,auto,if auto{Some(now.clone())}else{None},now])?;
-        Ok(Json(load_response(conn,id,question_id,false)?))
-    }).await
+    state
+        .db(move |conn| {
+            ensure_attempt_writable(conn, id, sid)?;
+            let (kind, key, max) = question_key(conn, id, question_id)?;
+            store_response(conn, id, question_id, kind, &key, max, &req.answer)?;
+            Ok(Json(load_response(conn, id, question_id, false)?))
+        })
+        .await
 }
 
 async fn submit_attempt(
@@ -688,6 +691,20 @@ fn objective_points(
         _ => (Some(if key == answer { max } else { 0.0 }), true),
     }
 }
+fn store_response(
+    conn: &rusqlite::Connection,
+    attempt_id: Uuid,
+    question_id: Uuid,
+    kind: QuizQuestionKind,
+    key: &serde_json::Value,
+    max: f64,
+    answer: &serde_json::Value,
+) -> HostResult<()> {
+    let (points, auto) = objective_points(kind, key, answer, max);
+    let now = Utc::now().to_rfc3339();
+    conn.execute("INSERT INTO quiz_responses(id,attempt_id,question_id,answer_json,points,feedback,auto_graded,graded_at,updated_at) VALUES(?1,?2,?3,?4,?5,'',?6,?7,?8) ON CONFLICT(attempt_id,question_id) DO UPDATE SET answer_json=excluded.answer_json,points=excluded.points,feedback='',auto_graded=excluded.auto_graded,graded_at=excluded.graded_at,updated_at=excluded.updated_at",rusqlite::params![Uuid::new_v4().to_string(),attempt_id.to_string(),question_id.to_string(),answer.to_string(),points,auto,auto.then(|| now.clone()),now])?;
+    Ok(())
+}
 fn recalculate_attempt(conn: &rusqlite::Connection, id: Uuid) -> HostResult<()> {
     let manual_missing:i64=conn.query_row("SELECT count(*) FROM quiz_version_questions q JOIN quiz_deliveries d ON d.version_id=q.version_id JOIN quiz_attempts a ON a.delivery_id=d.id WHERE a.id=?1 AND q.kind='short_answer' AND (q.required=1 OR EXISTS(SELECT 1 FROM quiz_responses answered WHERE answered.attempt_id=a.id AND answered.question_id=q.id)) AND NOT EXISTS(SELECT 1 FROM quiz_responses r WHERE r.attempt_id=a.id AND r.question_id=q.id AND r.graded_at IS NOT NULL)",[id.to_string()],|r|r.get(0))?;
     let score: f64 = conn.query_row(
@@ -921,5 +938,77 @@ mod tests {
             active_live_deadline(&conn, delivery, student, now),
             Err(HostError::Conflict)
         ));
+    }
+
+    #[test]
+    fn student_answers_are_stored_graded_and_replaced() {
+        let pool = crate::db::open_in_memory().unwrap();
+        let conn = pool.get().unwrap();
+        let (teacher, student, classroom, quiz, version, delivery, attempt) = (
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+        );
+        let (choice, written) = (Uuid::new_v4(), Uuid::new_v4());
+        let now = Utc::now().to_rfc3339();
+        for (id, role) in [(teacher, "teacher"), (student, "student")] {
+            conn.execute("INSERT INTO users(id,username,display_name,pw_hash,role,created_at) VALUES(?1,?2,?2,'hash',?2,?3)",rusqlite::params![id.to_string(),role,now]).unwrap();
+        }
+        conn.execute("INSERT INTO classrooms(id,name,description,color,created_at,owner_teacher_id,enrolment_code) VALUES(?1,'Class','','#fff',?2,?3,'QUIZ5678')",rusqlite::params![classroom.to_string(),now,teacher.to_string()]).unwrap();
+        conn.execute("INSERT INTO quizzes(id,classroom_id,title,instructions,created_by,created_at,updated_at) VALUES(?1,?2,'Quiz','',?3,?4,?4)",rusqlite::params![quiz.to_string(),classroom.to_string(),teacher.to_string(),now]).unwrap();
+        conn.execute("INSERT INTO quiz_versions(id,quiz_id,version_number,title,instructions,total_points,published_at) VALUES(?1,?2,1,'Quiz','',3,?3)",rusqlite::params![version.to_string(),quiz.to_string(),now]).unwrap();
+        conn.execute("INSERT INTO quiz_version_questions(id,version_id,position,kind,prompt,options_json,canonical_answer_json,max_points,required) VALUES(?1,?2,0,'single_choice','Pick','[\"A\",\"B\"]','\"A\"',1,1),(?3,?2,1,'short_answer','Explain','[]','\"\"',2,1)",rusqlite::params![choice.to_string(),version.to_string(),written.to_string()]).unwrap();
+        conn.execute("INSERT INTO quiz_deliveries(id,version_id,classroom_id,kind,created_by,created_at,assigned_count) VALUES(?1,?2,?3,'homework',?4,?5,1)",rusqlite::params![delivery.to_string(),version.to_string(),classroom.to_string(),teacher.to_string(),now]).unwrap();
+        conn.execute("INSERT INTO quiz_attempts(id,delivery_id,student_id,started_at,max_points) VALUES(?1,?2,?3,?4,3)",rusqlite::params![attempt.to_string(),delivery.to_string(),student.to_string(),now]).unwrap();
+        let stored = |question: Uuid| -> (Option<f64>, Option<String>, String) {
+            conn.query_row("SELECT points,graded_at,answer_json FROM quiz_responses WHERE attempt_id=?1 AND question_id=?2",rusqlite::params![attempt.to_string(),question.to_string()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap()
+        };
+
+        let (kind, key, max) = question_key(&conn, attempt, choice).unwrap();
+        store_response(
+            &conn,
+            attempt,
+            choice,
+            kind,
+            &key,
+            max,
+            &serde_json::json!("A"),
+        )
+        .unwrap();
+        let (points, graded_at, _) = stored(choice);
+        assert_eq!(points, Some(1.0));
+        assert!(graded_at.is_some());
+        store_response(
+            &conn,
+            attempt,
+            choice,
+            kind,
+            &key,
+            max,
+            &serde_json::json!("B"),
+        )
+        .unwrap();
+        assert_eq!(
+            stored(choice).0,
+            Some(0.0),
+            "a changed answer replaces the first"
+        );
+
+        let (kind, key, max) = question_key(&conn, attempt, written).unwrap();
+        store_response(
+            &conn,
+            attempt,
+            written,
+            kind,
+            &key,
+            max,
+            &serde_json::json!("Because"),
+        )
+        .unwrap();
+        assert_eq!(stored(written), (None, None, "\"Because\"".to_owned()));
     }
 }
