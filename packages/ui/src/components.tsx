@@ -606,7 +606,7 @@ export function PasswordChange({
   const [error, setError] = useState("");
 
   return (
-    <Modal title="Choose your password" description="Replace the temporary password before you continue." lock>
+    <Modal title="Choose your password" description="Replace the temporary PIN or password you were given before you continue." lock>
       <form
         className="form-stack"
         onSubmit={async (event) => {
@@ -625,7 +625,7 @@ export function PasswordChange({
         }}
       >
         {!currentPassword ? (
-          <Field label="Temporary password">
+          <Field label="Temporary PIN or password">
             <input type="password" value={current} onChange={(event) => setCurrent(event.target.value)} autoFocus />
           </Field>
         ) : null}
