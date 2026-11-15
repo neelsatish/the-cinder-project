@@ -24,7 +24,7 @@
     "build:teacher": "npm run build --workspace @cinder/teacher",
     "build:forge": "npm run build --workspace @cinder/forge",
     "build:host": "npm run build --workspace @cinder/host-app",
-    "test:gradebook-intent": "node --experimental-strip-types --test scripts/gradebook-intent.test.mjs",
+    "test:teacher": "node --experimental-strip-types --test apps/teacher/checks/teacher-session.test.mjs",
     "test:paper-logic": "node --experimental-strip-types --test scripts/paper-logic.test.mjs",
     "test:forge-notes": "node --experimental-strip-types --test scripts/forge-notes.test.mjs",
     "test:host-transport": "node --experimental-strip-types --test scripts/host-transport.test.mjs",

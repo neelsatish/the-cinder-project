@@ -22,7 +22,7 @@ import {
   type User,
 } from "@cinder/ui";
 import type { UniverGradebookHandle } from "./UniverGradebook";
-import { formatAssignmentHeader } from "./gradebookIntent";
+import { formatAssignmentHeader } from "./gradebookHeaders";
 import { saveTextExport } from "./teacherFiles";
 
 const UniverGradebook = lazy(() =>
@@ -60,7 +60,6 @@ export function GradebookView({
 
   const load = useCallback(async () => {
     if (!classroomId) return;
-    gradebookRef.current?.clearPreview();
     setStatus("Loading…");
     try {
       const [nextRoster, submissionPairs] = await Promise.all([

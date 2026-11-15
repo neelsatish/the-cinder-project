@@ -160,7 +160,7 @@ Three different values are in circulation for what everyone calls "Paper":
 | Value | Where | Status |
 | --- | --- | --- |
 | `#F7F1E7` | The actual light lockup asset | **Canonical Paper** |
-| `#F9F0E7` | `docs/product-overview.md` | Wrong. Unsourced. Correct it. |
+| `#F9F0E7` | `docs/archive/product-overview.md` | Wrong. Unsourced. Correct it. |
 | `#F5F1EB` | `--background` in `packages/ui/src/styles.css:3` | A UI token, not Paper |
 
 `--background` is an interface surface and is allowed to differ from Paper — the
@@ -407,7 +407,7 @@ repository. None of it is fixed by writing this file.
 
 | # | Issue | Location |
 | --- | --- | --- |
-| 1 | Paper documented as `#F9F0E7`; the asset is `#F7F1E7`. Value appears in no file. | `docs/product-overview.md` |
+| 1 | Paper documented as `#F9F0E7`; the asset is `#F7F1E7`. Value appears in no file. | `docs/archive/product-overview.md` |
 | 4 | Inter is specified as the UI face but is not bundled and is absent from the target OS. | `styles.css:24` |
 | 8 | No vector sources for the eleven-blade asset. Resolved for Ember, reduced by `cinder-mark-ember-reduced-*.svg`; the old mark remains PNG-only. | `design/brand/` |
 | 9 | Trademark reserved in the README with no policy behind it. | `README.md` |

@@ -10,7 +10,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR"
 
 npm run typecheck
-npm run test:gradebook-intent
+npm run test:teacher
 npm run test:paper-logic
 npm run test:forge-notes
 npm run test:host-transport

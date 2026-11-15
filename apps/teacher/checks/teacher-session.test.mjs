@@ -10,7 +10,7 @@ import {
   teacherStartupView,
 } from "../src/teacherSession.ts";
 import { isCinderHealthResponse } from "../../../packages/ui/src/health.ts";
-import { assignmentForHeader, formatAssignmentHeader } from "../src/gradebookIntent.ts";
+import { assignmentForHeader, formatAssignmentHeader } from "../src/gradebookHeaders.ts";
 
 test("gradebook assignment headers stay readable and resolvable", () => {
   const assignment = { id: "work-1", title: "Writing Work 1", max_points: 100 };

@@ -6,7 +6,7 @@
 `release-work`, released from `main`.
 
 This is the current handoff for whoever works on Cinder next, person or agent.
-`docs/handoff.md` is the older 0.9.0 handoff and is history only. Where this file
+`docs/archive/handoff-0.9.0.md` is the older 0.9.0 handoff and is history only. Where this file
 and the code disagree, the code wins for implementation facts,
 `design/brand/BRAND.md` wins for identity rules, and a current primary source wins
 for any public claim. Update this file when you resolve a conflict.
@@ -49,11 +49,31 @@ for any public claim. Update this file when you resolve a conflict.
   (HTTPS with a pinned certificate): 0.10.7 apps and older Hosts cannot talk to
   each other, so Cinder Host must be updated first.
 
+- **State on 5 November 2026:** `release-work` is two commits ahead of
+  `origin/release-work` and not pushed: the Host security-code check
+  (`7196182`) and the outdated-Host screen (`66bcaaf`). No PR is open and the
+  version is still 0.10.7. Signed Windows installers of Teacher and Student
+  with both changes were built locally (updater key id `90531AF31903EA5A`) but
+  nothing has been tested on a second device, on Linux, or against a real
+  0.10.6 Host. Next step: test, then push, open a PR, and decide the version
+  bump (a release decision for the maintainer).
+- `docs/research/host-ai-2026-10-19.md` is planning research on running AI on
+  the school Host (model and hardware options). Nothing was benchmarked or
+  built; it is not a product commitment.
+- **Tidy-up on 15 November 2026:** superseded docs and design explorations moved
+  to `docs/archive/` and `design/archive/` (history only). Stale local leftovers
+  (`tmp/`, the graphify cache, old Edge test profiles and dev logs from
+  `apps/forge`) were moved out of the repository to `Cinder-archive-2026-11-15`
+  beside it. The dead gradebook AI code was removed in the same pass (see
+  section 5). The local `master` branch (an August commit whose remote branch
+  was gone) was deleted, and `AGENTS.md` was rewritten as plain working rules
+  without personal details.
+
 Verification commands:
 
 ```bash
 npm run typecheck
-npm run test:gradebook-intent
+npm run test:teacher
 npm run test:paper-logic
 npm run test:forge-notes
 npm run test:host-transport
@@ -125,14 +145,18 @@ Details: "AI provider terms are unresolved" in `docs/security.md`.
   recommends the AppImage on Mint for that reason.
 - **Not yet tried in a real classroom on a modest PC**: paper creator speed, A4
   printing, behaviour when the internet is unreachable, many students at once.
-- **Legacy `apps/student`**: delete it or keep it; it only costs build time.
-- **Dead AI plumbing in the gradebook**: the gradebook assistant was retired at
-  0.9.11 and its Teacher-side code was removed in 0.10.6, but
-  `apps/teacher/src/UniverGradebook.tsx` still exposes `getAiContext`,
-  `showPreview` and `applyActions`, and most of `gradebookIntent.ts` only
-  served that assistant. Remove them unless the assistant is coming back.
-- **Docs that still describe older states**: `docs/product-overview.md` and
-  `docs/product-plan.md` predate Host. `docs/forge-studio-plan.md`,
+- **Legacy `apps/student`**: kept on purpose (maintainer's decision,
+  15 November 2026). It is not released and only costs build time.
+- **Gradebook AI plumbing removed (branch, 15 November 2026):** the hooks left
+  over from the retired gradebook assistant (`getAiContext`, `showPreview`,
+  `applyActions` and the intent parser) are gone. `gradebookIntent.ts` became
+  `gradebookHeaders.ts` with only the header helpers the gradebook uses, and
+  `npm run test:teacher` (Teacher's own checks) replaced
+  `test:gradebook-intent` in CI and the build scripts.
+- **Docs that still describe older states**: `docs/archive/` holds the
+  pre-Host product overview and plan, the UI direction proposals and the 0.9.0
+  handoff. `docs/CINDER_APP_SPEC.md` and the root `design.md` still contain
+  pre-Host or Paper-only statements. `docs/forge-studio-plan.md`,
   `docs/forge-english-learning-plan.md` and `docs/matchbox-rgh-week-goal.md`
   are plans and are labelled as such; none of them is shipped behaviour.
 - **Android/tablets** are not supported. Schools have asked.

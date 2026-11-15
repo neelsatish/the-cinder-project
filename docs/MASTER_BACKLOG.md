@@ -47,9 +47,8 @@ turning any row into a public claim.
   output. Test Light, Dark and Paper on modest hardware; fix observed issues
   rather than replacing the entire design speculatively. (`handoff.md`,
   `docs/CINDER_APP_SPEC.md`, `design/brand/BRAND.md`)
-- **Open:** Remove or decide to keep the dead gradebook AI hooks
-  (`getAiContext`, `showPreview`, `applyActions`, `gradebookIntent.ts`) and
-  the unreleased legacy `apps/student`; neither is a user-facing feature.
+- **Branch:** The dead gradebook AI hooks were removed. The unreleased legacy
+  `apps/student` is kept by decision. Neither is a user-facing change.
   (`handoff.md`)
 - **Open:** Keep Windows/Linux feature and release parity; run typecheck,
   script tests, Rust tests, signed-update checks and two-device installation
@@ -70,11 +69,11 @@ turning any row into a public claim.
   duplicate accounts, grade changes, backup/restore, update failure and many
   simultaneous students. Measure paper-generation latency and A4 printing on
   a modest PC. Record actual failures and fixes. (`handoff.md`,
-  `docs/product-plan.md` — historical test plan)
+  `docs/archive/product-plan.md` — historical test plan)
 - **Open:** Decide a support owner, stable Host address, school network and
   backup destination for each deployment. Never expose the classroom port to
   the public internet as a shortcut. (`docs/platform-support.md`,
-  `docs/product-plan.md`)
+  `docs/archive/product-plan.md`)
 - **Decision:** `.deb` users currently reinstall manually; decide whether
   package-manager updates are worth supporting. AppImage is the simpler
   self-updating Linux route. (`docs/platform-support.md`)
@@ -100,7 +99,7 @@ turning any row into a public claim.
   Neither competition funding nor adoption is guaranteed. (`docs/matchbox-rgh-week-goal.md`)
 - **Decision:** Matchbox's permanent free-for-schools commitment, the role of
   the Track 3/Wider World route, and who maintains installs after handover are
-  not settled in the older product overview. (`docs/product-overview.md`)
+  not settled in the older product overview. (`docs/archive/product-overview.md`)
 
 ## 5. Scope choices before building more Matchbox
 
@@ -114,7 +113,7 @@ turning any row into a public claim.
   (`docs/matchbox-rgh-week-goal.md`)
 - **Later:** Multi-school identity, gateway, cloud sync/backup, public-internet
   access and interoperability are scale-up ideas, not pilot shortcuts. Decide
-  privacy, operations and funding first. (`docs/product-plan.md`,
+  privacy, operations and funding first. (`docs/archive/product-plan.md`,
   `docs/competitive-research.md`)
 - **Open:** Google Gemini terms for a product likely accessed by minors need
   written clarification or a different provider; paper-search grounding must
@@ -142,16 +141,16 @@ turning any row into a public claim.
 - **Forge MAX:** Proposed paid individual copilot with more AI across learning
   material. ₹299/month and usage allowances were exploratory, not approved
   pricing or a shipped subscription. Validate provider cost, demand, terms
-  and support first. (`docs/product-overview.md`, `handoff.md`)
+  and support first. (`docs/archive/product-overview.md`, `handoff.md`)
 - **Cinder Bonfire:** Proposed paid school platform with broader classroom
   chat, announcements, administration and Forge MAX capabilities. Decide how
   it differs from Matchbox and whether code or deployment is shared before
-  treating it as a build plan. (`handoff.md`, `docs/product-overview.md`)
+  treating it as a build plan. (`handoff.md`, `docs/archive/product-overview.md`)
 
 ## Evidence and supersession
 
 `handoff.md`, `CHANGELOG.md`, code and the 0.10.7 release define current
-Matchbox. `docs/product-plan.md`, `docs/product-overview.md` and
+Matchbox. `docs/archive/product-plan.md`, `docs/archive/product-overview.md` and
 `docs/CINDER_APP_SPEC.md` contain historical Teacher-hosted/HTTP descriptions
 that were superseded by Cinder Host and HTTPS. The Forge plans and UI direction
 documents are proposals. `docs/pitch/claim-ledger.md` controls public pitch

@@ -1,43 +1,42 @@
-## Imported Claude Cowork project instructions
+# Working preferences for agents
 
-Instructions
+These are the maintainer's standing preferences for anyone, person or agent,
+working on Cinder. `handoff.md` holds the current product and release state;
+`design/brand/BRAND.md` is the identity authority.
 
-[unknown] - “Make sure you aren't a yes man, for every idea I have, try to find a better idea or contradict my idea. Always play devils advocate until I find the perfect idea.”
+## How to work
 
-Identity
+- Do not be a yes-man. For every idea, look for a better one or argue against
+  it until the idea holds up.
+- Windows 11 and Linux Mint Cinnamon change together, visually and
+  functionally, unless a request names one platform. Installers for both are
+  published to GitHub with every release.
+- Codex and Claude may work at the same time. Leave files the other agent is
+  editing alone when ownership is unclear.
+- The maintainer tests on several physical devices and sends screenshots or
+  photos when behaviour differs from the intended design. Treat those as the
+  source of truth for what is wrong.
 
-[unknown] - Your name appears to be Neel based on local profile paths; you have not directly confirmed it in conversation.
-[unknown] - Context indicates a connection to India: you price products in rupees and your workspace uses the Asia/Calcutta timezone. No city or more precise location is known.
-[unknown] - Your interests include educational technology, AI-assisted learning, Linux, lightweight software for older computers, UI design, and improving educational access for underprivileged students.
-[unknown] - Your age, formal education, family, relationships, and spoken languages are not known.
+## Product and interface
 
-Career
+- Interfaces are minimal, modern, clean and professional, and easy to use.
+- Software stays lightweight and fast on older or modest school computers.
+  Tauri is the desktop framework for that reason.
+- Light mode is the default; darker themes are optional.
+- Documents feel familiar (Word, Google Docs, LibreOffice) with fewer controls
+  and less resource use. Spreadsheets feel like Excel or Univer.
+- School workflows follow the Canvas / Google Classroom shape: teacher-created
+  classrooms, enrolled students, materials, assignments, submissions, comments,
+  grades and a completed-work section.
+- AI changes are validated and reviewable before they are applied, and usage is
+  tracked in tokens.
+- Question papers follow real board expectations (Cambridge, CBSE, CISCE/ICSE),
+  prefer official sources and past papers, cite sources, include suitable
+  diagrams and working space, and keep marking schemes separate.
 
-[unknown] - You are involved in planning and building products under “Cinder Education Technologies” or “CET.” Your exact title and whether CET is formally incorporated are not known.
-[unknown] - Your demonstrated areas include educational product planning, application testing, UI/UX direction, AI feature design, GitHub release management, and coordinating development with Codex and Claude Code.
+## Security and releases
 
-Projects
-
-[unknown] - Cinder Forge: A free individual learning application with freemium AI capabilities, notes, PDFs, worksheet creation, study-time tracking, timers, organization tools, and optional in-app purchases. It is currently a planned product rather than the app being developed in this conversation.
-[unknown] - Cinder Forge MAX: A proposed paid learning copilot with expanded AI assistance across documents, additional features, and extended support. Your initial target price was ₹299 per month, but operating costs and final pricing remain undecided.
-[unknown] - Cinder Bonfire: A proposed paid platform for schools combining Matchbox-style classrooms with Forge MAX capabilities, including chatrooms, chatbots, announcements, teacher interaction, grades, and school administration. Pricing remains undecided.
-[2026-08-12] - Cinder Matchbox: Originally discussed as StudyBox and later branded Lumina before being fully rebranded to Cinder. It is a lightweight, free learning system for underprivileged students, government schools, and the public using older computers. It consists of separate Teacher and Student Tauri applications for Linux Mint Cinnamon and Windows 11. Features include authenticated accounts, classrooms, assignments, submissions, private notes, materials, attendance, grading with change logs, a Univer-based gradebook, teacher AI assistance, question-paper generation, saved papers, PDF/DOC/text exports, signed updates, and LAN-based communication. You require Windows and Linux updates to be made together unless explicitly stated otherwise, with installers published to GitHub after every release. Version 0.9.0 was built, tested, and published with Windows Setup, Linux DEB, AppImage, checksums, and signed updater feeds.
-
-Preferences
-
-[unknown] - You want interfaces to be “pretty minimalistic” while remaining modern, clean, professional, and user-friendly.
-[unknown] - You prioritize lightweight software and good performance, particularly on older or modest school computers.
-[unknown] - You prefer Tauri for desktop applications because of its performance and smaller footprint.
-[unknown] - You want Linux Mint Cinnamon support and Windows 11 support to stay visually and functionally aligned.
-[unknown] - You prefer light mode as the default because it feels more professional, with optional dark themes including “Cinder original” and “plain dark.”
-[unknown] - You prefer familiar document experiences resembling Microsoft Word, Google Docs, or LibreOffice, but with fewer controls and less resource usage.
-[unknown] - You prefer spreadsheet tools that feel like Excel or Univer and allow AI to make structured, reviewable cell changes.
-[unknown] - You prefer school workflows similar to Canvas or Google Classroom: teacher-created classrooms, enrolled students, materials, assignments, submissions, comments, grades, and completed-work sections.
-[unknown] - You want AI actions to make actual changes instead of merely describing them, with changes validated before being applied.
-[unknown] - You favor token-based AI usage tracking over simple question counts, although you discussed limits such as 200 questions and 20 paper or flashcard creations per month.
-[unknown] - You want question papers to follow real board expectations, cite sources, include appropriate diagrams, provide working space, and keep answer keys separate.
-[unknown] - You prefer official board sources and past papers for assessment generation, including Cambridge, CBSE, and CISCE/ICSE resources.
-[unknown] - You care about cybersecurity, encrypted API keys, signed updates, restricted external content, and reviewing dependencies for vulnerabilities.
-[unknown] - You want GitHub download pages to be straightforward, with direct installer links and update logs written as bullet points.
-[unknown] - You test applications on multiple physical devices and provide screenshots or photographs when behavior differs from the intended design.
-[unknown] - You are comfortable letting Codex and Claude Code work concurrently, but explicitly want files from the other agent left untouched when ownership is unclear.
+- Encrypted API keys, signed updates, restricted external content and reviewed
+  dependencies are expected, not optional.
+- GitHub download pages stay plain: direct installer links, and release notes
+  written as bullet points.
