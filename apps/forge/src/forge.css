@@ -339,6 +339,7 @@
   gap: var(--space-2);
   color: var(--muted);
   font-size: var(--text-sm);
+  white-space: nowrap;
 }
 .editor-reference select {
   max-width: 220px;
