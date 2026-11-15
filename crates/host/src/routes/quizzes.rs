@@ -233,8 +233,8 @@ async fn start_attempt(
         if !enrolled { return Err(HostError::Forbidden); }
         if delivery.opens_at.is_some_and(|v|v>now) || delivery.due_at.is_some_and(|v|v<=now) { return Err(HostError::Conflict); }
         let live_end = active_live_deadline(conn, id, student_id, now)?;
-        let existing:Option<String>=conn.query_row("SELECT id FROM quiz_attempts WHERE delivery_id=?1 AND student_id=?2",rusqlite::params![id.to_string(),student_id.to_string()],|r|r.get(0)).optional()?;
-        let attempt_id=if let Some(value)=existing { parse_uuid(&value)? } else { let aid=Uuid::new_v4(); let expires=[delivery.time_limit_minutes.map(|m|now+Duration::minutes(i64::from(m))),delivery.due_at,live_end].into_iter().flatten().min(); conn.execute("INSERT INTO quiz_attempts(id,delivery_id,student_id,started_at,expires_at,max_points) VALUES(?1,?2,?3,?4,?5,?6)",rusqlite::params![aid.to_string(),id.to_string(),student_id.to_string(),now.to_rfc3339(),expires.map(|v|v.to_rfc3339()),delivery.total_points])?; aid};
+        let expires=[delivery.time_limit_minutes.map(|m|now+Duration::minutes(i64::from(m))),delivery.due_at,live_end].into_iter().flatten().min();
+        let attempt_id=insert_or_get_attempt(conn,id,student_id,now,expires,delivery.total_points)?;
         Ok(Json(load_attempt(conn,attempt_id,&student,false)?))
     }).await
 }
@@ -691,6 +691,29 @@ fn objective_points(
         _ => (Some(if key == answer { max } else { 0.0 }), true),
     }
 }
+/// Starts the attempt, or returns the one already started. Two "start"
+/// requests can arrive together (a double click, or a page mounting twice);
+/// the second must get the same attempt rather than a unique-constraint error.
+fn insert_or_get_attempt(
+    conn: &rusqlite::Connection,
+    delivery_id: Uuid,
+    student_id: Uuid,
+    now: chrono::DateTime<Utc>,
+    expires: Option<chrono::DateTime<Utc>>,
+    max_points: f64,
+) -> HostResult<Uuid> {
+    conn.execute(
+        "INSERT INTO quiz_attempts(id,delivery_id,student_id,started_at,expires_at,max_points) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(delivery_id,student_id) DO NOTHING",
+        rusqlite::params![Uuid::new_v4().to_string(), delivery_id.to_string(), student_id.to_string(), now.to_rfc3339(), expires.map(|v| v.to_rfc3339()), max_points],
+    )?;
+    let id: String = conn.query_row(
+        "SELECT id FROM quiz_attempts WHERE delivery_id=?1 AND student_id=?2",
+        rusqlite::params![delivery_id.to_string(), student_id.to_string()],
+        |r| r.get(0),
+    )?;
+    parse_uuid(&id)
+}
+
 fn store_response(
     conn: &rusqlite::Connection,
     attempt_id: Uuid,
@@ -967,6 +990,9 @@ mod tests {
         let stored = |question: Uuid| -> (Option<f64>, Option<String>, String) {
             conn.query_row("SELECT points,graded_at,answer_json FROM quiz_responses WHERE attempt_id=?1 AND question_id=?2",rusqlite::params![attempt.to_string(),question.to_string()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap()
         };
+
+        let again = insert_or_get_attempt(&conn, delivery, student, Utc::now(), None, 3.0).unwrap();
+        assert_eq!(again, attempt, "starting twice returns the same attempt");
 
         let (kind, key, max) = question_key(&conn, attempt, choice).unwrap();
         store_response(
