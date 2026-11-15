@@ -117,7 +117,7 @@ export function AppUpdater({ appName }: { appName: string }) {
   };
 
   return (
-    <Panel title="App updates" eyebrow="GitHub Releases">
+    <Panel title="App updates">
       <div className="updater-card">
         <div>
           <strong>{appName}</strong>
@@ -153,8 +153,8 @@ export function AppUpdater({ appName }: { appName: string }) {
           </Button>
         </div>
         <small>
-          Windows setup and AppImage installations update in place. Linux
-          package-manager installs may ask you to download the newest .deb manually.
+          Windows and AppImage installs update in place. A .deb install needs the
+          new package from Manual downloads.
         </small>
       </div>
     </Panel>

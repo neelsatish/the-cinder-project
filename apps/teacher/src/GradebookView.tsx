@@ -11,7 +11,7 @@ import {
   BrandMark,
   Button,
   EmptyState,
-  Field,
+  Icon,
   CinderApi,
   Modal,
   PageHeader,
@@ -40,7 +40,16 @@ export function GradebookView({
   assignments: Assignment[];
   onUpdated: () => Promise<void>;
 }) {
-  const [classroomId, setClassroomId] = useState(classrooms[0]?.id ?? "");
+  // Open on a classroom that has something to show, not merely the first by name.
+  const preferredClassroom = () =>
+    classrooms.find((room) => assignments.some((item) => item.classroom_id === room.id && item.status !== "draft"))?.id
+    ?? classrooms[0]?.id
+    ?? "";
+  const [classroomId, setClassroomId] = useState(preferredClassroom);
+  useEffect(() => {
+    if (!classrooms.some((room) => room.id === classroomId)) setClassroomId(preferredClassroom());
+    // Only when the classroom list changes underneath the selection.
+  }, [classrooms]);
   const [roster, setRoster] = useState<User[]>([]);
   const [byAssignment, setByAssignment] = useState<
     Record<string, Submission[]>
@@ -204,73 +213,35 @@ export function GradebookView({
     if (gradebookRef.current) gradebookRef.current.resetWorkbook();
     else
       localStorage.removeItem(`cinder.teacher.workbook.${classroomId}`);
-    setStatus("Sheet reset. Audited grades were kept.");
+    setStatus("Sheet reset. Saved marks were kept.");
     setResetOpen(false);
   };
 
   if (!classrooms.length)
     return (
-      <div className="page">
-        <PageHeader
-          eyebrow="Gradebook"
-          title="Structured grading sheet"
-          description="Create a classroom before opening a gradebook."
-        />
-        <Panel>
-          <EmptyState
-            icon="spreadsheet"
-            title="No classroom gradebook"
-            description="Create a classroom and assignments first."
-          />
-        </Panel>
+      <div className="workspace">
+        <div className="page">
+          <PageHeader title="Gradebook" />
+          <Panel><EmptyState icon="spreadsheet" title="No classrooms yet" description="Create a classroom and set an assignment to start a gradebook." /></Panel>
+        </div>
       </div>
     );
   return (
     <div className="gradebook-page">
-      <div className="gradebook-header">
-        <div>
-          <p className="eyebrow">Gradebook</p>
-          <h1>Structured grading sheet</h1>
-        </div>
-        <div className="gradebook-classroom-field">
-          <Field label="Classroom">
-            <select
-              value={classroomId}
-              onChange={(event) => setClassroomId(event.target.value)}
-            >
-              {classrooms.map((room) => (
-                <option value={room.id} key={room.id}>
-                  {room.name}
-                </option>
-              ))}
+      <PageHeader
+        title="Gradebook"
+        action={
+          <>
+            <select aria-label="Classroom" className="gradebook-classroom" value={classroomId} onChange={(event) => setClassroomId(event.target.value)}>
+              {classrooms.map((room) => <option value={room.id} key={room.id}>{room.name}</option>)}
             </select>
-          </Field>
-        </div>
-        <div className="page-action">
-          <div className="list-actions">
-            <Button icon="refresh" onClick={() => void load()}>
-              Refresh
-            </Button>
-            <Button variant="danger" onClick={() => setResetOpen(true)}>
-              Reset sheet
-            </Button>
-            <Button
-              icon="download"
-              onClick={() => void exportCsv()}
-              disabled={!roster.length}
-            >
-              Export CSV
-            </Button>
-            <Button
-              icon="download"
-              onClick={printGradebook}
-              disabled={!roster.length}
-            >
-              Export PDF
-            </Button>
-          </div>
-        </div>
-      </div>
+            <button type="button" className="icon-button" title="Reload marks" aria-label="Reload marks" onClick={() => void load()}><Icon name="refresh" /></button>
+            <Button icon="download" onClick={() => void exportCsv()} disabled={!roster.length}>Export CSV</Button>
+            <Button onClick={printGradebook} disabled={!roster.length}>Print</Button>
+            <Button variant="ghost" onClick={() => setResetOpen(true)}>Reset sheet…</Button>
+          </>
+        }
+      />
       <div className="gradebook-layout">
         <Panel className="gradebook-sheet panel-flush univer-gradebook-panel">
           {roomAssignments.length ? (
@@ -296,30 +267,22 @@ export function GradebookView({
               />
             </Suspense>
           ) : (
-            <EmptyState icon="spreadsheet" title="No published assignments" description="Publish an assignment to add a gradebook column." />
+            <EmptyState icon="spreadsheet" title="No assignments in this classroom yet" description="Each published assignment becomes a column." />
           )}
-          <div className="sheet-status">{savingCell ? "Saving audited grade…" : status}</div>
+          <div className="sheet-status">{savingCell ? "Saving…" : status}{status === "Saved to Cinder" || savingCell ? " · Marks typed here are returned to students straight away." : ""}</div>
         </Panel>
       </div>
       {resetOpen ? (
         <Modal
-          title="Reset this gradebook sheet?"
-          description="This removes custom sheets, columns, formulas, values and formatting from this classroom on this Teacher computer."
+          title="Reset this sheet?"
+          description="Extra sheets, columns, formulas and formatting you added on this computer are removed."
           onClose={() => setResetOpen(false)}
         >
-          <div className="form-stack">
-            <p className="form-hint">
-              Cinder will rebuild the default Student, Username and assignment
-              columns. Saved grades, feedback and grade history will not be
-              deleted.
-            </p>
-            <div className="list-actions">
-              <Button variant="danger" onClick={resetSheet}>
-                Reset local sheet
-              </Button>
-              <Button variant="ghost" onClick={() => setResetOpen(false)}>
-                Cancel
-              </Button>
+          <div className="modal-content form-stack">
+            <p>Marks saved to Cinder Host are kept and come back when the sheet is rebuilt.</p>
+            <div className="form-actions">
+              <Button onClick={() => setResetOpen(false)}>Cancel</Button>
+              <Button variant="danger" onClick={resetSheet}>Reset sheet</Button>
             </div>
           </div>
         </Modal>

@@ -188,9 +188,15 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
     );
 
     useEffect(() => {
-      if (!containerRef.current) return;
+      const host = containerRef.current;
+      if (!host) return;
+      // Each instance gets its own element, so a new sheet never mounts into
+      // the DOM of one that is still being torn down.
+      const mount = document.createElement("div");
+      mount.className = "univer-mount";
+      host.appendChild(mount);
       const { univer, univerAPI } = createSheetUniver(
-        containerRef.current,
+        mount,
         theme === "dark",
       );
       setDarkModeRef.current = (darkMode) => univerAPI.toggleDarkMode(darkMode);
@@ -404,7 +410,13 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         resetWorkbookRef.current = () => undefined;
         syncAuthoritativeRef.current = () => undefined;
         setDarkModeRef.current = () => undefined;
-        univer.dispose();
+        // Univer unmounts its own React root. Doing that inside React's commit
+        // ("synchronously unmount a root while rendering") left the next
+        // instance blank, so it is deferred until React has finished.
+        window.setTimeout(() => {
+          univer.dispose();
+          mount.remove();
+        }, 0);
       };
     }, [props.classroomId]);
 

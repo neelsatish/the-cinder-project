@@ -640,11 +640,9 @@ export function PapersView({
     : savedPapers;
 
   return (
-    <div className="page papers-page">
+    <div className="papers-page">
       <PageHeader
-        eyebrow="Assessment"
-        title="Question papers"
-        description="Build a paper from official past papers, keep its marking scheme private, then publish it to a classroom."
+        title="Papers"
         action={<Button variant="primary" icon="plus" onClick={startNewPaper}>New paper</Button>}
       />
       <div className="papers-workspace">
@@ -700,7 +698,7 @@ export function PapersView({
               <p className="papers-library-empty">
                 {savedPapers.length
                   ? "No paper matches that filter."
-                  : "Papers you create are saved here on the school server."}
+                  : "No saved papers yet."}
               </p>
             )}
           </div>
@@ -738,6 +736,8 @@ function initialPaperSpec(paper: SavedQuestionPaper | null): GeneratedPaper {
     return EMPTY_GENERATED_PAPER;
   }
 }
+
+const STEP_LABEL = { options: "Setup", feed: "Sources", editing: "Paper" } as const;
 
 const DEFAULT_PAPER_ADVANCED: PaperAdvancedOptions = {
   year: String(new Date().getFullYear()),
@@ -784,10 +784,8 @@ function QuestionPaperStudio({
   );
   const [board, setBoard] = useState<ExamBoard>(activePaper?.board ?? "CIE");
   const [syllabusCode, setSyllabusCode] = useState(
-    activePaper?.syllabusCode ??
-      classrooms.find((classroom) => classroom.id === activePaper?.classroomId)?.subject_code ??
-      classrooms[0]?.subject_code ??
-      "",
+    // A classroom's own subject code (e.g. "MATH9") is not an exam syllabus code.
+    activePaper?.syllabusCode ?? "",
   );
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(
     activePaper?.difficulty ?? 3,
@@ -1364,15 +1362,15 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
             onClick={() => setWorkspaceSection(item)}
           >
             <span>{index + 1}</span>
-            {item[0].toUpperCase() + item.slice(1)}
+            {STEP_LABEL[item]}
           </button>
         ))}
       </nav>
 
       {workspaceSection === "options" ? <section className="paper-section paper-workflow-section" aria-labelledby="paper-options-heading">
         <div className="paper-section-head">
-          <div><span className="eyebrow">Step 1</span><h2 id="paper-options-heading">Options</h2></div>
-          <span className="paper-section-note">Set the shape of the paper.</span>
+          <div><span className="eyebrow">Step 1</span><h2 id="paper-options-heading">Setup</h2></div>
+          <span className="paper-section-note" />
         </div>
         <div className="paper-grid paper-options-grid">
           <Field label="Classroom">
@@ -1382,7 +1380,6 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
                 const id = event.target.value;
                 setClassroomId(id);
                 setSelected([]);
-                setSyllabusCode(classrooms.find((item) => item.id === id)?.subject_code ?? "");
               }}
             >
               <option value="">Choose a classroom</option>
@@ -1418,24 +1415,24 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           </Field>
         </div>
         <div className="paper-section-actions">
-          <Button variant="primary" onClick={() => setWorkspaceSection("feed")}>Continue to feed</Button>
+          <Button variant="primary" onClick={() => setWorkspaceSection("feed")}>Next: sources</Button>
         </div>
       </section> : null}
 
       {workspaceSection === "feed" ? <><section className="paper-section paper-workflow-section" aria-labelledby="paper-feed-heading">
         <div className="paper-section-head">
-          <div><span className="eyebrow">Step 2</span><h2 id="paper-feed-heading">Feed</h2></div>
+          <div><span className="eyebrow">Step 2</span><h2 id="paper-feed-heading">Sources</h2></div>
           <span className="paper-section-note">
             {referenceCount
               ? `${referenceCount} reference${referenceCount === 1 ? "" : "s"} selected`
-              : "AI can work from your options alone"}
+              : "Optional: AI can write from the setup alone"}
           </span>
         </div>
 
         <Field label="What should the paper focus on?" hint="Question types, learning goals, accommodations or anything the options do not cover.">
           <textarea maxLength={2000} value={teacherBrief} placeholder="For example: include one data-response question and avoid logarithms." onChange={(event) => setTeacherBrief(event.target.value)} />
         </Field>
-        <Field label="How should AI use the feed?">
+        <Field label="How should AI use the sources?">
           <select
             value={sourceMode}
             onChange={(event) => {
@@ -1572,9 +1569,9 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           onClick={() => void generate()}
           disabled={busy || !title.trim() || !classroomId}
         >
-          {busy ? "Creating paper…" : paper.questions.length ? "Create paper again" : "Create paper"}
+          {busy ? "Drafting…" : paper.questions.length ? "Draft again with AI" : "Draft with AI"}
         </Button>
-        <Button variant="secondary" onClick={() => setWorkspaceSection("editing")}>Open editing</Button>
+        <Button variant="secondary" onClick={() => setWorkspaceSection("editing")}>Write it myself</Button>
         {paperId ? (
           <Button variant="ghost" disabled={busy || deleting} onClick={() => void deleteCurrentPaper()}>
             {deleting ? "Deleting…" : "Delete this paper"}
@@ -1590,7 +1587,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
 
       {workspaceSection === "editing" ? <section className="paper-section paper-preview-section paper-workflow-section" aria-labelledby="paper-preview-heading">
         <div className="paper-section-head">
-          <div><span className="eyebrow">Step 3</span><h2 id="paper-preview-heading">Editing</h2></div>
+          <div><span className="eyebrow">Step 3</span><h2 id="paper-preview-heading">Paper</h2></div>
           <span className="paper-section-note">
             {paperId ? "Saved to the school server as you work." : "Draft not saved yet."}
           </span>
@@ -1695,7 +1692,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
                 <h3>Your questions will appear here.</h3>
                 <p>Choose what the AI should use in Feed, or add a question by hand.</p>
                 <div>
-                  <Button variant="primary" onClick={() => setWorkspaceSection("feed")}>Open feed</Button>
+                  <Button variant="primary" onClick={() => setWorkspaceSection("feed")}>Choose sources</Button>
                   <Button variant="secondary" icon="plus" onClick={addBlankQuestion}>Add question</Button>
                 </div>
               </div>

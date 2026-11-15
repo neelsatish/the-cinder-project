@@ -13,34 +13,17 @@
   --forge-font-ui: var(--font-sans);
 }
 
-.boot-screen {
-  height: 100%;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-}
 .app-alert {
   margin: var(--space-4) var(--space-8) 0;
 }
 .panel-message {
   padding: var(--space-3) var(--space-4) 0;
 }
-.panel-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
 .stack-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-}
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: var(--space-3);
 }
 .join-row {
   display: flex;
@@ -50,17 +33,6 @@
 }
 .join-row .field {
   flex: 1;
-}
-.list-open {
-  padding: 0;
-  border: 0;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-}
-.list-open:hover strong {
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
 /* Sidebar timer */
@@ -159,11 +131,6 @@
 }
 
 /* Assignment */
-.assignment-instructions {
-  max-width: 70ch;
-  color: var(--text-soft);
-  white-space: pre-wrap;
-}
 .answer-note {
   display: flex;
   align-items: center;
@@ -177,15 +144,6 @@
   font-size: var(--text-xl);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-}
-.comment {
-  margin: 0;
-  padding-left: var(--space-3);
-  border-left: 2px solid var(--border-strong);
-}
-.comment strong {
-  font-size: var(--text-sm);
-  font-weight: 500;
 }
 .handed-in-text {
   max-height: 320px;
@@ -395,85 +353,7 @@
   display: flex;
   padding: var(--space-4);
 }
-.reader-page .pdf-pane {
-  flex: 1;
-}
-.pdf-pane {
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--border);
-  background: var(--surface);
-}
-.reader-page .pdf-pane {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-.pdf-pane-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--border);
-}
-.pdf-pane-bar strong {
-  min-width: 0;
-  overflow: hidden;
-  font-weight: 500;
-  font-size: var(--text-sm);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.pdf-pane-tools {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-1);
-}
-.pdf-pane-tools button {
-  min-width: 28px;
-  min-height: 28px;
-  padding: 0 7px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-soft);
-}
-.pdf-pane-tools button:hover {
-  background: var(--surface-high);
-  color: var(--text);
-}
-.pdf-pane-tools span {
-  padding: 0 var(--space-1);
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-}
-.pdf-zoom-select {
-  width: auto;
-  min-height: 28px;
-  padding: 0 26px 0 8px;
-  font-size: var(--text-sm);
-}
-.pdf-pane-scroll {
-  flex: 1;
-  min-height: 0;
-  padding: var(--space-4);
-  overflow: auto;
-  background: var(--document-canvas);
-}
-.pdf-page {
-  display: block;
-  margin: 0 auto var(--space-4);
-  background: white;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-}
-
-/* School connection dialog */
+.reader-page /* School connection dialog */
 .host-list {
   display: grid;
   gap: var(--space-1);

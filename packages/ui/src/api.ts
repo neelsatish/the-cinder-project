@@ -72,6 +72,10 @@ export class CinderApi {
     this.token = token;
   }
 
+  get currentToken() {
+    return this.token;
+  }
+
   private async request<T>(
     path: string,
     init: RequestInit = {},
