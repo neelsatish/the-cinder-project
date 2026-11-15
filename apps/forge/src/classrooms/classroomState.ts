@@ -45,11 +45,8 @@ export function checkedLiveResult(score: number | null, elapsedSeconds: number, 
 }
 
 export function formatAssignmentDue(value: string | null) {
-  if (!value) return "No deadline";
+  if (!value) return "No due date";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No deadline";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  if (Number.isNaN(date.getTime())) return "No due date";
+  return `Due ${new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(date)}`;
 }

@@ -1,4 +1,4 @@
-import { type CinderApi, type QuizAttempt, type QuizDelivery } from "@cinder/ui";
+import { Badge, Button, EmptyState, formatWhen, Icon, Panel, type CinderApi, type QuizAttempt, type QuizDelivery } from "@cinder/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export function StudentQuizzes({ api, classroomId, online, focusDeliveryId }: { api: CinderApi; classroomId: string; online: boolean; focusDeliveryId?: string | null }) {
@@ -9,6 +9,7 @@ export function StudentQuizzes({ api, classroomId, online, focusDeliveryId }: { 
   const [message, setMessage] = useState("");
   const [now, setNow] = useState(Date.now());
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
   const dirty = useRef(new Map<string, unknown>());
   const pendingSave = useRef<Promise<void>>(Promise.resolve());
   const refresh = useCallback(async () => setDeliveries(await api.quizDeliveries(classroomId)), [api, classroomId]);
@@ -51,7 +52,8 @@ export function StudentQuizzes({ api, classroomId, online, focusDeliveryId }: { 
   }, [online, attempt?.id, attempt?.submitted_at]);
 
   async function submit() {
-    if (!attempt || !window.confirm("Submit this quiz? You cannot change answers afterwards.")) return;
+    setConfirmSubmit(false);
+    if (!attempt) return;
     try {
       for (const [questionId, answer] of Object.entries(answers)) if (dirty.current.has(questionId)) await save(questionId, answer);
       await pendingSave.current;
@@ -68,53 +70,97 @@ export function StudentQuizzes({ api, classroomId, online, focusDeliveryId }: { 
     const question = attempt.questions[index];
     const progress = attempt.questions.length ? ((index + 1) / attempt.questions.length) * 100 : 0;
     return (
-      <section className="forge-panel quiz-runner">
-        <header className="quiz-runner-header">
-          <div><span className="forge-kicker">Quiz</span><h2>{attempt.delivery.title}</h2></div>
-          <div className="quiz-runner-meta"><strong>Question {index + 1} of {attempt.questions.length}</strong>{remaining !== null ? <time>{Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</time> : null}</div>
-        </header>
-        <div className="quiz-progress" aria-hidden="true"><span style={{ width: `${progress}%` }} /></div>
-        {attempt.delivery.instructions ? <p className="quiz-instructions">{attempt.delivery.instructions}</p> : null}
-
-        {attempt.submitted_at ? (
-          <div className="quiz-submitted">
-            <div className="quiz-submission-summary"><span className="forge-kicker">Submitted</span><h3>{attempt.released ? `${attempt.score ?? 0} / ${attempt.max_points}` : "Waiting for results"}</h3><p>{attempt.released ? "Your marked answers are below." : "Your result will appear after your teacher releases it."}</p></div>
-            {attempt.released ? <div className="quiz-result-list">{attempt.questions.map((item, questionIndex) => { const response = attempt.responses.find((entry) => entry.question_id === item.id); return <article className="quiz-result" key={item.id}><span className="quiz-result-number">{questionIndex + 1}</span><div><strong>{item.prompt}</strong><p>Your answer: {String(response?.answer ?? "Not answered")}</p><p className={response?.correct === true ? "quiz-correct" : response?.correct === false ? "quiz-incorrect" : ""}>{response?.correct === true ? "Correct" : response?.correct === false ? "Incorrect" : "Reviewed"} · {response?.points ?? 0}/{item.max_points}</p>{response?.canonical_answer !== null && item.kind !== "short_answer" ? <p>Correct answer: {String(response?.canonical_answer)}</p> : null}{response?.feedback ? <p>{response.feedback}</p> : null}</div></article>; })}</div> : null}
-            <button className="forge-button secondary" type="button" onClick={() => setAttempt(null)}>Back to quizzes</button>
-          </div>
-        ) : question ? (
-          <>
-            <article className="quiz-question">
-              <span className="forge-kicker">{question.max_points} point{question.max_points === 1 ? "" : "s"}</span>
-              <h3>{question.prompt}</h3>
-              <div className="quiz-answer-area">
+      <Panel
+        title={attempt.delivery.title}
+        action={attempt.submitted_at ? null : <span className="list-meta">Question {index + 1} of {attempt.questions.length}{remaining !== null ? ` · ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")} left` : ""}</span>}
+      >
+        <div className="quiz-runner">
+          {!attempt.submitted_at ? <div className="quiz-progress" aria-hidden="true"><span style={{ width: `${progress}%` }} /></div> : null}
+          {attempt.delivery.instructions && !attempt.submitted_at ? <p className="muted">{attempt.delivery.instructions}</p> : null}
+          {attempt.submitted_at ? (
+            <div className="form-stack">
+              <p className="mark-line">{attempt.released ? `${attempt.score ?? 0} / ${attempt.max_points}` : "Handed in"}</p>
+              <p className="muted">{attempt.released ? "Your marked answers are below." : "Your result appears here when your teacher releases it."}</p>
+              {attempt.released ? (
+                <ol className="quiz-results">
+                  {attempt.questions.map((item) => {
+                    const response = attempt.responses.find((entry) => entry.question_id === item.id);
+                    return (
+                      <li key={item.id}>
+                        <strong>{item.prompt}</strong>
+                        <p>Your answer: {String(response?.answer ?? "Not answered")}</p>
+                        <p className={response?.correct === true ? "quiz-correct" : response?.correct === false ? "quiz-incorrect" : ""}>
+                          {response?.correct === true ? "Correct" : response?.correct === false ? "Incorrect" : "Marked"} · {response?.points ?? 0}/{item.max_points}
+                        </p>
+                        {response?.canonical_answer !== null && item.kind !== "short_answer" ? <p className="muted">Correct answer: {String(response?.canonical_answer)}</p> : null}
+                        {response?.feedback ? <p>{response.feedback}</p> : null}
+                      </li>
+                    );
+                  })}
+                </ol>
+              ) : null}
+              <div className="panel-actions"><Button onClick={() => setAttempt(null)}>Back to quizzes</Button></div>
+            </div>
+          ) : question ? (
+            <>
+              <fieldset className="quiz-question">
+                <legend>{question.prompt}</legend>
+                <small className="muted">{question.max_points} mark{question.max_points === 1 ? "" : "s"}</small>
                 {question.kind === "single_choice" ? question.options.map((option) => <label className="quiz-option" key={option}><input type="radio" name={question.id} checked={answers[question.id] === option} onChange={() => void save(question.id, option)} /><span>{option}</span></label>) : null}
                 {question.kind === "true_false" ? [true, false].map((value) => <label className="quiz-option" key={String(value)}><input type="radio" name={question.id} checked={answers[question.id] === value} onChange={() => void save(question.id, value)} /><span>{value ? "True" : "False"}</span></label>) : null}
                 {question.kind === "short_answer" ? <textarea rows={6} placeholder="Write your answer" value={String(answers[question.id] ?? "")} onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))} onBlur={() => void save(question.id, answers[question.id] ?? "")} /> : null}
-              </div>
-            </article>
-            <footer className="quiz-runner-actions"><button className="forge-button secondary" type="button" disabled={index === 0} onClick={() => setIndex(index - 1)}>Previous</button><span>{message || (!online ? "Working offline" : "Changes save automatically")}</span>{index < attempt.questions.length - 1 ? <button className="forge-button primary" type="button" onClick={() => setIndex(index + 1)}>Next</button> : <button className="forge-button primary" type="button" disabled={!online || remaining === 0} onClick={() => void submit()}>Submit quiz</button>}</footer>
-          </>
-        ) : null}
-      </section>
+              </fieldset>
+              <footer className="quiz-actions">
+                <Button disabled={index === 0} onClick={() => setIndex(index - 1)}>Previous</Button>
+                <span className="form-hint">{message || (!online ? "Offline: answers will be sent when you reconnect" : "Answers save as you go")}</span>
+                {index < attempt.questions.length - 1 ? (
+                  <Button variant="primary" onClick={() => setIndex(index + 1)}>Next</Button>
+                ) : confirmSubmit ? (
+                  <span className="panel-actions">
+                    <Button variant="ghost" onClick={() => setConfirmSubmit(false)}>Keep working</Button>
+                    <Button variant="primary" disabled={!online || remaining === 0} onClick={() => void submit()}>Hand in now</Button>
+                  </span>
+                ) : (
+                  <Button variant="primary" disabled={!online || remaining === 0} onClick={() => setConfirmSubmit(true)}>Hand in…</Button>
+                )}
+              </footer>
+            </>
+          ) : null}
+        </div>
+      </Panel>
     );
   }
 
   const nowDate = new Date();
   return (
-    <section className="forge-panel student-quiz-list">
-      <div className="panel-heading student-quiz-heading">
-        <div><span className="forge-kicker">Assessment</span><h2>Quizzes</h2><p>Timed and take-home quizzes for this classroom.</p></div>
-        <button className="forge-button secondary" type="button" onClick={() => void refresh()}>Refresh</button>
-      </div>
-      {deliveries.length ? <div className="quiz-deliveries">{deliveries.map((delivery) => {
-        const notOpen = Boolean(delivery.opens_at && new Date(delivery.opens_at) > nowDate);
-        const closed = Boolean(delivery.due_at && new Date(delivery.due_at) <= nowDate);
-        const releasedWithoutSubmission = Boolean(delivery.results_released_at && delivery.attempt_state !== "submitted");
-        const state = delivery.attempt_state === "submitted" ? delivery.results_released_at ? "View result" : "Submitted" : releasedWithoutSubmission ? "Closed" : delivery.attempt_id ? "Resume" : notOpen ? "Not open" : closed ? "Closed" : "Start";
-        return <button className="quiz-delivery-card" type="button" key={delivery.id} disabled={notOpen || closed || releasedWithoutSubmission} onClick={() => void open(delivery)}><span><strong>{delivery.title}</strong><small>{delivery.kind === "live" ? "Live quiz" : delivery.due_at ? `Due ${new Date(delivery.due_at).toLocaleString()}` : "Homework"}</small></span><span className="quiz-delivery-state">{state}</span></button>;
-      })}</div> : <div className="student-quiz-empty"><strong>No quizzes yet</strong><p>Your teacher’s quizzes will appear here when they are ready.</p></div>}
+    <>
+      <Panel className="panel-flush">
+        {deliveries.length ? (
+          <div className="list">
+            {deliveries.map((delivery) => {
+              const submitted = delivery.attempt_state === "submitted";
+              const notOpen = Boolean(delivery.opens_at && new Date(delivery.opens_at) > nowDate);
+              const closed = Boolean(delivery.due_at && new Date(delivery.due_at) <= nowDate);
+              const missed = Boolean(delivery.results_released_at && !submitted);
+              // A handed-in quiz always opens, so the result stays readable after the due date.
+              const locked = !submitted && (notOpen || closed || missed);
+              const state = submitted ? (delivery.results_released_at ? "Result ready" : "Handed in") : missed || closed ? "Closed" : delivery.attempt_id ? "In progress" : notOpen ? "Not open yet" : "Start";
+              const tone = submitted ? (delivery.results_released_at ? "good" : "accent") : delivery.attempt_id ? "warning" : "neutral";
+              return (
+                <button className="list-item" type="button" key={delivery.id} disabled={locked} onClick={() => void open(delivery)}>
+                  <span className="list-icon"><Icon name="check" /></span>
+                  <span className="list-copy">
+                    <strong>{delivery.title}</strong>
+                    <span>{delivery.kind === "live" ? "Live quiz" : delivery.due_at ? `Due ${formatWhen(delivery.due_at)}` : "No due date"}{delivery.time_limit_minutes ? ` · ${delivery.time_limit_minutes} minutes` : ""}</span>
+                  </span>
+                  <Badge tone={tone}>{state}</Badge>
+                </button>
+              );
+            })}
+          </div>
+        ) : <EmptyState icon="check" title="No quizzes yet" />}
+      </Panel>
       {message ? <p className="form-hint" role="status">{message}</p> : null}
-    </section>
+    </>
   );
 }

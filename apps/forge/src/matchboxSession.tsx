@@ -357,7 +357,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
     void remoteLogout;
   }
 
-  if (loading) return <div className="matchbox-boot">Starting Cinder Student…</div>;
+  if (loading) return <div className="boot-screen">Opening Cinder Student…</div>;
   if (!user && showHostOutdated) return (
     <>
       <HostOutdatedScreen appName="Cinder Student" baseUrl={baseUrl} onOpenConnection={() => setConnectionOpen(true)} />
@@ -368,13 +368,13 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
     <>
       <LoginScreen
         role="student"
-        subtitle="Your classes and writing workspace, together in Cinder Student."
-        helper="Sign in with the account created by your teacher."
+        helper="Use the account your teacher created for you."
         onSubmit={login}
         rememberedUsernames={knownAccounts}
-        offlineHint={online ? `Connected to ${baseUrl}` : "Teacher computer not found. Check the school connection before signing in."}
-      />
-      <button type="button" className="matchbox-connection-button" onClick={() => setConnectionOpen(true)}>School connection</button>
+        offlineHint={online ? `Connected to ${baseUrl}` : "Cinder Host was not found. Check the school connection before signing in."}
+      >
+        <button type="button" className="auth-secondary-action" onClick={() => setConnectionOpen(true)}>School connection</button>
+      </LoginScreen>
       {connectionOpen ? <ConnectionModal baseUrl={baseUrl} deviceLabel={deviceLabel} onClose={() => setConnectionOpen(false)} onSave={saveConnection} /> : null}
     </>
   );
