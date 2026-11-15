@@ -36,6 +36,9 @@ export function AppShell<T extends string>({
   search,
   footer,
   accountActions,
+  statusLabel,
+  logoutLabel = "Sign out",
+  logoutIcon = "logout",
   children,
 }: {
   roleLabel: string;
@@ -54,6 +57,10 @@ export function AppShell<T extends string>({
   footer?: ReactNode;
   /** Extra icon buttons on the account row. */
   accountActions?: ReactNode;
+  /** Replaces "Connected"/"Offline" under the name. */
+  statusLabel?: string;
+  logoutLabel?: string;
+  logoutIcon?: IconName;
   children: ReactNode;
 }) {
   return (
@@ -88,7 +95,7 @@ export function AppShell<T extends string>({
             <span className="account-copy">
               <strong title={user.display_name}>{user.display_name}</strong>
               <span className={`sync-status${online ? "" : " is-offline"}`}>
-                {online ? "Connected" : "Offline"}
+                {statusLabel ?? (online ? "Connected" : "Offline")}
               </span>
             </span>
             {accountActions}
@@ -104,8 +111,8 @@ export function AppShell<T extends string>({
                 <Icon name="refresh" />
               </button>
             ) : null}
-            <button className="icon-button" type="button" onClick={onLogout} title="Sign out" aria-label="Sign out">
-              <Icon name="logout" />
+            <button className="icon-button" type="button" onClick={onLogout} title={logoutLabel} aria-label={logoutLabel}>
+              <Icon name={logoutIcon} />
             </button>
           </div>
         </div>

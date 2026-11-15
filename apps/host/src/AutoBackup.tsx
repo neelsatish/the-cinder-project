@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { Button, formatDateTime, Panel } from "@cinder/ui";
 import { useCallback, useEffect, useState } from "react";
 
 type AutoBackupStatus = {
@@ -10,14 +11,7 @@ type AutoBackupStatus = {
   ready: boolean;
 };
 
-const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
-const when = (value: string | null) =>
-  value
-    ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
-        new Date(value),
-      )
-    : "Not yet";
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /** Daily encrypted backups to a folder the school chooses, ideally another drive. */
 export function AutoBackupCard({ token }: { token: string }) {
@@ -36,10 +30,10 @@ export function AutoBackupCard({ token }: { token: string }) {
   }, [token]);
   useEffect(() => void load(), [load]);
 
-  async function save(folder: string | null) {
+  async function save(folder: string | null, nextKeep = keep) {
     setMessage("");
     try {
-      const next = await invoke<AutoBackupStatus>("save_auto_backup", { token, folder, keep });
+      const next = await invoke<AutoBackupStatus>("save_auto_backup", { token, folder, keep: nextKeep });
       setStatus(next);
       setMessage(folder ? "Daily backups are on." : "Daily backups are off.");
     } catch (error) {
@@ -48,57 +42,45 @@ export function AutoBackupCard({ token }: { token: string }) {
   }
 
   async function chooseFolder() {
-    const folder = await open({
-      directory: true,
-      multiple: false,
-      title: "Choose where daily backups go",
-    });
+    const folder = await open({ directory: true, multiple: false, title: "Choose where daily backups go" });
     if (typeof folder === "string") await save(folder);
   }
 
   return (
-    <section className="card">
-      <h2>Daily backups</h2>
-      <p>
-        Once a day while Cinder Host is open, an encrypted, verified copy of the school is saved,
-        even while the server runs. The oldest are removed beyond the number kept.
-      </p>
-      {status && !status.ready && (
-        <p className="warning">
-          Lock and unlock Cinder Host with its password once so it can prepare encrypted backups.
-        </p>
-      )}
-      <label>
-        Keep this many
-        <select value={keep} onChange={(event) => setKeep(Number(event.target.value))}>
-          {[7, 14, 30, 60].map((count) => (
-            <option key={count} value={count}>
-              {count}
-            </option>
-          ))}
-        </select>
-      </label>
-      <small className="card-note">
-        {status?.folder ? `Saving to ${status.folder}. ` : "Off. "}
-        Last daily backup: {when(status?.last ?? null)}.
-      </small>
-      {status?.last_error && <p className="error">Last attempt failed: {status.last_error}</p>}
-      <div className="card-actions">
-        <button className="primary" onClick={() => void chooseFolder()}>
-          {status?.folder ? "Change folder" : "Choose folder and turn on"}
-        </button>
-        {status?.folder && (
-          <>
-            <button className="secondary" onClick={() => void save(status.folder)}>
-              Save number kept
-            </button>
-            <button className="secondary" onClick={() => void save(null)}>
-              Turn off
-            </button>
-          </>
-        )}
+    <Panel title="Daily backups" className="panel-flush">
+      <div className="settings-list">
+        <div className="settings-row">
+          <div>
+            <strong>{status?.folder ? "On" : "Off"}</strong>
+            <small>
+              {status?.folder ? `Saving to ${status.folder}. ` : "Once a day while Cinder Host is open, an encrypted, checked copy is saved. "}
+              Last daily backup: {formatDateTime(status?.last ?? null, "not yet")}.
+            </small>
+          </div>
+          <span className="panel-actions">
+            {status?.folder ? <Button variant="ghost" onClick={() => void save(null)}>Turn off</Button> : null}
+            <Button variant={status?.folder ? "secondary" : "primary"} onClick={() => void chooseFolder()}>{status?.folder ? "Change folder…" : "Choose folder…"}</Button>
+          </span>
+        </div>
+        <div className="settings-row">
+          <div><strong>Copies to keep</strong><small>Older daily copies are removed beyond this number.</small></div>
+          <select
+            className="toolbar-select"
+            aria-label="Copies to keep"
+            value={keep}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              setKeep(next);
+              if (status?.folder) void save(status.folder, next);
+            }}
+          >
+            {[7, 14, 30, 60].map((count) => <option key={count} value={count}>{count}</option>)}
+          </select>
+        </div>
       </div>
-      {message && <small className="card-note">{message}</small>}
-    </section>
+      {status && !status.ready ? <p className="notice notice-warning panel-inset">Lock and unlock Cinder Host with its password once so it can prepare encrypted backups.</p> : null}
+      {status?.last_error ? <p className="form-error panel-inset" role="alert">The last daily backup failed: {status.last_error}</p> : null}
+      {message ? <p className="form-hint panel-inset" role="status">{message}</p> : null}
+    </Panel>
   );
 }

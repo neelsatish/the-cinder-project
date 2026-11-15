@@ -14,7 +14,7 @@
       "title": "Cinder Host", "width": 1280, "height": 820,
       "minWidth": 960, "minHeight": 640, "resizable": true
     }],
-    "security": { "csp": "default-src 'self'; img-src 'self' data: blob:; frame-src blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost https:;" }
+    "security": { "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost https:; worker-src 'self' blob:" }
   },
   "bundle": {
     "active": true,

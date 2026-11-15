@@ -7,6 +7,7 @@ import {
   DotsThreeVertical,
   FilePdf,
   Image,
+  LockSimple,
   UploadSimple,
   ArrowsClockwise,
   CalendarCheck,
@@ -82,7 +83,8 @@ export type IconName =
   | "pdf"
   | "image"
   | "more"
-  | "upload";
+  | "upload"
+  | "lock";
 
 const components: Record<IconName, PhosphorIcon> = {
   dashboard: SquaresFour,
@@ -124,6 +126,7 @@ const components: Record<IconName, PhosphorIcon> = {
   image: Image,
   more: DotsThreeVertical,
   upload: UploadSimple,
+  lock: LockSimple,
 };
 
 export function Icon({

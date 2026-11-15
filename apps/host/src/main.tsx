@@ -1,9 +1,8 @@
-import "@fontsource/ubuntu/400.css";
-import "@fontsource/ubuntu/500.css";
-import "@fontsource/ubuntu/700.css";
+import "@fontsource/ubuntu/latin-400.css";
+import "@fontsource/ubuntu/latin-500.css";
+import "@fontsource/ubuntu/latin-700.css";
 import "@cinder/ui/styles.css";
 import "./host.css";
-import "./audit.css";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ThemeProvider } from "@cinder/ui";
