@@ -14,6 +14,7 @@ import {
   Icon,
   CinderApi,
   PageHeader,
+  PromptDialog,
   openExternalUrl,
   type Classroom,
   type PaperCandidate,
@@ -230,6 +231,7 @@ function PaperDocumentView({
   editable?: boolean;
   onChange?: (paper: GeneratedPaper) => void;
 }) {
+  const [diagramError, setDiagramError] = useState<{ index: number; message: string } | null>(null);
   const details = [
     boardName(metadata.board),
     metadata.syllabusCode ? `Syllabus ${metadata.syllabusCode}` : "",
@@ -467,6 +469,7 @@ function PaperDocumentView({
                           const file = input.files?.[0];
                           input.value = "";
                           if (!file) return;
+                          setDiagramError(null);
                           void readDiagramFile(file)
                             .then((imageDataUrl) =>
                               replaceQuestion(questionIndex, {
@@ -479,15 +482,20 @@ function PaperDocumentView({
                               }),
                             )
                             .catch((failure) =>
-                              window.alert(
-                                failure instanceof Error
-                                  ? failure.message
-                                  : "The diagram image could not be attached.",
-                              ),
+                              setDiagramError({
+                                index: questionIndex,
+                                message:
+                                  failure instanceof Error
+                                    ? failure.message
+                                    : "The diagram image could not be attached.",
+                              }),
                             );
                         }}
                       />
                     </label>
+                    {diagramError?.index === questionIndex ? (
+                      <p className="form-error" role="alert">{diagramError.message}</p>
+                    ) : null}
                     {question.diagram ? (
                       <button
                         type="button"
@@ -547,6 +555,7 @@ export function PapersView({
   classrooms: Classroom[];
 }) {
   const [savedPapers, setSavedPapers] = useState<SavedQuestionPaper[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState<SavedQuestionPaper | null>(null);
   const [papersLoading, setPapersLoading] = useState(true);
   const [papersError, setPapersError] = useState("");
   const [activePaperId, setActivePaperId] = useState(() =>
@@ -684,11 +693,7 @@ export function PapersView({
                     type="button"
                     className="papers-library-delete"
                     aria-label={`Delete ${paper.title}`}
-                    onClick={() => {
-                      if (window.confirm(`Delete “${paper.title}” from the school server?`)) {
-                        void removePaper(paper.id);
-                      }
-                    }}
+                    onClick={() => setConfirmDelete(paper)}
                   >
                     <Icon name="trash" />
                   </button>
@@ -720,6 +725,17 @@ export function PapersView({
           />
         )}
       </div>
+      {confirmDelete ? (
+        <PromptDialog
+          title={`Delete “${confirmDelete.title}”?`}
+          description="It is removed from the school server. This cannot be undone."
+          fields={[]}
+          submitLabel="Delete paper"
+          danger
+          onSubmit={() => removePaper(confirmDelete.id)}
+          onClose={() => setConfirmDelete(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -827,6 +843,7 @@ function QuestionPaperStudio({
   const [status, setStatus] = useState(activePaper ? "Saved paper opened." : "");
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [generationStage, setGenerationStage] = useState("");
   const [previewRevision, setPreviewRevision] = useState(0);
   const latestPaperRef = useRef<SavedQuestionPaper | null>(activePaper);
@@ -1332,9 +1349,6 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
 
   const deleteCurrentPaper = async () => {
     if (!paperId || deleting) return;
-    if (!window.confirm(`Delete “${metadata.title}” from the school server? This cannot be undone.`)) {
-      return;
-    }
     discardingPaperRef.current = true;
     setDeleting(true);
     try {
@@ -1581,7 +1595,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
         </Button>
         <Button variant="secondary" onClick={() => setWorkspaceSection("editing")}>Write it myself</Button>
         {paperId ? (
-          <Button variant="ghost" disabled={busy || deleting} onClick={() => void deleteCurrentPaper()}>
+          <Button variant="ghost" disabled={busy || deleting} onClick={() => setConfirmingDelete(true)}>
             {deleting ? "Deleting…" : "Delete this paper"}
           </Button>
         ) : null}
@@ -1716,6 +1730,17 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           </div>
         ) : null}
       </section> : null}
+      {confirmingDelete ? (
+        <PromptDialog
+          title={`Delete “${metadata.title}”?`}
+          description="It is removed from the school server. This cannot be undone."
+          fields={[]}
+          submitLabel="Delete paper"
+          danger
+          onSubmit={deleteCurrentPaper}
+          onClose={() => setConfirmingDelete(false)}
+        />
+      ) : null}
     </div>
   );
 }
