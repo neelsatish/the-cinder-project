@@ -33,7 +33,7 @@ type AiSettings = { base_url?: string; model: string; has_key: boolean; reachabl
 type GoogleModel = { id: string; display_name: string; description: string };
 type AiUsage = { requests: number; input_tokens: number; output_tokens: number; lifetime_requests: number; lifetime_input_tokens: number; lifetime_output_tokens: number; monthly_token_limit: number | null };
 /** Secrets shown once (recovery codes, temporary passwords, PINs), always in a dialog of their own. */
-type Secrets = { title: string; note: string; values: { label: string; value: string }[] };
+type Secrets = { title: string; note: string; values: { label: string; value: string }[]; done?: string };
 
 const NAV: NavigationItem<Tab>[] = [
   { id: "server", label: "Server", icon: "dashboard" },
@@ -92,10 +92,12 @@ export function App() {
     return (
       <>
         <Setup onDone={(result) => {
+          // The setup PIN is replaced when the server starts, so the Server page shows the live one.
           setSecrets({
-            title: "Save these before you continue",
-            note: "They are shown only once. Keep the recovery code away from this computer: it resets the Host password. The setup PIN lets the first teacher create their account in Cinder Teacher within 15 minutes.",
-            values: [{ label: "Host recovery code", value: result.recovery_code }, ...(result.bootstrap_pin ? [{ label: "Teacher setup PIN", value: result.bootstrap_pin }] : [])],
+            title: "Save the Host recovery code",
+            note: "This code is not shown again. It resets the Host password if it is forgotten, so keep it somewhere other than this computer. When you start the server, the Server page shows the PIN the first teacher uses to create their account.",
+            values: [{ label: "Host recovery code", value: result.recovery_code }],
+            done: "I have saved it",
           });
           void refreshPublic();
         }} />
@@ -108,7 +110,7 @@ export function App() {
         <Unlock
           schoolName={publicState.school_name ?? "Cinder Host"}
           onUnlock={setToken}
-          onRecovered={(code) => setSecrets({ title: "Save the new recovery code", note: "The old recovery code no longer works.", values: [{ label: "Host recovery code", value: code }] })}
+          onRecovered={(code) => setSecrets({ title: "Save the new recovery code", note: "The old recovery code no longer works, and this one is not shown again.", values: [{ label: "Host recovery code", value: code }], done: "I have saved it" })}
         />
         {secretsDialog}
       </>
@@ -134,7 +136,7 @@ function SecretsDialog({ secrets, onClose }: { secrets: Secrets; onClose: () => 
           ))}
         </div>
         <p className="form-hint">{secrets.note}</p>
-        <div className="form-actions"><Button variant="primary" onClick={onClose}>I have saved them</Button></div>
+        <div className="form-actions"><Button variant="primary" onClick={onClose}>{secrets.done ?? "Done"}</Button></div>
       </div>
     </Modal>
   );
@@ -683,12 +685,13 @@ function Settings({ token, state, running, onSaved, showSecrets }: { token: stri
       <Panel title="School">
         <div className="form-stack">
           <div className="form-row">
-            <Field label="School name"><input value={school} onChange={(event) => setSchool(event.target.value)} /></Field>
-            <Field label="Network port" hint={running ? "Stop the server to change the port." : undefined}>
+            <Field label="School name"><input value={school} disabled={running} onChange={(event) => setSchool(event.target.value)} /></Field>
+            <Field label="Network port">
               <input type="number" min={1024} max={65535} value={port} disabled={running} onChange={(event) => setPort(Number(event.target.value))} />
             </Field>
           </div>
-          <div className="form-actions"><Button variant="primary" onClick={() => void saveSettings()}>Save</Button></div>
+          {running ? <p className="form-hint">Stop the server (Server page) to change these.</p> : null}
+          <div className="form-actions"><Button variant="primary" disabled={running} onClick={() => void saveSettings()}>Save</Button></div>
         </div>
       </Panel>
       <Panel title="Appearance" className="panel-flush">
@@ -716,10 +719,11 @@ function Settings({ token, state, running, onSaved, showSecrets }: { token: stri
           danger
           onSubmit={async (values) => {
             const result = await invoke<SetupResult>("reset_school", { token, password: values.password, typedSchoolName: values.typed });
+            // reset_school returns the archive path in recovery_code; its PIN is replaced when the server starts.
             showSecrets({
               title: "School reset",
-              note: "Keep the archive reference to restore the old school. The setup PIN lets the first teacher of the new school create their account.",
-              values: [{ label: "Recovery archive", value: result.recovery_code }, ...(result.bootstrap_pin ? [{ label: "Teacher setup PIN", value: result.bootstrap_pin }] : [])],
+              note: "To bring the old school back, restore this archive from Backups. The audit log keeps the path too. The new school has no teachers yet: when you start the server, the Server page shows the PIN the first teacher uses to create their account.",
+              values: [{ label: "Old school archived to", value: result.recovery_code }],
             });
             await onSaved();
           }}
