@@ -64,8 +64,11 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
     return () => window.clearTimeout(handle);
   }, [toast]);
 
+  // Only when a running timer finishes: a timer saved as finished must not announce itself on every launch.
+  const timerStatus = useRef(timer.status);
   useEffect(() => {
-    if (timer.status === "done") setToast("Time is up");
+    if (timer.status === "done" && timerStatus.current === "running") setToast("Time is up");
+    timerStatus.current = timer.status;
   }, [timer.status]);
 
   const navItems: NavigationItem<Page>[] = [
