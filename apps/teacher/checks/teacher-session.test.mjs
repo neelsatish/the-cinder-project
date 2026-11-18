@@ -14,8 +14,36 @@ import { assignmentForHeader, formatAssignmentHeader } from "../src/gradebookHea
 
 test("gradebook assignment headers stay readable and resolvable", () => {
   const assignment = { id: "work-1", title: "Writing Work 1", max_points: 100 };
-  assert.equal(formatAssignmentHeader(assignment), '"Writing Work 1"  -/100');
+  assert.equal(formatAssignmentHeader(assignment), "Writing Work 1 (out of 100)");
   assert.equal(assignmentForHeader(formatAssignmentHeader(assignment), [assignment])?.id, "work-1");
+});
+
+test("gradebook sheets saved with older headers still find their assignments", () => {
+  const assignment = { id: "work-1", title: "Mental maths check", max_points: 5 };
+  for (const header of ['"Mental maths check"  -/5', "Mental maths check /5", "Mental maths check /5 points", "“Mental maths check” -/5"]) {
+    assert.equal(assignmentForHeader(header, [assignment])?.id, "work-1", header);
+  }
+});
+
+test("gradebook headers survive awkward titles", () => {
+  const assignments = [
+    { id: "slash", title: "Unit 2/3 review", max_points: 10 },
+    { id: "quoted", title: 'The "big" essay', max_points: 40 },
+    { id: "bracket", title: "Quiz (out of 3)", max_points: 6 },
+    { id: "digits", title: "Test 2", max_points: 20 },
+  ];
+  for (const assignment of assignments) {
+    assert.equal(assignmentForHeader(formatAssignmentHeader(assignment), assignments)?.id, assignment.id, assignment.title);
+  }
+  assert.equal(assignmentForHeader('"Unit 2/3 review"  -/10', assignments)?.id, "slash");
+});
+
+test("gradebook headers tell same-named assignments apart by their marks", () => {
+  const short = { id: "short", title: "Homework", max_points: 10 };
+  const long = { id: "long", title: "Homework", max_points: 50 };
+  assert.equal(assignmentForHeader(formatAssignmentHeader(long), [short, long])?.id, "long");
+  assert.equal(assignmentForHeader('"Homework"  -/10', [short, long])?.id, "short");
+  assert.equal(assignmentForHeader("Homework", [short, long]), null);
 });
 
 test("teacher session migration and startup modes stay server-specific", () => {

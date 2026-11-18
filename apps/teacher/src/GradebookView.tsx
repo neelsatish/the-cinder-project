@@ -22,7 +22,7 @@ import {
   type User,
 } from "@cinder/ui";
 import type { UniverGradebookHandle } from "./UniverGradebook";
-import { formatAssignmentHeader } from "./gradebookHeaders";
+import { formatAssignmentHeader, NOT_HANDED_IN } from "./gradebookHeaders";
 import { saveTextExport } from "./teacherFiles";
 
 const UniverGradebook = lazy(() =>
@@ -111,6 +111,8 @@ export function GradebookView({
 
   const submissionFor = (studentId: string, assignmentId: string) =>
     byAssignment[assignmentId]?.find((item) => item.student_id === studentId);
+  const cellText = (studentId: string, assignmentId: string) =>
+    submissionFor(studentId, assignmentId) ? (scores[`${studentId}:${assignmentId}`] ?? "") : NOT_HANDED_IN;
   const saveScore = async (
     studentId: string,
     assignment: Assignment,
@@ -176,9 +178,7 @@ export function GradebookView({
       ...roster.map((student) => [
         student.display_name,
         student.username,
-        ...roomAssignments.map(
-          (assignment) => scores[`${student.id}:${assignment.id}`] ?? "",
-        ),
+        ...roomAssignments.map((assignment) => cellText(student.id, assignment.id)),
       ]),
     ];
     try {
@@ -264,12 +264,16 @@ export function GradebookView({
                     value.trim() === "" ? null : Number(value),
                   );
                 }}
+                onRefused={setStatus}
               />
             </Suspense>
           ) : (
             <EmptyState icon="spreadsheet" title="No assignments in this classroom yet" description="Each published assignment becomes a column." />
           )}
-          <div className="sheet-status">{savingCell ? "Saving…" : status}{status === "Saved to Cinder" || savingCell ? " · Marks typed here are returned to students straight away." : ""}</div>
+          <div className="sheet-status">
+            <span>{savingCell ? "Saving…" : status}{status === "Saved to Cinder" || savingCell ? " · Marks typed here are returned to students straight away." : ""}</span>
+            {roomAssignments.length ? <span>{NOT_HANDED_IN} not handed in · blank: handed in, not marked yet</span> : null}
+          </div>
         </Panel>
       </div>
       {resetOpen ? (
@@ -291,7 +295,7 @@ export function GradebookView({
         classroomName={classrooms.find((item) => item.id === classroomId)?.name ?? "Cinder"}
         roster={roster}
         assignments={roomAssignments}
-        scores={scores}
+        cellText={cellText}
       />
     </div>
   );
@@ -301,16 +305,17 @@ function PrintableGradebook({
   classroomName,
   roster,
   assignments,
-  scores,
+  cellText,
 }: {
   classroomName: string;
   roster: User[];
   assignments: Assignment[];
-  scores: Record<string, string>;
+  cellText: (studentId: string, assignmentId: string) => string;
 }) {
   return (
     <div className="gradebook-print-copy">
       <h1>{classroomName} gradebook</h1>
+      <p>{NOT_HANDED_IN} not handed in. A blank cell was handed in but not marked yet.</p>
       <table>
         <thead>
           <tr>
@@ -327,7 +332,7 @@ function PrintableGradebook({
               <td>{student.display_name}</td>
               <td>{student.username}</td>
               {assignments.map((assignment) => (
-                <td key={assignment.id}>{scores[`${student.id}:${assignment.id}`] ?? ""}</td>
+                <td key={assignment.id}>{cellText(student.id, assignment.id)}</td>
               ))}
             </tr>
           ))}

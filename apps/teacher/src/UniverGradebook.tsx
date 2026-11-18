@@ -16,7 +16,7 @@ import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import sheetsEnUS from "@univerjs/preset-sheets-core/locales/en-US";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import { useTheme, type Assignment, type User } from "@cinder/ui";
-import { assignmentForHeader, formatAssignmentHeader } from "./gradebookHeaders";
+import { assignmentForHeader, formatAssignmentHeader, NOT_HANDED_IN } from "./gradebookHeaders";
 
 export type UniverGradebookHandle = {
   resetWorkbook: () => void;
@@ -34,6 +34,8 @@ type Props = {
     assignment: Assignment,
     value: string,
   ) => Promise<boolean>;
+  /** Called when a typed mark is undone because the work was not handed in. */
+  onRefused: (message: string) => void;
 };
 
 const storageKey = (classroomId: string) =>
@@ -156,7 +158,7 @@ function workbookData(props: Props): Partial<IWorkbookData> {
       const key = `${student.id}:${assignment.id}`;
       const value = props.submitted(student.id, assignment.id)
         ? props.scores[key]
-        : "—";
+        : NOT_HANDED_IN;
       sheet.cellData![rowIndex]![column + 2] =
         value === ""
           ? { v: null }
@@ -291,7 +293,7 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
             const key = `${student.id}:${assignment.id}`;
             const value = propsRef.current.submitted(student.id, assignment.id)
               ? (propsRef.current.scores[key] ?? "")
-              : "—";
+              : NOT_HANDED_IN;
             gradeSheet
               .getRange(row + 1, column + 2)
               .setValue(
@@ -301,8 +303,8 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
                     ? Number(value)
                     : value,
               );
-            gradeValues.set(key, value === "—" ? "" : value);
-            persistedGradeValues.set(key, value === "—" ? "" : value);
+            gradeValues.set(key, value === NOT_HANDED_IN ? "" : value);
+            persistedGradeValues.set(key, value === NOT_HANDED_IN ? "" : value);
           });
         });
         renderedRosterCount = propsRef.current.roster.length;
@@ -360,9 +362,15 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
                 const student = propsRef.current.roster[row - 1];
                 const assignment = propsRef.current.assignments[column - 2];
                 if (!student || !assignment) continue;
-                if (!propsRef.current.submitted(student.id, assignment.id)) continue;
-                const key = `${student.id}:${assignment.id}`;
                 const raw = activeGradeSheet.getRange(row, column).getValues()[0]?.[0];
+                if (!propsRef.current.submitted(student.id, assignment.id)) {
+                  // There is nothing to mark, so put the marker back rather than keep a mark that is never saved.
+                  if (String(raw ?? "").trim() === NOT_HANDED_IN) continue;
+                  window.setTimeout(() => activeGradeSheet.getRange(row, column).setValue(NOT_HANDED_IN), 0);
+                  propsRef.current.onRefused(`${student.display_name} has not handed in ${assignment.title}, so there is nothing to mark yet.`);
+                  continue;
+                }
+                const key = `${student.id}:${assignment.id}`;
                 const value = raw == null ? "" : String(raw).trim();
                 const previous = gradeValues.get(key) ?? "";
                 if (value === previous) continue;

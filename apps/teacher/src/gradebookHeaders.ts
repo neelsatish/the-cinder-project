@@ -8,9 +8,15 @@ const normalizeWords = (value: string) =>
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
+/** Shown in a gradebook cell when the student has not handed the work in. A blank cell was handed in but not marked yet. */
+export const NOT_HANDED_IN = "—";
+
 function parseAssignmentHeader(value: unknown) {
   const text = String(value ?? "").trim();
-  const match = /^(.*?)\s*(?:-\s*)?\/\s*(\d+(?:\.\d+)?)\s*(?:points?)?$/i.exec(text);
+  // Current form: Title (out of 5). Older sheets saved on this computer use "Title"  -/5, Title /5 or Title /5 points.
+  const match =
+    /^(.*?)\s*\(out of\s*(\d+(?:\.\d+)?)\)$/i.exec(text) ??
+    /^(.*?)\s*(?:-\s*)?\/\s*(\d+(?:\.\d+)?)\s*(?:points?)?$/i.exec(text);
   const title = match?.[1].trim().replace(/^["“](.*)["”]$/, "$1") ?? text;
   return match
     ? { title, maxPoints: Number(match[2]) }
@@ -18,7 +24,7 @@ function parseAssignmentHeader(value: unknown) {
 }
 
 export function formatAssignmentHeader(assignment: Pick<Assignment, "title" | "max_points">) {
-  return `"${assignment.title}"  -/${assignment.max_points}`;
+  return `${assignment.title} (out of ${assignment.max_points})`;
 }
 
 export function assignmentForHeader(
