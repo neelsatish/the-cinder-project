@@ -18,9 +18,18 @@ Not yet in a published installer. The version is still 0.10.7.
 - Fixed: Teacher's register used the UTC date, so early in the morning it opened on yesterday.
 - Fixed: handed-in work lost its line breaks.
 - Cinder Student: Home lists the work and quizzes still to do and offers to join a live class; notes sit in a list beside the editor; Start writing on an assignment opens a note for it, and the assignment shows exactly what was handed in; marks appear in the Work and Marks lists. The notification bell (which never showed anything), the home widgets and the floating timer are gone; the study timer lives in the sidebar.
-- Cinder Teacher: assignments show how many students handed in and what is left to mark, list who has not handed in, and open marking with previous/next and a save-as-draft option; Mark everyone present on the register; Reset sign-in for a student from the classroom; Change password in Settings; quizzes are set as homework from their own dialog. PDFs open inside the app on Windows and Linux alike.
+- Cinder Teacher: assignments show how many students handed in and what is left to mark, list who has not handed in, and open marking with previous/next and a save-as-draft option until the mark is returned; Mark everyone present on the register; Reset sign-in for a student from the classroom; Change password in Settings; quizzes are set as homework from their own dialog. PDFs open inside the app on Windows and Linux alike.
 - Papers says when AI drafting or online search is not set up on Cinder Host instead of failing after a click.
 - Live classes can last up to 60 minutes.
+- Fixed: Cinder Host's setup dialog listed a teacher setup PIN that stopped working as soon as the server started. It now shows only the recovery code and points to the Server page, which shows the live PIN. After a reset it says where the old school was archived. School settings can no longer be saved while the server runs, which Host refused anyway.
+- Teacher and Student show the Host address as the https:// link they really use, and the address hints give the https:// form from the Host's Server page. Entering that form over a saved http:// address counts as the same Host, so nobody is signed out.
+- Gradebook headers read "Title (out of 5)". "—" always means not handed in and a blank cell means handed in but not marked, in the sheet, the CSV and the printout, with a key under the sheet. A mark typed over "—" is put back with a message instead of vanishing.
+- Papers asks before deleting in Cinder's own dialog, and a diagram that cannot be attached says why beside the control.
+- Fixed: deleting the paper open in the editor from the library list saved it straight back.
+- Fixed: "Save draft" on a mark already returned took it back from the student. Once returned, marking offers "Update returned mark".
+- Fixed: the hand-in and to-mark counts did not change after marking until Teacher was reloaded.
+- Fixed: Cinder Student said "Time is up" every time it opened after a timer had finished.
+- Fixed: choosing Classrooms in Student's sidebar from inside a classroom did nothing.
 - Cinder Host: no more pop-up prompts. Editing people, resetting sign-in, disabling a teacher (with the replacement chosen from a list), renaming files, emptying Trash, restoring and resetting use in-app dialogs, and recovery codes and PINs appear in a dialog of their own.
 - Teacher and Student show the Host security code at first contact and after a certificate change, and need the matching code before trusting it (from earlier work on this branch).
 - An outdated Cinder Host gets its own update-Host-first screen in Teacher and Student (from earlier work on this branch).

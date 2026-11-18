@@ -74,7 +74,12 @@ for any public claim. Update this file when you resolve a conflict.
   Host data folder with a labelled Cinder Test School through the classroom
   API. The test passwords are in the script. The maintainer's earlier app
   data was moved to `Cinder-archive-2026-11-15/app-data-before-rework` (with a
-  README on restoring it).
+  README on restoring it). To keep the browser dev builds off a real Host on
+  the same computer, run the standalone `cinder-host` on another port and set
+  `VITE_CINDER_DEV_HOST=http://127.0.0.1:<port>` in
+  `apps/teacher/.env.development.local` and `apps/forge/.env.development.local`
+  (ignored by git). A Tauri dev run shares the installed apps' identifiers and
+  app data, so do not use one while the installed apps are in use.
 - `docs/research/host-ai-2026-10-19.md` is planning research on running AI on
   the school Host (model and hardware options). Nothing was benchmarked or
   built; it is not a product commitment.
