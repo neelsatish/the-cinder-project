@@ -54,6 +54,7 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [classroomsVisit, setClassroomsVisit] = useState(0);
   const timer = useCountdown(session.user.id);
   const live = useStudentLiveSession({ api: session.api, baseUrl: session.baseUrl, accountId: session.user.id, online: session.online });
   const liveNow = Boolean(live.session && live.remainingSeconds > 0 && live.resultState === "active");
@@ -152,7 +153,11 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
         user={session.user}
         items={navItems}
         active={page}
-        onNavigate={go}
+        onNavigate={(next) => {
+          // Choosing Classrooms from inside a classroom goes back to the list.
+          if (next === "classrooms" && page === "classrooms") { setFocus(null); setClassroomsVisit((value) => value + 1); }
+          go(next);
+        }}
         onLogout={() => void session.switchAccount()}
         online={session.online}
         onRefresh={() => void refreshWorkspace()}
@@ -192,7 +197,7 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
           />
         ) : page === "classrooms" ? (
           <StudentClassrooms
-            key={refreshKey}
+            key={`${refreshKey}-${classroomsVisit}`}
             accountId={session.user.id}
             api={session.api}
             baseUrl={session.baseUrl}
