@@ -51,6 +51,7 @@ export function AssignmentsView({
   const completed = assignments.filter((item) => item.status === "closed");
 
   useEffect(() => {
+    if (selectedId) return;
     let alive = true;
     void Promise.all(open.map(async (item) => {
       const list = await api.submissions(item.id);
@@ -58,8 +59,8 @@ export function AssignmentsView({
       return [item.id, { handedIn: live.length, toMark: live.filter((submission) => !submission.grade?.published).length }] as const;
     })).then((entries) => { if (alive) setCounts(Object.fromEntries(entries)); }).catch(() => undefined);
     return () => { alive = false; };
-    // Recount when the set of assignments changes, not on every render.
-  }, [api, assignments.map((item) => item.id + item.status).join()]);
+    // Recount when the set of assignments changes or the teacher comes back from marking one, not on every render.
+  }, [api, selectedId, assignments.map((item) => item.id + item.status).join()]);
 
   if (selected) {
     return <AssignmentDetail api={api} assignment={selected} roster={roster} onBack={() => setSelectedId(null)} onUpdated={onUpdated} />;
