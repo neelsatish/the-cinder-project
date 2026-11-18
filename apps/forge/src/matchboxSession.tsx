@@ -14,6 +14,7 @@ import {
   hostCodesMatch,
   inspectHostIdentity,
   isHostOutdated,
+  hostAddressLabel,
   HostOutdatedNotice,
   HostOutdatedScreen,
   saveSessionValue,
@@ -373,7 +374,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
         helper="Use the account your teacher created for you."
         onSubmit={login}
         rememberedUsernames={knownAccounts}
-        offlineHint={online ? `Connected to ${baseUrl}` : "Cinder Host was not found. Check the school connection before signing in."}
+        offlineHint={online ? `Connected to ${hostAddressLabel(baseUrl)}` : "Cinder Host was not found. Check the school connection before signing in."}
       >
         <button type="button" className="auth-secondary-action" onClick={() => setConnectionOpen(true)}>School connection</button>
       </LoginScreen>
@@ -484,8 +485,8 @@ function ConnectionModal({ baseUrl, deviceLabel, onClose, onSave }: {
         finally { setBusy(false); }
       }}>
         <Button type="button" onClick={() => void discover()} disabled={busy}>Find Cinder Host</Button>
-        {found.length > 1 ? <div className="host-list">{found.map((host) => <button type="button" key={host} onClick={() => { setUrl(host); setIdentity(null); setHostCode(""); }}>{host}</button>)}</div> : null}
-        <Field label="Cinder Host address" hint="Example: http://192.168.1.20:7373"><input value={url} onChange={(event) => { setUrl(event.target.value); setIdentity(null); setHostCode(""); }} /></Field>
+        {found.length > 1 ? <div className="host-list">{found.map((host) => <button type="button" key={host} onClick={() => { setUrl(host); setIdentity(null); setHostCode(""); }}>{hostAddressLabel(host)}</button>)}</div> : null}
+        <Field label="Cinder Host address" hint="Copy it from the Server page on the Host computer, for example https://192.168.1.20:7373."><input value={url} onChange={(event) => { setUrl(event.target.value); setIdentity(null); setHostCode(""); }} /></Field>
         <Field label="This device name"><input value={label} onChange={(event) => setLabel(event.target.value)} /></Field>
         {identity && identity.status !== "trusted" && checkedUrl === url.trim() ? (
           <div className="host-security-review" role="group" aria-label="Verify Host security code">

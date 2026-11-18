@@ -8,6 +8,7 @@ import {
   EmptyState,
   formatDate,
   formatWhen,
+  hostAddressLabel,
   Icon,
   PageHeader,
   Panel,
@@ -637,7 +638,7 @@ function SettingsPage({ name, baseUrl, onOpenConnection, onSignOut, onReset }: {
         <Panel title="Account" className="panel-flush">
           <div className="settings-list">
             <div className="settings-row"><div><strong>{name}</strong><small>Your teacher manages your name.</small></div><Button onClick={onSignOut}>Sign out</Button></div>
-            <div className="settings-row"><div><strong>School connection</strong><small>{baseUrl}</small></div><Button onClick={onOpenConnection}>Change</Button></div>
+            <div className="settings-row"><div><strong>School connection</strong><small>{hostAddressLabel(baseUrl)}</small></div><Button onClick={onOpenConnection}>Change</Button></div>
           </div>
         </Panel>
         <Panel title="Appearance" className="panel-flush">

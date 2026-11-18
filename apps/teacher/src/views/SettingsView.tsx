@@ -7,6 +7,7 @@ import {
   Panel,
   PromptDialog,
   ThemePicker,
+  hostAddressLabel,
   type CinderApi,
   type TeacherInvitePin,
   type User,
@@ -59,7 +60,7 @@ export function SettingsView({
               <Button onClick={() => setDialog("password")}>Change password</Button>
             </div>
             <div className="settings-row">
-              <div><strong>School connection</strong><small>{baseUrl}</small></div>
+              <div><strong>School connection</strong><small>{hostAddressLabel(baseUrl)}</small></div>
               <span className="panel-actions">
                 <Badge tone={online ? "good" : "warning"}>{online ? "Connected" : "Reconnecting"}</Badge>
                 <Button onClick={onOpenConnection}>Change</Button>

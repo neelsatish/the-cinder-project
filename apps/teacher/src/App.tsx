@@ -25,6 +25,7 @@ import {
   type NavigationItem,
   type User,
   type HostIdentity,
+  hostAddressLabel,
 } from "@cinder/ui";
 import { GradebookView } from "./GradebookView";
 import { PapersView } from "./PapersView";
@@ -516,7 +517,7 @@ export function App() {
           rememberedUsernames={knownAccounts}
           offlineHint={
             online
-              ? `Connected to ${baseUrl}`
+              ? `Connected to ${hostAddressLabel(baseUrl)}`
               : "Cinder Host is not reachable. Check the school connection."
           }
         >
@@ -705,14 +706,14 @@ function HostConnectionModal({
           <div className="host-list">
             {found.map((host) => (
               <button type="button" key={host} onClick={() => { setUrl(host); setIdentity(null); setHostCode(""); }}>
-                {host}
+                {hostAddressLabel(host)}
               </button>
             ))}
           </div>
         ) : null}
         <Field
           label="Cinder Host address"
-          hint="Local example: http://192.168.1.20:7373. Remote connections must use HTTPS."
+          hint="Copy it from the Server page on the Host computer, for example https://192.168.1.20:7373."
         >
           <input
             value={url}

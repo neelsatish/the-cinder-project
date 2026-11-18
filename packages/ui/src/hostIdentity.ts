@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriRuntime } from "./session";
 
-export { isHostOutdated } from "./hostTransport";
+export { hostAddressLabel, isHostOutdated } from "./hostTransport";
 
 export type HostIdentity = {
   fingerprint: string;

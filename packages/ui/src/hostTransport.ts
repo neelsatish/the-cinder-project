@@ -33,6 +33,27 @@ function inTauri() {
   );
 }
 
+/**
+ * The Host address as the app really reaches it, for display only. The
+ * installed apps upgrade a saved http:// address to HTTPS on the same port
+ * (`cinder_core::host_client::https_url`). The saved string is left as typed,
+ * because sign-in and the offline store are keyed by it.
+ */
+export function hostAddressLabel(baseUrl: string) {
+  if (!inTauri()) return baseUrl;
+  try {
+    const url = new URL(baseUrl.trim());
+    if (url.protocol !== "http:") return baseUrl;
+    // An implicit port 80 stays 80, as on the native side.
+    const port = url.port || "80";
+    url.protocol = "https:";
+    url.port = port;
+    return url.pathname === "/" ? url.origin : url.href;
+  } catch {
+    return baseUrl;
+  }
+}
+
 /** 4-byte big-endian length, a JSON header, then the raw body. */
 function frame(head: unknown, body: Uint8Array) {
   const encoded = new TextEncoder().encode(JSON.stringify(head));

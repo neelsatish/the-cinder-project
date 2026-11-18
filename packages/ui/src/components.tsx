@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, FormEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
+import { hostAddressLabel } from "./hostTransport";
 import { BrandMark, Icon, type IconName } from "./icons";
 import { useTheme, type CinderTheme } from "./theme";
 import type { Role, User } from "./types";
@@ -556,7 +557,7 @@ export function HostOutdatedScreen({
           <BrandMark size={40} />
           <h1>Update Cinder Host first</h1>
           <p>
-            Cinder Host at {baseUrl} is an older version. {appName} connects securely and cannot
+            Cinder Host at {hostAddressLabel(baseUrl)} is an older version. {appName} connects securely and cannot
             talk to it until Host is updated.
           </p>
         </div>

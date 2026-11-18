@@ -132,3 +132,21 @@ test("an outdated Host is recognised from page and raw native errors", async () 
   assert.equal(isHostOutdated("offline"), false);
   assert.equal(isHostOutdated(null), false);
 });
+
+test("the shown Host address matches the HTTPS address the native side uses", async () => {
+  const { hostAddressLabel } = await import("../packages/ui/src/hostTransport.ts");
+  assert.equal(hostAddressLabel(HOST), "https://192.168.1.20:7373");
+  assert.equal(hostAddressLabel("http://[fd00::5]:7373"), "https://[fd00::5]:7373");
+  // An implicit port 80 stays 80, as in cinder_core::host_client::https_url.
+  assert.equal(hostAddressLabel("http://school.local"), "https://school.local:80");
+  assert.equal(hostAddressLabel("https://host.example.org:7373"), "https://host.example.org:7373");
+  assert.equal(hostAddressLabel("not an address"), "not an address");
+  // A plain browser (development only) really does use HTTP.
+  const internals = globalThis.__TAURI_INTERNALS__;
+  delete globalThis.__TAURI_INTERNALS__;
+  try {
+    assert.equal(hostAddressLabel(HOST), HOST);
+  } finally {
+    globalThis.__TAURI_INTERNALS__ = internals;
+  }
+});
