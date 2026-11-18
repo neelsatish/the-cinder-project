@@ -44,7 +44,9 @@ const SESSION_KEY = "cinder.matchbox.session";
 const LEGACY_SESSION_KEY = "cinder.student.session";
 const SESSION_KEYS = [SESSION_KEY, LEGACY_SESSION_KEY] as const;
 const KNOWN_ACCOUNTS_KEY = "cinder.matchbox.known-accounts";
-const DEV_HOST = "http://127.0.0.1:7373";
+// Browser development only (the installed app saves its own address). Set
+// VITE_CINDER_DEV_HOST to keep a dev build off a real Host on this computer.
+const DEV_HOST: string = import.meta.env.VITE_CINDER_DEV_HOST || "http://127.0.0.1:7373";
 
 function isTauri() {
   return "__TAURI_INTERNALS__" in window;

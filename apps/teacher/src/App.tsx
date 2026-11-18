@@ -50,7 +50,9 @@ const SESSION_KEY = "cinder.teacher.session";
 const KNOWN_ACCOUNTS_KEY = "cinder.teacher.known-accounts";
 const LEGACY_SESSION_KEY = ["lu", "mina.teacher.session"].join("");
 const SESSION_KEYS = [SESSION_KEY, LEGACY_SESSION_KEY] as const;
-const DEV_HOST = "http://127.0.0.1:7373";
+// Browser development only (the installed app saves its own address). Set
+// VITE_CINDER_DEV_HOST to keep a dev build off a real Host on this computer.
+const DEV_HOST: string = import.meta.env.VITE_CINDER_DEV_HOST || "http://127.0.0.1:7373";
 const navigation: NavigationItem<TeacherTab>[] = [
   { id: "dashboard", label: "Overview", icon: "dashboard" },
   { id: "classrooms", label: "Classrooms", icon: "classrooms" },
