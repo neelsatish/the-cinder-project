@@ -308,7 +308,10 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
   }
 
   async function saveConnection(nextUrl: string, nextLabel: string, fingerprint?: string) {
-    const normalized = await normalizeHostAddress(nextUrl);
+    const typed = await normalizeHostAddress(nextUrl);
+    // The installed app reaches http:// and https:// on the same port as one Host. Keep the saved
+    // form, because sign-in and offline work are keyed by it.
+    const normalized = hostAddressLabel(typed) === hostAddressLabel(baseUrl) ? baseUrl : typed;
     let identityReplaced = false;
     if (isTauri()) {
       const identity = await inspectHostIdentity(normalized);
@@ -425,7 +428,7 @@ function ConnectionModal({ baseUrl, deviceLabel, onClose, onSave }: {
   onClose: () => void;
   onSave: (url: string, label: string, fingerprint?: string) => Promise<void>;
 }) {
-  const [url, setUrl] = useState(baseUrl);
+  const [url, setUrl] = useState(() => hostAddressLabel(baseUrl));
   const [label, setLabel] = useState(deviceLabel);
   const [found, setFound] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -451,7 +454,7 @@ function ConnectionModal({ baseUrl, deviceLabel, onClose, onSave }: {
     try {
       const hosts = isTauri() ? await invoke<string[]>("discover_hosts") : [DEV_HOST];
       setFound(hosts);
-      if (hosts[0]) { setUrl(hosts[0]); setIdentity(null); setHostCode(""); }
+      if (hosts[0]) { setUrl(hostAddressLabel(hosts[0])); setIdentity(null); setHostCode(""); }
       if (!hosts.length) setError("No Cinder Host was found automatically. Enter its address below.");
     } catch {
       setError("Automatic discovery was unavailable. Enter the address manually.");
@@ -485,7 +488,7 @@ function ConnectionModal({ baseUrl, deviceLabel, onClose, onSave }: {
         finally { setBusy(false); }
       }}>
         <Button type="button" onClick={() => void discover()} disabled={busy}>Find Cinder Host</Button>
-        {found.length > 1 ? <div className="host-list">{found.map((host) => <button type="button" key={host} onClick={() => { setUrl(host); setIdentity(null); setHostCode(""); }}>{hostAddressLabel(host)}</button>)}</div> : null}
+        {found.length > 1 ? <div className="host-list">{found.map((host) => <button type="button" key={host} onClick={() => { setUrl(hostAddressLabel(host)); setIdentity(null); setHostCode(""); }}>{hostAddressLabel(host)}</button>)}</div> : null}
         <Field label="Cinder Host address" hint="Copy it from the Server page on the Host computer, for example https://192.168.1.20:7373."><input value={url} onChange={(event) => { setUrl(event.target.value); setIdentity(null); setHostCode(""); }} /></Field>
         <Field label="This device name"><input value={label} onChange={(event) => setLabel(event.target.value)} /></Field>
         {identity && identity.status !== "trusted" && checkedUrl === url.trim() ? (

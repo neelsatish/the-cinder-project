@@ -421,7 +421,10 @@ export function App() {
   };
 
   const saveConnection = async (nextUrl: string, nextLabel: string, fingerprint?: string) => {
-    const normalized = await normalizeHostAddress(nextUrl);
+    const typed = await normalizeHostAddress(nextUrl);
+    // The installed app reaches http:// and https:// on the same port as one Host. Keep the saved
+    // form, because sign-in and offline work are keyed by it.
+    const normalized = hostAddressLabel(typed) === hostAddressLabel(baseUrl) ? baseUrl : typed;
     let identityReplaced = false;
     if (isTauri()) {
       const identity = await inspectHostIdentity(normalized);
@@ -626,7 +629,7 @@ function HostConnectionModal({
   onClose: () => void;
   onSave: (url: string, label: string, fingerprint?: string) => Promise<void>;
 }) {
-  const [url, setUrl] = useState(baseUrl);
+  const [url, setUrl] = useState(() => hostAddressLabel(baseUrl));
   const [label, setLabel] = useState(deviceLabel);
   const [found, setFound] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -654,7 +657,7 @@ function HostConnectionModal({
         ? await invoke<string[]>("discover_hosts")
         : [DEV_HOST];
       setFound(hosts);
-      if (hosts[0]) setUrl(hosts[0]);
+      if (hosts[0]) setUrl(hostAddressLabel(hosts[0]));
       if (!hosts.length)
         setError("No Cinder Host was found automatically. Enter its address below.");
     } catch {
@@ -705,7 +708,7 @@ function HostConnectionModal({
         {found.length ? (
           <div className="host-list">
             {found.map((host) => (
-              <button type="button" key={host} onClick={() => { setUrl(host); setIdentity(null); setHostCode(""); }}>
+              <button type="button" key={host} onClick={() => { setUrl(hostAddressLabel(host)); setIdentity(null); setHostCode(""); }}>
                 {hostAddressLabel(host)}
               </button>
             ))}
