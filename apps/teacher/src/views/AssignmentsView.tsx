@@ -346,6 +346,8 @@ function ReviewModal({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  // Saving a draft sets published to false on the Host, so offering it on a returned mark would take the mark back from the student.
+  const returned = Boolean(submission.grade?.published);
   useEffect(() => {
     void Promise.all([
       api.comments(submission.id).then(setComments),
@@ -405,8 +407,8 @@ function ReviewModal({
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           {message ? <p className="form-success" role="status">{message}</p> : null}
           <div className="form-actions">
-            <Button disabled={busy} onClick={() => void save(false)}>Save draft</Button>
-            <Button variant="primary" type="submit" disabled={busy}>{busy ? "Saving…" : "Return to student"}</Button>
+            {returned ? null : <Button disabled={busy} onClick={() => void save(false)}>Save draft</Button>}
+            <Button variant="primary" type="submit" disabled={busy}>{busy ? "Saving…" : returned ? "Update returned mark" : "Return to student"}</Button>
           </div>
           <div className="review-comments">
             <strong>Comments</strong>
