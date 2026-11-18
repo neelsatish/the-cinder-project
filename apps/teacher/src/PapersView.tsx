@@ -602,8 +602,11 @@ export function PapersView({
     };
   }, [api]);
 
+  // A paper deleted while open must not be saved back by the editor's pending or closing autosave.
+  const deletedPaperIds = useRef(new Set<string>());
   const savePaperRecord = useCallback(
     async (paper: SavedQuestionPaper) => {
+      if (deletedPaperIds.current.has(paper.id)) return;
       await saveQuestionPaper(api, paper);
       localStorage.setItem(ACTIVE_PAPER_KEY, paper.id);
       if (!mountedRef.current) return;
@@ -630,7 +633,13 @@ export function PapersView({
 
   const removePaper = useCallback(
     async (id: string) => {
-      await deleteQuestionPaper(api, id);
+      deletedPaperIds.current.add(id);
+      try {
+        await deleteQuestionPaper(api, id);
+      } catch (failure) {
+        deletedPaperIds.current.delete(id);
+        throw failure;
+      }
       setSavedPapers((current) => current.filter((paper) => paper.id !== id));
       if (activePaperId === id) {
         setActivePaperId(null);
