@@ -61,7 +61,17 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0013_ai_usage",
         include_str!("../migrations/0013_ai_usage.sql"),
     ),
+    (
+        "0014_longer_live_classes",
+        include_str!("../migrations/0014_longer_live_classes.sql"),
+    ),
 ];
+
+/// Migrations that rebuild a table other tables refer to. SQLite's rebuild
+/// procedure needs foreign key enforcement off, or dropping the old table
+/// would cascade into its children. The pragma cannot change inside a
+/// transaction, so the runner sets it around the migration.
+const REBUILDS: &[&str] = &["0014_longer_live_classes"];
 
 /// Opens (creating if needed) the database at `path` and brings it up to date.
 pub fn open(path: &Path) -> Result<Pool> {
@@ -139,17 +149,41 @@ fn migrate(conn: &mut Connection) -> Result<()> {
             continue;
         }
 
-        let tx = conn.transaction()?;
-        tx.execute_batch(sql)
-            .with_context(|| format!("applying migration {name}"))?;
-        tx.execute(
-            "INSERT INTO schema_migrations (name, applied_at) VALUES (?1, ?2)",
-            rusqlite::params![name, chrono::Utc::now().to_rfc3339()],
-        )?;
-        tx.commit()?;
+        let rebuild = REBUILDS.contains(name);
+        if rebuild {
+            conn.pragma_update(None, "foreign_keys", "OFF")?;
+        }
+        let applied = apply(conn, name, sql, rebuild);
+        if rebuild {
+            conn.pragma_update(None, "foreign_keys", "ON")?;
+        }
+        applied?;
         tracing::info!(migration = name, "applied migration");
     }
 
+    Ok(())
+}
+
+fn apply(conn: &mut Connection, name: &str, sql: &str, rebuild: bool) -> Result<()> {
+    let tx = conn.transaction()?;
+    tx.execute_batch(sql)
+        .with_context(|| format!("applying migration {name}"))?;
+    if rebuild {
+        // Enforcement was off, so prove every reference still resolves.
+        let broken: i64 =
+            tx.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
+                row.get(0)
+            })?;
+        anyhow::ensure!(
+            broken == 0,
+            "migration {name} left {broken} broken references"
+        );
+    }
+    tx.execute(
+        "INSERT INTO schema_migrations (name, applied_at) VALUES (?1, ?2)",
+        rusqlite::params![name, chrono::Utc::now().to_rfc3339()],
+    )?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -169,6 +203,88 @@ mod tests {
             .query_row("SELECT count(*) FROM schema_migrations", [], |r| r.get(0))
             .unwrap();
         assert_eq!(applied, MIGRATIONS.len() as i64);
+    }
+
+    #[test]
+    fn longer_live_classes_rebuild_keeps_every_reference() {
+        // A database as 0.10.7 left it: every migration before the rebuild.
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_migrations (name TEXT PRIMARY KEY NOT NULL, applied_at TEXT NOT NULL);",
+        )
+        .unwrap();
+        for (name, sql) in MIGRATIONS
+            .iter()
+            .filter(|(name, _)| *name != "0014_longer_live_classes")
+        {
+            conn.execute_batch(sql).unwrap();
+            conn.execute(
+                "INSERT INTO schema_migrations (name, applied_at) VALUES (?1, 'then')",
+                [name],
+            )
+            .unwrap();
+        }
+        conn.execute_batch(
+            "INSERT INTO users (id, username, display_name, pw_hash, role, created_at)
+                 VALUES ('t1', 'teacher', 'Teacher', 'x', 'teacher', 'then'),
+                        ('s1', 'priya', 'Priya', 'x', 'student', 'then');
+             INSERT INTO classrooms (id, name, created_at, owner_teacher_id, enrolment_code)
+                 VALUES ('c1', 'Physics', 'then', 't1', 'ABC123');
+             INSERT INTO live_module_sessions
+                 (id, classroom_id, started_by, module_id, module_name, duration_minutes,
+                  join_code, starts_at, ends_at, ended_at)
+                 VALUES ('l1', 'c1', 't1', 'classroom.live', 'Live Classroom', 30,
+                         'OLDCODE001', 'then', 'then', 'then');
+             INSERT INTO live_module_participants (session_id, student_id, joined_at)
+                 VALUES ('l1', 's1', 'then');
+             INSERT INTO live_session_tasks
+                 (id, session_id, revision, kind, title, assigned_by, created_at)
+                 VALUES ('k1', 'l1', 1, 'instruction', 'Read page 4', 't1', 'then');",
+        )
+        .unwrap();
+
+        migrate(&mut conn).unwrap();
+
+        let count = |table: &str| -> i64 {
+            conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .unwrap()
+        };
+        assert_eq!(count("live_module_sessions"), 1);
+        assert_eq!(count("live_module_participants"), 1);
+        assert_eq!(count("live_session_tasks"), 1);
+        let enforced: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(enforced, 1, "enforcement must be back on");
+
+        conn.execute(
+            "INSERT INTO live_module_sessions
+                 (id, classroom_id, started_by, module_id, module_name, duration_minutes,
+                  join_code, starts_at, ends_at)
+                 VALUES ('l2', 'c1', 't1', 'classroom.live', 'Live Classroom', 60,
+                         'NEWCODE001', 'now', 'later')",
+            [],
+        )
+        .expect("a 60-minute class must fit");
+        assert!(conn
+            .execute(
+                "INSERT INTO live_module_sessions
+                     (id, classroom_id, started_by, module_id, module_name, duration_minutes,
+                      join_code, starts_at, ends_at, ended_at)
+                     VALUES ('l3', 'c1', 't1', 'classroom.live', 'Live Classroom', 61,
+                             'NEWCODE002', 'now', 'later', 'later')",
+                [],
+            )
+            .is_err());
+
+        // The children still point at the rebuilt table.
+        conn.execute("DELETE FROM live_module_sessions WHERE id = 'l1'", [])
+            .unwrap();
+        assert_eq!(count("live_module_participants"), 0);
+        assert_eq!(count("live_session_tasks"), 0);
     }
 
     #[test]
