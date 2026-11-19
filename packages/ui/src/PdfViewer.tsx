@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+// The legacy build carries polyfills for newer JavaScript (Map.getOrInsertComputed, Math.sumPrecise)
+// that the modern build calls directly and older WebKitGTK on Linux may lack.
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 const ZOOM_LEVELS = [.5, .75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
@@ -109,7 +111,7 @@ export function PdfViewer({ sourceKey, load, name, onClose, showName = true }: {
       try {
         const blob = await load();
         if (!alive) return;
-        const [pdfjs, data] = await Promise.all([import("pdfjs-dist"), blob.arrayBuffer()]);
+        const [pdfjs, data] = await Promise.all([import("pdfjs-dist/legacy/build/pdf.mjs"), blob.arrayBuffer()]);
         if (!alive) return;
         pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
         task = pdfjs.getDocument({ data });

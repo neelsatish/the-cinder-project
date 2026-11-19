@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save as showSaveDialog } from "@tauri-apps/plugin-dialog";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import {
   useCallback,
   useEffect,
@@ -150,7 +150,7 @@ async function extractPdfText(blob: Blob, name: string): Promise<ExtractedPdf> {
   if (blob.type && blob.type !== "application/pdf") {
     throw new Error(`${name} is an image, not a text PDF.`);
   }
-  const pdfjs = await import("pdfjs-dist");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
   const task = pdfjs.getDocument({
     data: await blob.arrayBuffer(),
