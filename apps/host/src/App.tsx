@@ -55,6 +55,8 @@ export function App() {
   const refreshPublic = useCallback(() => invoke<PublicState>("public_state").then(setPublicState), []);
   const lockAdmin = useCallback(() => {
     setToken("");
+    // Recovery codes and temporary passwords must not outlive the lock.
+    setSecrets(null);
     void invoke("lock");
   }, []);
   useEffect(() => { void refreshPublic(); }, [refreshPublic]);
@@ -323,7 +325,7 @@ function ServerPage({ token, running, busy, onServer }: { token: string; running
           </div>
         </div>
       </Panel>
-      {data?.bootstrap_pin ? (
+      {running && data?.teachers === 0 && data.bootstrap_pin ? (
         <Panel title="Teacher setup PIN">
           <div className="form-stack">
             <code className="credential-code">{data.bootstrap_pin}</code>
@@ -371,7 +373,7 @@ function SettingsRow({ label, value, children }: { label: string; value?: string
   );
 }
 
-type PersonDialog = { kind: "edit" | "reset" | "disable"; person: Person };
+type PersonDialog = { kind: "edit" | "reset"; person: Person } | { kind: "disable"; person: Person; candidates: Person[] };
 
 function People({ token, showSecrets }: { token: string; showSecrets: (secrets: Secrets) => void }) {
   const [people, setPeople] = useState<Person[]>([]);
@@ -381,7 +383,10 @@ function People({ token, showSecrets }: { token: string; showSecrets: (secrets: 
   const [error, setError] = useState("");
   const load = useCallback(() => invoke<Person[]>("list_people", { token, search, role: role || null }).then(setPeople).catch((failure) => setError(errorText(failure))), [token, search, role]);
   useEffect(() => { void load(); }, [load]);
-  const otherTeachers = (person: Person) => people.filter((item) => item.role === "teacher" && !item.disabled_at && item.id !== person.id);
+  // Who can take over classrooms comes from every teacher, not the filtered list on screen.
+  const openDisable = (person: Person) => invoke<Person[]>("list_people", { token, search: "", role: "teacher" })
+    .then((teachers) => setDialog({ kind: "disable", person, candidates: teachers.filter((item) => !item.disabled_at && item.id !== person.id) }))
+    .catch((failure) => setError(errorText(failure)));
 
   return (
     <div className="page">
@@ -409,7 +414,7 @@ function People({ token, showSecrets }: { token: string; showSecrets: (secrets: 
                 <div className="list-actions">
                   <button type="button" className="icon-button" title="Edit" aria-label={`Edit ${person.display_name}`} onClick={() => setDialog({ kind: "edit", person })}><Icon name="edit" /></button>
                   <Button size="small" variant="ghost" onClick={() => setDialog({ kind: "reset", person })}>Reset sign-in</Button>
-                  <Button size="small" variant="ghost" onClick={() => setDialog({ kind: "disable", person })}>{person.disabled_at ? "Restore" : "Disable"}</Button>
+                  <Button size="small" variant="ghost" onClick={() => void openDisable(person)}>{person.disabled_at ? "Restore" : "Disable"}</Button>
                 </div>
               </div>
             ))}
@@ -448,7 +453,7 @@ function People({ token, showSecrets }: { token: string; showSecrets: (secrets: 
       {dialog?.kind === "disable" ? (
         <DisableDialog
           person={dialog.person}
-          candidates={otherTeachers(dialog.person)}
+          candidates={dialog.candidates}
           onSubmit={async (transferTo) => { await invoke("set_person_disabled", { token, id: dialog.person.id, disabled: !dialog.person.disabled_at, transferTo }); await load(); }}
           onClose={() => setDialog(null)}
         />
