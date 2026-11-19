@@ -680,7 +680,7 @@ function HostConnectionModal({
     <Modal
       title="Cinder Host connection"
       description="Connect this Teacher app to the school Host computer."
-      onClose={onClose}
+      onClose={busy ? undefined : onClose}
     >
       <form
         className="form-stack"
@@ -859,7 +859,7 @@ function TeacherAccountModal({
 
   if (recoveryCode) {
     return (
-      <Modal title="Teacher account created" description="Save this new teacher's recovery code now." onClose={onClose}>
+      <Modal title="Teacher account created" description="Save this new teacher's recovery code now." onClose={onClose} lock>
         <div className="form-stack">
           <div className="credential-box"><span>Recovery code</span><code className="credential-code">{recoveryCode}</code></div>
           <p className="form-hint">It is shown once and can reset this teacher's password.</p>
@@ -932,15 +932,17 @@ function TeacherRecoveryModal({
         title="Teacher password recovered"
         description="The old recovery code has been retired. Save this replacement."
         onClose={onClose}
+        lock
       >
-        <div className="modal-content">
+        <div className="modal-content form-stack">
           <div className="credential-box">
             <span>New recovery code</span>
             <code className="credential-code recovery-code">{nextCode}</code>
           </div>
           <p className="form-hint">
-            Close this window and sign in using the new password.
+            It is shown once. Then sign in using the new password.
           </p>
+          <div className="form-actions"><Button variant="primary" onClick={onClose}>I have saved it</Button></div>
         </div>
       </Modal>
     );

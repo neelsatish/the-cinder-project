@@ -318,6 +318,19 @@ export function Modal({
 }) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const dialogRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    // Take keyboard focus like a native dialog, unless a field already has it (autoFocus),
+    // and give it back to whatever opened the dialog when it closes.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.contains(document.activeElement)) dialog.focus();
+    return () => {
+      // Only when focus went with this dialog, so a dialog replacing it keeps its own.
+      const lost = document.activeElement === document.body || Boolean(dialog?.contains(document.activeElement));
+      if (lost && opener?.isConnected) opener.focus();
+    };
+  }, []);
   useEffect(() => {
     if (lock) return;
     const onKey = (event: KeyboardEvent) => {
@@ -332,7 +345,7 @@ export function Modal({
       role="presentation"
       onMouseDown={lock ? undefined : (event) => event.target === event.currentTarget && onClose?.()}
     >
-      <section className={`modal${wide ? " modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+      <section ref={dialogRef} tabIndex={-1} className={`modal${wide ? " modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="modal-header">
           <div>
             <h2>{title}</h2>

@@ -1007,6 +1007,9 @@ button.list-item:hover,
 .modal-wide {
   width: min(1180px, 100%);
 }
+.modal:focus {
+  outline: none;
+}
 .modal-header {
   display: flex;
   align-items: flex-start;

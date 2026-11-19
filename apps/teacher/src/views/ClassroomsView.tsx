@@ -504,7 +504,7 @@ function StudentsSection({
         />
       ) : null}
       {credentials ? (
-        <Modal title="Give these details to the student" description="The temporary PIN and recovery code are shown only now." onClose={() => setCredentials(null)}>
+        <Modal title="Give these details to the student" description="The temporary PIN and recovery code are shown only now." onClose={() => setCredentials(null)} lock>
           <div className="modal-content form-stack">
             <div className="credential-box">
               <span className="muted">Username</span>

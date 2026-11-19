@@ -474,7 +474,7 @@ function ConnectionModal({ baseUrl, deviceLabel, onClose, onSave }: {
   }
 
   return (
-    <Modal title="School connection" description="Connect to the Cinder Host computer on the school network." onClose={onClose}>
+    <Modal title="School connection" description="Connect to the Cinder Host computer on the school network." onClose={busy ? undefined : onClose}>
       <form className="form-stack" onSubmit={async (event) => {
         event.preventDefault();
         setBusy(true);
