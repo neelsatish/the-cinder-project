@@ -1,4 +1,7 @@
-import { Badge, Button, EmptyState, formatWhen, Icon, Panel, type CinderApi, type QuizAttempt, type QuizDelivery } from "@cinder/ui";
+import { ApiError, Badge, Button, cacheGet, cacheRemove, cacheSet, EmptyState, formatWhen, Icon, Panel, type CinderApi, type QuizAttempt, type QuizDelivery } from "@cinder/ui";
+
+/** Answers not yet on the Host, kept on this computer so leaving the quiz offline loses nothing. */
+const keptAnswersKey = (attemptId: string) => `quiz-answers:${attemptId}`;
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export function StudentQuizzes({ api, classroomId, online, focusDeliveryId, onFocusOpened }: { api: CinderApi; classroomId: string; online: boolean; focusDeliveryId?: string | null; onFocusOpened?: () => void }) {
@@ -27,14 +30,22 @@ export function StudentQuizzes({ api, classroomId, online, focusDeliveryId, onFo
     void open(delivery);
   }, [focusDeliveryId, deliveries]);
 
+  function keepAnswers(attemptId: string) {
+    const key = keptAnswersKey(attemptId);
+    void (dirty.current.size ? cacheSet(key, Object.fromEntries(dirty.current)) : cacheRemove(key)).catch(() => undefined);
+  }
+
   async function open(delivery: QuizDelivery) {
     if (!online && !delivery.attempt_id) { setMessage("Connect to the Host to start this quiz."); return; }
     try {
       const next = delivery.attempt_id ? await api.quizAttempt(delivery.attempt_id) : await api.startQuizAttempt(delivery.id);
-      dirty.current.clear();
+      // Answers given offline earlier win over the Host's copy; they are sent once connected.
+      const kept = next.submitted_at ? null : await cacheGet<Record<string, unknown>>(keptAnswersKey(next.id)).catch(() => null);
+      dirty.current = new Map(Object.entries(kept ?? {}));
+      if (next.submitted_at) void cacheRemove(keptAnswersKey(next.id)).catch(() => undefined);
       setAttempt(next);
       setClockOffsetMs(Date.parse(next.server_now) - Date.now());
-      setAnswers(Object.fromEntries(next.responses.map((response) => [response.question_id, response.answer])));
+      setAnswers({ ...Object.fromEntries(next.responses.map((response) => [response.question_id, response.answer])), ...kept });
       setIndex(0);
       setMessage("");
     } catch (error) { setMessage(error instanceof Error ? error.message : "The quiz could not be opened."); }
@@ -43,16 +54,23 @@ export function StudentQuizzes({ api, classroomId, online, focusDeliveryId, onFo
   async function save(questionId: string, answer: unknown) {
     setAnswers((current) => ({ ...current, [questionId]: answer }));
     dirty.current.set(questionId, answer);
-    if (!attempt || !online) return;
+    if (!attempt) return;
     const attemptId = attempt.id;
+    keepAnswers(attemptId);
+    if (!online) return;
     pendingSave.current = pendingSave.current.catch(() => undefined).then(async () => {
       if (!dirty.current.has(questionId)) return;
       const latest = dirty.current.get(questionId);
       await api.saveQuizResponse(attemptId, questionId, latest);
       if (dirty.current.get(questionId) === latest) dirty.current.delete(questionId);
+      keepAnswers(attemptId);
     });
     try { await pendingSave.current; setMessage("Answer saved."); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Answer will retry when connected."); }
+    catch (error) {
+      // The Host no longer takes answers (time is up or it was handed in), so stop keeping this one.
+      if (error instanceof ApiError && error.status === 409) { dirty.current.delete(questionId); keepAnswers(attemptId); }
+      setMessage(error instanceof Error ? error.message : "Answer will retry when connected.");
+    }
   }
 
   useEffect(() => {
@@ -68,6 +86,7 @@ export function StudentQuizzes({ api, classroomId, online, focusDeliveryId, onFo
       await pendingSave.current;
       if (dirty.current.size) throw new Error("Some answers are not saved yet. Check the Host connection and try again.");
       setAttempt(await api.submitQuizAttempt(attempt.id));
+      void cacheRemove(keptAnswersKey(attempt.id)).catch(() => undefined);
       await refresh();
       setMessage("Quiz submitted.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Quiz could not be submitted."); }
@@ -121,7 +140,7 @@ export function StudentQuizzes({ api, classroomId, online, focusDeliveryId, onFo
               </fieldset>
               <footer className="quiz-actions">
                 <Button disabled={index === 0} onClick={() => setIndex(index - 1)}>Previous</Button>
-                <span className="form-hint">{message || (!online ? "Offline: keep this quiz open and your answers are sent when you reconnect" : "Answers save as you go")}</span>
+                <span className="form-hint">{message || (!online ? "Offline: your answers are kept on this computer and sent when you are connected with this quiz open" : "Answers save as you go")}</span>
                 {index < attempt.questions.length - 1 ? (
                   <Button variant="primary" onClick={() => setIndex(index + 1)}>Next</Button>
                 ) : confirmSubmit ? (
