@@ -1,7 +1,7 @@
 import { Badge, Button, EmptyState, formatWhen, Icon, Panel, type CinderApi, type QuizAttempt, type QuizDelivery } from "@cinder/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-export function StudentQuizzes({ api, classroomId, online, focusDeliveryId }: { api: CinderApi; classroomId: string; online: boolean; focusDeliveryId?: string | null }) {
+export function StudentQuizzes({ api, classroomId, online, focusDeliveryId, onFocusOpened }: { api: CinderApi; classroomId: string; online: boolean; focusDeliveryId?: string | null; onFocusOpened?: () => void }) {
   const [deliveries, setDeliveries] = useState<QuizDelivery[]>([]);
   const [attempt, setAttempt] = useState<QuizAttempt | null>(null);
   const [index, setIndex] = useState(0);
@@ -16,7 +16,16 @@ export function StudentQuizzes({ api, classroomId, online, focusDeliveryId }: { 
 
   useEffect(() => { void refresh().catch((error) => setMessage(error instanceof Error ? error.message : "Quizzes could not be loaded.")); }, [refresh]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { const delivery = deliveries.find((item) => item.id === focusDeliveryId); if (delivery) void open(delivery); }, [focusDeliveryId, deliveries]);
+  // The focused quiz opens once. Reloading the list (after handing in) must not switch back to it.
+  const openedFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!focusDeliveryId || openedFocus.current === focusDeliveryId) return;
+    const delivery = deliveries.find((item) => item.id === focusDeliveryId);
+    if (!delivery) return;
+    openedFocus.current = focusDeliveryId;
+    onFocusOpened?.();
+    void open(delivery);
+  }, [focusDeliveryId, deliveries]);
 
   async function open(delivery: QuizDelivery) {
     if (!online && !delivery.attempt_id) { setMessage("Connect to the Host to start this quiz."); return; }
@@ -112,7 +121,7 @@ export function StudentQuizzes({ api, classroomId, online, focusDeliveryId }: { 
               </fieldset>
               <footer className="quiz-actions">
                 <Button disabled={index === 0} onClick={() => setIndex(index - 1)}>Previous</Button>
-                <span className="form-hint">{message || (!online ? "Offline: answers will be sent when you reconnect" : "Answers save as you go")}</span>
+                <span className="form-hint">{message || (!online ? "Offline: keep this quiz open and your answers are sent when you reconnect" : "Answers save as you go")}</span>
                 {index < attempt.questions.length - 1 ? (
                   <Button variant="primary" onClick={() => setIndex(index + 1)}>Next</Button>
                 ) : confirmSubmit ? (
@@ -142,9 +151,10 @@ export function StudentQuizzes({ api, classroomId, online, focusDeliveryId }: { 
               const notOpen = Boolean(delivery.opens_at && new Date(delivery.opens_at) > nowDate);
               const closed = Boolean(delivery.due_at && new Date(delivery.due_at) <= nowDate);
               const missed = Boolean(delivery.results_released_at && !submitted);
+              const expired = delivery.attempt_state === "expired";
               // A handed-in quiz always opens, so the result stays readable after the due date.
-              const locked = !submitted && (notOpen || closed || missed);
-              const state = submitted ? (delivery.results_released_at ? "Result ready" : "Handed in") : missed || closed ? "Closed" : delivery.attempt_id ? "In progress" : notOpen ? "Not open yet" : "Start";
+              const locked = !submitted && (notOpen || closed || missed || expired);
+              const state = submitted ? (delivery.results_released_at ? "Result ready" : "Handed in") : missed || closed ? "Closed" : expired ? "Time is up" : delivery.attempt_id ? "In progress" : notOpen ? "Not open yet" : "Start";
               const tone = submitted ? (delivery.results_released_at ? "good" : "accent") : delivery.attempt_id ? "warning" : "neutral";
               return (
                 <button className="list-item" type="button" key={delivery.id} disabled={locked} onClick={() => void open(delivery)}>

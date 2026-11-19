@@ -10,6 +10,7 @@ import {
   formatWhen,
   hostAddressLabel,
   Icon,
+  outboxEntries,
   PageHeader,
   Panel,
   ThemePicker,
@@ -25,7 +26,7 @@ import { useCountdown, SidebarTimer } from "./components/Countdown";
 import { useForgeData, type ForgeData, type ReferenceFile, type StudioNote } from "./forgeData";
 import { clearAssets, useForgeTheme, writeAsset } from "./theme";
 import { StudentClassrooms, type ClassroomFocus } from "./classrooms/StudentClassrooms";
-import { classroomCacheKey, classroomScope } from "./classrooms/classroomState";
+import { belongsToClassroomScope, classroomCacheKey, classroomScope } from "./classrooms/classroomState";
 import { LiveSessionBar, useStudentLiveSession } from "./classrooms/LiveSession";
 import "./studio/documents.css";
 
@@ -107,6 +108,8 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
       setToast("Cinder Host is not reachable");
       return;
     }
+    // A rebuilt Classrooms page starts at the list, not at an item Home opened earlier.
+    setFocus(null);
     setRefreshKey((value) => value + 1);
     setToast("Up to date");
   }
@@ -256,6 +259,8 @@ function HomePage({ api, scope, online, refreshKey, notes, liveNow, liveClassroo
   onNewNote: () => void;
 }) {
   const [work, setWork] = useState<{ assignments: Assignment[]; submissions: Record<string, Submission | null>; quizzes: QuizDelivery[] } | null>(null);
+  const [queued, setQueued] = useState<Set<string>>(new Set());
+  const [unreachable, setUnreachable] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -263,11 +268,18 @@ function HomePage({ api, scope, online, refreshKey, notes, liveNow, liveClassroo
     async function load() {
       // The classroom pages keep these cached; reading them first means Home
       // has something to show when the Host is unreachable.
-      const [cachedAssignments, cachedSubmissions] = await Promise.all([
+      const [cachedAssignments, cachedSubmissions, outbox] = await Promise.all([
         cacheGet<Assignment[]>(classroomCacheKey(scope, "assignments")),
         cacheGet<Record<string, Submission | null>>(classroomCacheKey(scope, "submissions")),
+        outboxEntries(),
       ]);
-      if (!cancelled && cachedAssignments) setWork({ assignments: cachedAssignments, submissions: cachedSubmissions ?? {}, quizzes: [] });
+      if (cancelled) return;
+      // Hand-ins made offline wait in the outbox until the Host answers.
+      setQueued(new Set(outbox
+        .filter((entry) => entry.kind === "submission" && belongsToClassroomScope(entry.key, scope))
+        .map((entry) => (entry.payload as { assignmentId: string }).assignmentId)));
+      if (cachedAssignments) setWork({ assignments: cachedAssignments, submissions: cachedSubmissions ?? {}, quizzes: [] });
+      setUnreachable(!online && !cachedAssignments);
       if (!online) return;
       const [assignments, quizzes] = await Promise.all([api.assignments(), api.quizDeliveries()]);
       const open = assignments.filter((item) => item.status === "published");
@@ -284,7 +296,7 @@ function HomePage({ api, scope, online, refreshKey, notes, liveNow, liveClassroo
     .filter((item) => { const submission = work?.submissions[item.id]; return !submission || submission.status === "withdrawn"; })
     .sort((left, right) => (left.due_at ? Date.parse(left.due_at) : Infinity) - (right.due_at ? Date.parse(right.due_at) : Infinity));
   const quizzes = (work?.quizzes ?? []).filter((delivery) =>
-    delivery.attempt_state !== "submitted" && !delivery.results_released_at
+    delivery.attempt_state !== "submitted" && delivery.attempt_state !== "expired" && !delivery.results_released_at
     && (!delivery.opens_at || Date.parse(delivery.opens_at) <= now)
     && (!delivery.due_at || Date.parse(delivery.due_at) > now));
   const recent = notes.filter((note) => !note.deletedAt).sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt)).slice(0, 5);
@@ -302,7 +314,10 @@ function HomePage({ api, scope, online, refreshKey, notes, liveNow, liveClassroo
         ) : null}
         <Panel title="To do" className="panel-flush">
           {error ? <p className="form-error panel-message" role="alert">{error}</p> : null}
-          {!work && !error ? <p className="loading-line">Loading…</p> : null}
+          {!work && !error && unreachable ? (
+            <EmptyState icon="assignments" title="Not connected" description="Your work and quizzes appear here once this computer reaches Cinder Host." />
+          ) : null}
+          {!work && !error && !unreachable ? <p className="loading-line">Loading…</p> : null}
           {work && !due.length && !quizzes.length ? (
             <EmptyState icon="check" title="Nothing due" description="Work and quizzes from your classrooms appear here." />
           ) : null}
@@ -320,7 +335,7 @@ function HomePage({ api, scope, online, refreshKey, notes, liveNow, liveClassroo
                 <button key={assignment.id} type="button" className="list-item" onClick={() => onOpenAssignment(assignment.id)}>
                   <span className="list-icon"><Icon name="assignments" /></span>
                   <span className="list-copy"><strong>{assignment.title}</strong><span>{assignment.classroom_name}{assignment.due_at ? ` · Due ${formatWhen(assignment.due_at)}` : ""}</span></span>
-                  {late ? <Badge tone="warning">Past due date</Badge> : null}
+                  {queued.has(assignment.id) ? <Badge>Waiting to send</Badge> : late ? <Badge tone="warning">Past due date</Badge> : null}
                 </button>
               );
             })}

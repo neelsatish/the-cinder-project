@@ -245,12 +245,17 @@ export function StudentClassrooms({
     }
   }, [api, assignments, baseUrl, liveTask?.id, loading, nodes, token]);
 
+  // Home or a note opens this page on one item, once. Later reloads (after a hand-in or a
+  // reconnect) must not pull the student back to it.
+  const pendingFocusAssignment = useRef(focus?.assignmentId ?? null);
+  const [focusDeliveryId, setFocusDeliveryId] = useState(focus?.deliveryId ?? null);
   useEffect(() => {
     // A focused assignment also opens its classroom, so Back lands somewhere useful.
-    if (!focus?.assignmentId || loading) return;
-    const assignment = assignments.find((item) => item.id === focus.assignmentId);
+    if (!pendingFocusAssignment.current || loading) return;
+    const assignment = assignments.find((item) => item.id === pendingFocusAssignment.current);
+    pendingFocusAssignment.current = null;
     if (assignment) setSelectedClassroomId(assignment.classroom_id);
-  }, [assignments, focus?.assignmentId, loading]);
+  }, [assignments, loading]);
 
   const selectedClassroom = classrooms.find((room) => room.id === selectedClassroomId) ?? null;
   const selectedAssignment = assignments.find((item) => item.id === selectedAssignmentId) ?? null;
@@ -328,7 +333,7 @@ export function StudentClassrooms({
               ))}
             </ClassroomList>
           ) : null}
-          {section === "quizzes" ? <StudentQuizzes api={api} classroomId={selectedClassroom.id} online={online} focusDeliveryId={liveTask?.kind === "quiz" ? liveTask.target_id : focus?.deliveryId ?? null} /> : null}
+          {section === "quizzes" ? <StudentQuizzes api={api} classroomId={selectedClassroom.id} online={online} focusDeliveryId={liveTask?.kind === "quiz" ? liveTask.target_id : focusDeliveryId} onFocusOpened={() => setFocusDeliveryId(null)} /> : null}
           {section === "materials" ? (
             <ClassroomList empty="No materials have been shared yet." icon="pdf">
               {materials.map((material) => <MaterialButton key={material.id} material={material} onOpen={() => openMaterial(api, baseUrl, token, material)} />)}

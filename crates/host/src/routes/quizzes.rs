@@ -494,7 +494,22 @@ fn load_delivery(
 ) -> HostResult<QuizDelivery> {
     let row=conn.query_row("SELECT v.quiz_id,d.version_id,d.classroom_id,c.name,v.title,v.instructions,d.kind,v.time_limit_minutes,v.total_points,d.opens_at,d.due_at,d.results_released_at FROM quiz_deliveries d JOIN quiz_versions v ON v.id=d.version_id JOIN classrooms c ON c.id=d.classroom_id WHERE d.id=?1",[id.to_string()],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,String>(5)?,r.get::<_,String>(6)?,r.get::<_,Option<u32>>(7)?,r.get::<_,f64>(8)?,r.get::<_,Option<String>>(9)?,r.get::<_,Option<String>>(10)?,r.get::<_,Option<String>>(11)?))).optional()?.ok_or(HostError::NotFound("quiz delivery"))?;
     let attempt = if let Some(sid) = student {
-        conn.query_row("SELECT id,CASE WHEN submitted_at IS NOT NULL THEN 'submitted' ELSE 'in_progress' END FROM quiz_attempts WHERE delivery_id=?1 AND student_id=?2",rusqlite::params![id.to_string(),sid.to_string()],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).optional()?
+        let row = conn.query_row("SELECT id,submitted_at IS NOT NULL,expires_at FROM quiz_attempts WHERE delivery_id=?1 AND student_id=?2",rusqlite::params![id.to_string(),sid.to_string()],|r|Ok((r.get::<_,String>(0)?,r.get::<_,bool>(1)?,r.get::<_,Option<String>>(2)?))).optional()?;
+        match row {
+            Some((attempt_id, submitted, expires_at)) => {
+                // The Host never hands in a timed-out attempt itself, and it can no
+                // longer be answered or handed in, so it is not "in progress".
+                let state = if submitted {
+                    "submitted"
+                } else if parse_optional_time(expires_at)?.is_some_and(|at| at <= Utc::now()) {
+                    "expired"
+                } else {
+                    "in_progress"
+                };
+                Some((attempt_id, state.to_owned()))
+            }
+            None => None,
+        }
     } else {
         None
     };
@@ -990,6 +1005,31 @@ mod tests {
         let stored = |question: Uuid| -> (Option<f64>, Option<String>, String) {
             conn.query_row("SELECT points,graded_at,answer_json FROM quiz_responses WHERE attempt_id=?1 AND question_id=?2",rusqlite::params![attempt.to_string(),question.to_string()],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap()
         };
+
+        let state = || {
+            load_delivery(&conn, delivery, Some(student))
+                .unwrap()
+                .attempt_state
+        };
+        assert_eq!(state().as_deref(), Some("in_progress"));
+        conn.execute(
+            "UPDATE quiz_attempts SET expires_at=?2 WHERE id=?1",
+            rusqlite::params![
+                attempt.to_string(),
+                (Utc::now() - Duration::minutes(1)).to_rfc3339()
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            state().as_deref(),
+            Some("expired"),
+            "a timed-out attempt is over"
+        );
+        conn.execute(
+            "UPDATE quiz_attempts SET expires_at=NULL WHERE id=?1",
+            [attempt.to_string()],
+        )
+        .unwrap();
 
         let again = insert_or_get_attempt(&conn, delivery, student, Utc::now(), None, 3.0).unwrap();
         assert_eq!(again, attempt, "starting twice returns the same attempt");
