@@ -70,8 +70,8 @@ for any public claim. Update this file when you resolve a conflict.
   later are in `docs/future-features.md`. Checked in a browser against a
   seeded test Host, not yet in the installed apps, on Linux or on a second
   device. Unsigned Windows installers were built locally for review only.
-- **Tauri 2.12, 19 November 2026 (branch `claude/tauri-2-12-upgrade`, on top
-  of the UI rework):** Tauri 2.11.5 to 2.12.7 and `tauri-plugin-updater` 2.14.1
+- **Tauri 2.12, 19 November 2026 (from branch `claude/tauri-2-12-upgrade`,
+  merged into the UI rework branch):** Tauri 2.11.5 to 2.12.7 and `tauri-plugin-updater` 2.14.1
   (zip 9), which clears the six zip advisories that kept `cargo audit` red.
   The updater's new `requireSignedVersion` option is left at its default
   (off). It stops a tampered feed pairing a new version number with an older
@@ -79,6 +79,15 @@ for any public claim. Update this file when you resolve a conflict.
   releases signed by Tauri CLI 2.12 or later carry one. Whether to turn it on
   for the next release is the maintainer's call. The updater itself was not
   exercised end to end.
+- **Branch review, 19 November 2026:** a full review of the branch found and
+  fixed the slips listed as R-01 to R-14 in the audit document. One touches
+  existing school data: Host migration `0014_longer_live_classes` rebuilds
+  `live_module_sessions` so live classes can last 60 minutes. SQLite cannot
+  change a CHECK in place, so the migration runner turns foreign keys off for
+  that one migration (`REBUILDS` in `crates/host/src/db.rs`) and checks every
+  reference before committing. It was tested on a 0.10.7-shaped database in
+  `cargo test` and on the seeded dev data folder. The Host also reports a
+  timed-out quiz attempt as `attempt_state: "expired"`.
 - **Test data:** `node scripts/seed-test-data.mjs <empty folder>` fills a new
   Host data folder with a labelled Cinder Test School through the classroom
   API. The test passwords are in the script. The maintainer's earlier app
