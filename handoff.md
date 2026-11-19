@@ -70,6 +70,15 @@ for any public claim. Update this file when you resolve a conflict.
   later are in `docs/future-features.md`. Checked in a browser against a
   seeded test Host, not yet in the installed apps, on Linux or on a second
   device. Unsigned Windows installers were built locally for review only.
+- **Tauri 2.12, 19 November 2026 (branch `claude/tauri-2-12-upgrade`, on top
+  of the UI rework):** Tauri 2.11.5 to 2.12.7 and `tauri-plugin-updater` 2.14.1
+  (zip 9), which clears the six zip advisories that kept `cargo audit` red.
+  The updater's new `requireSignedVersion` option is left at its default
+  (off). It stops a tampered feed pairing a new version number with an older
+  signed release, but rejects any signature without a version, and only
+  releases signed by Tauri CLI 2.12 or later carry one. Whether to turn it on
+  for the next release is the maintainer's call. The updater itself was not
+  exercised end to end.
 - **Test data:** `node scripts/seed-test-data.mjs <empty folder>` fills a new
   Host data folder with a labelled Cinder Test School through the classroom
   API. The test passwords are in the script. The maintainer's earlier app
