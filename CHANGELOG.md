@@ -31,6 +31,9 @@ Not yet in a published installer. The version is still 0.10.7.
 - Fixed: Cinder Student said "Time is up" every time it opened after a timer had finished.
 - Fixed: choosing Classrooms in Student's sidebar from inside a classroom did nothing.
 - Fixed: Cinder Host's People list named a teacher's classroom once for every student in it, and listed archived classrooms.
+- Fixed: marks typed in the Gradebook close together could be lost when the first one saved, and a mark typed just before leaving the Gradebook was dropped.
+- Fixed: work handed in offline in Cinder Student was sent only once the Classrooms page was opened, and could be sent twice. It now goes as soon as the Host is reachable.
+- Quiz answers given offline in Cinder Student are kept on the computer until they reach the Host, instead of being lost when the quiz is left.
 - Cinder Student says "Time is up" on a quiz whose time limit has run out, instead of "In progress".
 - PDFs in Papers and the figure picker load pdf.js's build with polyfills, so they no longer depend on very new browser features that the webview on Linux Mint may lack.
 - Security updates for newly published advisories: rustls and its root certificates, the SQLite bundled with Cinder Host (rusqlite 0.41), DOMPurify, ProseMirror and markdown-it. Tauri moves to 2.12 and its updater to 2.14.1, which clears six advisories in the zip crate the updater uses on Windows.
