@@ -164,19 +164,26 @@ fn migrate(conn: &mut Connection) -> Result<()> {
     Ok(())
 }
 
+fn broken_references(conn: &Connection) -> rusqlite::Result<i64> {
+    conn.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
+        row.get(0)
+    })
+}
+
 fn apply(conn: &mut Connection, name: &str, sql: &str, rebuild: bool) -> Result<()> {
     let tx = conn.transaction()?;
+    // An older database may already hold a stray broken reference somewhere else; that must
+    // not stop the Host starting, so only references this migration breaks count.
+    let before = if rebuild { broken_references(&tx)? } else { 0 };
     tx.execute_batch(sql)
         .with_context(|| format!("applying migration {name}"))?;
     if rebuild {
         // Enforcement was off, so prove every reference still resolves.
-        let broken: i64 =
-            tx.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
-                row.get(0)
-            })?;
+        let after = broken_references(&tx)?;
         anyhow::ensure!(
-            broken == 0,
-            "migration {name} left {broken} broken references"
+            after <= before,
+            "migration {name} broke {} references",
+            after - before
         );
     }
     tx.execute(
@@ -243,6 +250,14 @@ mod tests {
                  VALUES ('k1', 'l1', 1, 'instruction', 'Read page 4', 't1', 'then');",
         )
         .unwrap();
+        // A stray broken reference elsewhere, as an old database might hold, must not block it.
+        conn.execute_batch(
+            "PRAGMA foreign_keys = OFF;
+             INSERT INTO nodes (id, owner_id, parent_id, name, kind, position, created_at, updated_at)
+                 VALUES ('stray', 'gone', NULL, 'Old folder', 'folder', 0, 'then', 'then');
+             PRAGMA foreign_keys = ON;",
+        )
+        .unwrap();
 
         migrate(&mut conn).unwrap();
 
@@ -252,6 +267,11 @@ mod tests {
             })
             .unwrap()
         };
+        assert_eq!(
+            count("nodes WHERE id = 'stray'"),
+            1,
+            "other data is left alone"
+        );
         assert_eq!(count("live_module_sessions"), 1);
         assert_eq!(count("live_module_participants"), 1);
         assert_eq!(count("live_session_tasks"), 1);
