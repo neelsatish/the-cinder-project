@@ -319,18 +319,21 @@ export function Modal({
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const dialogRef = useRef<HTMLElement>(null);
+  // Read during the first render: by the time effects run, a field's autoFocus has moved focus.
+  const [opener] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
   useEffect(() => {
     // Take keyboard focus like a native dialog, unless a field already has it (autoFocus),
     // and give it back to whatever opened the dialog when it closes.
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = dialogRef.current;
     if (dialog && !dialog.contains(document.activeElement)) dialog.focus();
     return () => {
-      // Only when focus went with this dialog, so a dialog replacing it keeps its own.
-      const lost = document.activeElement === document.body || Boolean(dialog?.contains(document.activeElement));
+      // Only once the dialog has really gone (not a development re-run of this effect), and only
+      // when focus went with it, so a dialog replacing it (Next, Previous) keeps its own.
+      if (dialog?.isConnected) return;
+      const lost = !document.activeElement || document.activeElement === document.body;
       if (lost && opener?.isConnected) opener.focus();
     };
-  }, []);
+  }, [opener]);
   useEffect(() => {
     if (lock) return;
     const onKey = (event: KeyboardEvent) => {
