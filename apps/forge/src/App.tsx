@@ -28,6 +28,7 @@ import { clearAssets, useForgeTheme, writeAsset } from "./theme";
 import { StudentClassrooms, type ClassroomFocus } from "./classrooms/StudentClassrooms";
 import { belongsToClassroomScope, classroomCacheKey, classroomScope } from "./classrooms/classroomState";
 import { LiveSessionBar, useStudentLiveSession } from "./classrooms/LiveSession";
+import { REJECTED_HAND_IN, sendQueuedHandIns } from "./classrooms/outbox";
 import "./studio/documents.css";
 
 // The editor pulls in Quill and KaTeX, and the PDF pane pdf.js; loading them on
@@ -65,6 +66,15 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
     const handle = window.setTimeout(() => setToast(""), 2600);
     return () => window.clearTimeout(handle);
   }, [toast]);
+
+  // Work handed in offline goes as soon as the Host answers, whichever page is open.
+  const scope = classroomScope(session.baseUrl, session.user.id);
+  useEffect(() => {
+    if (!session.online) return;
+    void sendQueuedHandIns(session.api, scope)
+      .then(({ rejected }) => { if (rejected) setToast(REJECTED_HAND_IN); })
+      .catch(() => undefined);
+  }, [scope, session.api, session.online]);
 
   // Only when a running timer finishes: a timer saved as finished must not announce itself on every launch.
   const timerStatus = useRef(timer.status);
@@ -186,7 +196,7 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
         ) : page === "home" ? (
           <HomePage
             api={session.api}
-            scope={classroomScope(session.baseUrl, session.user.id)}
+            scope={scope}
             online={session.online}
             refreshKey={refreshKey}
             notes={forge.data.studioNotes}
@@ -266,6 +276,8 @@ function HomePage({ api, scope, online, refreshKey, notes, liveNow, liveClassroo
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      // Send work handed in offline first, so To do shows what is really still waiting.
+      if (online) await sendQueuedHandIns(api, scope).catch(() => undefined);
       // The classroom pages keep these cached; reading them first means Home
       // has something to show when the Host is unreachable.
       const [cachedAssignments, cachedSubmissions, outbox] = await Promise.all([

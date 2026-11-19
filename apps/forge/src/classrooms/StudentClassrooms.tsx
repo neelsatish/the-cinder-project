@@ -33,18 +33,12 @@ import {
   classroomCacheKey,
   classroomScope,
   formatAssignmentDue,
-  shouldRetryOutboxFailure,
   submissionOutboxKey,
 } from "./classroomState";
 import { StudentQuizzes } from "./StudentQuizzes";
+import { REJECTED_HAND_IN, sendQueuedHandIns, type SubmissionPayload } from "./outbox";
 
 type ClassroomSection = "work" | "quizzes" | "materials" | "marks";
-type SubmissionPayload = {
-  assignmentId: string;
-  doc: Record<string, unknown>;
-  text: string;
-  note: string;
-};
 type StartNote = (input: { title: string; topic: string; bodyHtml: string; assignmentId: string }) => void;
 
 /** Where to land when another page sends the student here. */
@@ -156,22 +150,8 @@ export function StudentClassrooms({
   }, [scope]);
 
   const flushCurrentStudent = useCallback(async () => {
-    for (const entry of await outboxEntries()) {
-      if (entry.kind !== "submission" || !belongsToClassroomScope(entry.key, scope)) continue;
-      const payload = entry.payload as SubmissionPayload;
-      try {
-        await api.submitWork(payload.assignmentId, payload.doc, payload.text, payload.note);
-        await removeOutbox(entry.key);
-      } catch (failure) {
-        if (!(failure instanceof ApiError)) break;
-        if (shouldRetryOutboxFailure(failure.status, failure.offline)) {
-          if (failure.offline) break;
-          continue;
-        }
-        await removeOutbox(entry.key);
-        setMessage("Work waiting to be sent was rejected by Cinder Host. Your note is still saved on this computer.");
-      }
-    }
+    const { rejected } = await sendQueuedHandIns(api, scope);
+    if (rejected) setMessage(REJECTED_HAND_IN);
     await readQueued();
   }, [api, readQueued, scope]);
 
