@@ -108,6 +108,14 @@ export function App() {
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
   const [connectionOpen, setConnectionOpen] = useState(false);
+  // Ask about an untrusted or changed Host once. The background retry runs every few
+  // seconds and must not reopen the dialog after it is closed; saving a connection resets this.
+  const identityPrompted = useRef(false);
+  const promptHostIdentity = (failure: unknown) => {
+    if (identityPrompted.current || !(failure instanceof ApiError) || !["host_identity_changed", "host_untrusted"].includes(failure.code)) return;
+    identityPrompted.current = true;
+    setConnectionOpen(true);
+  };
   const [hostOutdated, setHostOutdated] = useState(false);
   const [knownAccounts, setKnownAccounts] = useState<string[]>(() => {
     try {
@@ -271,7 +279,7 @@ export function App() {
           if (isCurrent()) {
             setOnline(false);
             if (isHostOutdated(failure)) setHostOutdated(true);
-            if (failure instanceof ApiError && ["host_identity_changed", "host_untrusted"].includes(failure.code)) setConnectionOpen(true);
+            promptHostIdentity(failure);
             if (session) {
               setUser(session.user);
               rememberAccount(session.user.username);
@@ -352,7 +360,7 @@ export function App() {
           return;
         setOnline(false);
         if (isHostOutdated(failure)) setHostOutdated(true);
-        if (failure instanceof ApiError && ["host_identity_changed", "host_untrusted"].includes(failure.code)) setConnectionOpen(true);
+        promptHostIdentity(failure);
         if (!(failure instanceof ApiError) || !failure.offline) {
           resetWorkspace();
           api.setToken(null);
@@ -466,6 +474,7 @@ export function App() {
     setNeedsSetup(status.needs_setup);
     setOnline(true);
     setConnectionOpen(false);
+    identityPrompted.current = false;
   };
 
   const startupView = teacherStartupView(needsSetup, Boolean(user));

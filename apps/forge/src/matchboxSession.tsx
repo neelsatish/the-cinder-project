@@ -94,6 +94,14 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
   const [online, setOnline] = useState(false);
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [connectionOpen, setConnectionOpen] = useState(false);
+  // Ask about an untrusted or changed Host once. The background retry runs every few
+  // seconds and must not reopen the dialog after it is closed; saving a connection resets this.
+  const identityPrompted = useRef(false);
+  const promptHostIdentity = (failure: unknown) => {
+    if (identityPrompted.current || !(failure instanceof ApiError) || !["host_identity_changed", "host_untrusted"].includes(failure.code)) return;
+    identityPrompted.current = true;
+    setConnectionOpen(true);
+  };
   const [hostOutdated, setHostOutdated] = useState(false);
   const [knownAccounts, setKnownAccounts] = useState(readKnownAccounts);
   const sessionGeneration = useRef(0);
@@ -149,7 +157,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
         if (failure instanceof ApiError && failure.offline) {
           setOnline(false);
           if (isHostOutdated(failure)) setHostOutdated(true);
-          if (["host_identity_changed", "host_untrusted"].includes(failure.code)) setConnectionOpen(true);
+          promptHostIdentity(failure);
           return false;
         }
         sessionGeneration.current += 1;
@@ -197,7 +205,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
         if (isTauri()) {
           try {
             const identity = await inspectHostIdentity(nextUrl);
-            if (identity.status !== "trusted" && !cancelled) setConnectionOpen(true);
+            if (identity.status !== "trusted" && !cancelled) { identityPrompted.current = true; setConnectionOpen(true); }
           } catch (failure) {
             // School connection can retry when Host is available.
             if (isHostOutdated(failure) && !cancelled) setHostOutdated(true);
@@ -214,7 +222,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
             await saveSessionValue(SESSION_KEYS, JSON.stringify({ ...stored, user: current }));
           } catch (failure) {
             if (isHostOutdated(failure) && !cancelled) setHostOutdated(true);
-            if (failure instanceof ApiError && ["host_identity_changed", "host_untrusted"].includes(failure.code) && !cancelled) setConnectionOpen(true);
+            if (!cancelled) promptHostIdentity(failure);
             if (failure instanceof ApiError && !failure.offline) {
               sessionGeneration.current += 1;
               refreshInFlight.current = null;
@@ -336,6 +344,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
       setDeviceLabel(label);
       setOnline(true);
       setConnectionOpen(false);
+      identityPrompted.current = false;
       return;
     }
 
@@ -359,6 +368,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
     setApi(nextApi);
     setOnline(true);
     setConnectionOpen(false);
+    identityPrompted.current = false;
     setLoading(false);
     void remoteLogout;
   }
