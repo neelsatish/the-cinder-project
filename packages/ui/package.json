@@ -8,14 +8,15 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./styles.css": "./src/styles.css"
+    "./styles.css": "./src/styles.css",
+    "./pdf": "./src/PdfViewer.tsx"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
-    "@tauri-apps/api": "^2.11.1",
-    "@tauri-apps/plugin-opener": "^2.5.4",
-    "@tauri-apps/plugin-process": "^2.3.1",
-    "@tauri-apps/plugin-updater": "^2.10.1",
+    "@tauri-apps/api": "^2.12.5",
+    "@tauri-apps/plugin-opener": "^2.7.3",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "@tiptap/core": "^2.27.1",
     "@tiptap/extension-character-count": "^2.27.1",
     "@tiptap/extension-color": "^2.27.1",
@@ -28,6 +29,7 @@
     "@tiptap/extension-underline": "^2.27.1",
     "@tiptap/react": "^2.27.1",
     "@tiptap/starter-kit": "^2.27.1",
+    "pdfjs-dist": "^6.2.108",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   }

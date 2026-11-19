@@ -1,14 +1,14 @@
 import type { ButtonHTMLAttributes, FormEvent, ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { hostAddressLabel } from "./hostTransport";
 import { BrandMark, Icon, type IconName } from "./icons";
 import { useTheme, type CinderTheme } from "./theme";
 import type { Role, User } from "./types";
 
-const THEME_OPTIONS: { id: CinderTheme; label: string; description: string }[] = [
-  { id: "light", label: "Light", description: "Clean and calm for everyday work." },
-  { id: "dark", label: "Dark", description: "Low glare with warm Cinder accents." },
-  { id: "paper", label: "Paper", description: "Printed texture, hard ink and bold colour." },
+const THEME_OPTIONS: { id: CinderTheme; label: string; icon: IconName }[] = [
+  { id: "light", label: "Light", icon: "sun" },
+  { id: "dark", label: "Dark", icon: "moon" },
 ];
 
 export type NavigationItem<T extends string> = {
@@ -18,8 +18,14 @@ export type NavigationItem<T extends string> = {
   badge?: number;
 };
 
+/**
+ * The one app frame: a quiet sidebar (brand, optional search, navigation,
+ * account) beside a scrolling content area. No top bar, so the page title is
+ * the first thing in the content.
+ */
 export function AppShell<T extends string>({
   roleLabel,
+  appName = `Cinder ${roleLabel}`,
   user,
   items,
   active,
@@ -28,10 +34,17 @@ export function AppShell<T extends string>({
   online = true,
   onRefresh,
   refreshing = false,
+  search,
+  footer,
+  accountActions,
+  statusLabel,
+  logoutLabel = "Sign out",
+  logoutIcon = "logout",
   children,
 }: {
   roleLabel: string;
-  user: User;
+  appName?: string;
+  user: Pick<User, "display_name">;
   items: NavigationItem<T>[];
   active: T;
   onNavigate: (id: T) => void;
@@ -39,125 +52,126 @@ export function AppShell<T extends string>({
   online?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
+  /** Rendered under the brand, for an app-wide search box. */
+  search?: ReactNode;
+  /** Rendered above the account row, for small app-specific tools. */
+  footer?: ReactNode;
+  /** Extra icon buttons on the account row. */
+  accountActions?: ReactNode;
+  /** Replaces "Connected"/"Offline" under the name. */
+  statusLabel?: string;
+  logoutLabel?: string;
+  logoutIcon?: IconName;
   children: ReactNode;
 }) {
-  const activeItem = items.find((item) => item.id === active);
-  const isTeacher = roleLabel === "Teacher";
   return (
-    <div className={`app-frame${isTeacher ? " teacher-shell" : ""}`}>
-      <aside className="nav-rail">
-        <div className="rail-brand">
-          <BrandMark size={38} />
-          {isTeacher ? <strong className="rail-brand-copy">Cinder Teacher</strong> : null}
+    <div className="app-frame">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <BrandMark size={24} />
+          <span>{appName}</span>
         </div>
-        <nav className="rail-nav" aria-label={`${roleLabel} navigation`}>
+        {search}
+        <nav className="sidebar-nav" aria-label={`${roleLabel} navigation`}>
           {items.map((item) => (
             <button
               key={item.id}
               type="button"
-              className={`rail-button ${active === item.id ? "is-active" : ""}`}
+              className={`nav-item${active === item.id ? " is-active" : ""}`}
               onClick={() => onNavigate(item.id)}
-              title={item.label}
-              aria-label={item.label}
               aria-current={active === item.id ? "page" : undefined}
             >
               <Icon name={item.icon} />
-              {isTeacher ? <span className="rail-label">{item.label}</span> : null}
-              {item.badge ? (
-                <span className="rail-badge">{item.badge}</span>
-              ) : null}
+              <span>{item.label}</span>
+              {item.badge ? <span className="nav-badge">{item.badge}</span> : null}
             </button>
           ))}
         </nav>
-        <button
-          className="rail-button rail-logout"
-          type="button"
-          onClick={onLogout}
-          title="Sign out"
-        >
-          <Icon name="logout" />
-          {isTeacher ? <span className="rail-label">Sign out</span> : null}
-        </button>
-      </aside>
-
-      <div className="app-stage">
-        <header className="topbar">
-          <div className="product-lockup">
-            <span className="product-name">Cinder</span>
-            <span className="product-divider" />
-            <span className="section-name">{activeItem?.label}</span>
-          </div>
-          <div className="topbar-actions">
+        <div className="sidebar-footer">
+          {footer}
+          <div className="sidebar-account">
+            <span className="account-initial" aria-hidden="true">
+              {user.display_name.trim().slice(0, 1).toUpperCase() || "?"}
+            </span>
+            <span className="account-copy">
+              <strong title={user.display_name}>{user.display_name}</strong>
+              <span className={`sync-status${online ? "" : " is-offline"}`}>
+                {statusLabel ?? (online ? "Connected" : "Offline")}
+              </span>
+            </span>
+            {accountActions}
             {onRefresh ? (
               <button
-                className={`topbar-refresh ${refreshing ? "is-refreshing" : ""}`}
+                className="icon-button"
                 type="button"
                 onClick={onRefresh}
                 disabled={refreshing}
-                title="Refresh data"
-                aria-label="Refresh data"
+                title="Refresh"
+                aria-label="Refresh"
               >
                 <Icon name="refresh" />
               </button>
             ) : null}
-            <span className={`connection ${online ? "online" : "offline"}`}>
-              <Icon name={online ? "wifi" : "offline"} />
-              {online ? "Synced" : "Working offline"}
-            </span>
-            <span className="role-chip">{roleLabel}</span>
-            <span className="user-name">{user.display_name}</span>
+            <button className="icon-button" type="button" onClick={onLogout} title={logoutLabel} aria-label={logoutLabel}>
+              <Icon name={logoutIcon} />
+            </button>
           </div>
-        </header>
-        <main className="workspace">{children}</main>
-      </div>
+        </div>
+      </aside>
+      <main className="app-main">{children}</main>
     </div>
   );
 }
 
 export function PageHeader({
-  eyebrow,
   title,
   description,
   action,
+  back,
 }: {
+  /** @deprecated Eyebrow labels were removed from the design; ignored. */
   eyebrow?: string;
-  title: string;
-  description?: string;
+  title: ReactNode;
+  description?: ReactNode;
   action?: ReactNode;
+  /** A "back to…" link shown above the title on nested pages. */
+  back?: { label: string; onClick: () => void };
 }) {
   return (
-    <div className="page-header">
+    <header className="page-header">
       <div>
-        {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
+        {back ? (
+          <button type="button" className="back-link" onClick={back.onClick}>
+            <Icon name="chevron" />
+            {back.label}
+          </button>
+        ) : null}
         <h1>{title}</h1>
         {description ? <p className="page-description">{description}</p> : null}
       </div>
       {action ? <div className="page-action">{action}</div> : null}
-    </div>
+    </header>
   );
 }
 
 export function Panel({
   title,
-  eyebrow,
   action,
   children,
   className = "",
 }: {
-  title?: string;
+  title?: ReactNode;
+  /** @deprecated Eyebrow labels were removed from the design; ignored. */
   eyebrow?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <section className={`panel ${className}`}>
-      {title || eyebrow || action ? (
+    <section className={`panel ${className}`.trim()}>
+      {title || action ? (
         <header className="panel-header">
-          <div>
-            {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-            {title ? <h2>{title}</h2> : null}
-          </div>
+          {title ? <h2>{title}</h2> : <span />}
           {action}
         </header>
       ) : null}
@@ -188,7 +202,7 @@ export function Badge({
   tone = "neutral",
   children,
 }: {
-  tone?: "neutral" | "good" | "warning" | "accent";
+  tone?: "neutral" | "good" | "warning" | "accent" | "danger";
   children: ReactNode;
 }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
@@ -196,17 +210,19 @@ export function Badge({
 
 export function Button({
   variant = "secondary",
+  size,
   icon,
   className = "",
   children,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger";
+  size?: "small";
   icon?: IconName;
 }) {
   return (
     <button
-      className={`button button-${variant} ${className}`.trim()}
+      className={`button button-${variant}${size ? ` button-${size}` : ""} ${className}`.trim()}
       type="button"
       {...props}
     >
@@ -216,10 +232,40 @@ export function Button({
   );
 }
 
+export function Tabs<T extends string>({
+  tabs,
+  active,
+  onChange,
+  label,
+}: {
+  tabs: { id: T; label: string; count?: number }[];
+  active: T;
+  onChange: (id: T) => void;
+  label: string;
+}) {
+  return (
+    <div className="tabs" role="tablist" aria-label={label}>
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={active === tab.id}
+          className={`tab${active === tab.id ? " is-active" : ""}`}
+          onClick={() => onChange(tab.id)}
+        >
+          {tab.label}
+          {tab.count !== undefined ? <span className="tab-count">{tab.count}</span> : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function ThemePicker() {
   const { theme, setTheme } = useTheme();
   return (
-    <div className="theme-picker" role="radiogroup" aria-label="Colour theme">
+    <div className="theme-picker" role="radiogroup" aria-label="Theme">
       {THEME_OPTIONS.map((option) => (
         <button
           className={theme === option.id ? "is-selected" : ""}
@@ -229,11 +275,8 @@ export function ThemePicker() {
           key={option.id}
           onClick={() => setTheme(option.id)}
         >
-          <span className={`theme-preview theme-preview-${option.id}`} aria-hidden="true">
-            <i /><i /><i />
-          </span>
-          <strong>{option.label}</strong>
-          <small>{option.description}</small>
+          <Icon name={option.icon} />
+          {option.label}
         </button>
       ))}
     </div>
@@ -258,44 +301,72 @@ export function Field({
   );
 }
 
+/** Where focus returns when a dialog closes after the dialog it was opened from has gone. */
+const dialogReturnTargets = new WeakMap<Element, HTMLElement | null>();
+
 export function Modal({
   title,
   description,
   onClose,
   children,
   lock = false,
+  wide = false,
 }: {
   title: string;
   description?: string;
   onClose?: () => void;
   children: ReactNode;
   lock?: boolean;
+  wide?: boolean;
 }) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const dialogRef = useRef<HTMLElement>(null);
+  // Read during the first render: by the time effects run, a field's autoFocus has moved focus.
+  const [opener] = useState(() => {
+    const element = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Opened from inside another dialog: if that dialog goes first (Next, Previous, a secrets
+    // dialog after a reset), focus returns to what opened that one instead.
+    const parent = element?.closest('[role="dialog"]');
+    return { element, fallback: parent ? dialogReturnTargets.get(parent) ?? null : element };
+  });
+  useEffect(() => {
+    // Take keyboard focus like a native dialog, unless a field already has it (autoFocus),
+    // and give it back to whatever opened the dialog when it closes.
+    const dialog = dialogRef.current;
+    if (dialog) dialogReturnTargets.set(dialog, opener.fallback);
+    if (dialog && !dialog.contains(document.activeElement)) dialog.focus();
+    return () => {
+      // Only once the dialog has really gone (not a development re-run of this effect), and only
+      // when focus went with it, so a dialog replacing it keeps its own.
+      if (dialog?.isConnected) return;
+      const lost = !document.activeElement || document.activeElement === document.body;
+      const target = opener.element?.isConnected ? opener.element : opener.fallback?.isConnected ? opener.fallback : null;
+      if (lost) target?.focus();
+    };
+  }, [opener]);
+  useEffect(() => {
+    if (lock) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeRef.current?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lock]);
   return (
     <div
       className="modal-backdrop"
       role="presentation"
-      onMouseDown={lock ? undefined : onClose}
+      onMouseDown={lock ? undefined : (event) => event.target === event.currentTarget && onClose?.()}
     >
-      <section
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
+      <section ref={dialogRef} tabIndex={-1} className={`modal${wide ? " modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="modal-header">
           <div>
             <h2>{title}</h2>
             {description ? <p>{description}</p> : null}
           </div>
           {!lock && onClose ? (
-            <button
-              className="icon-button"
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-            >
+            <button className="icon-button" type="button" onClick={onClose} aria-label="Close">
               <Icon name="close" />
             </button>
           ) : null}
@@ -303,6 +374,71 @@ export function Modal({
         {children}
       </section>
     </div>
+  );
+}
+
+/** A small dialog that asks for one or two values, replacing window.prompt. */
+export function PromptDialog({
+  title,
+  description,
+  fields,
+  submitLabel = "Save",
+  danger = false,
+  onSubmit,
+  onClose,
+}: {
+  title: string;
+  description?: string;
+  fields: { name: string; label: string; type?: string; initial?: string; required?: boolean; hint?: string; min?: number; max?: number; step?: number }[];
+  submitLabel?: string;
+  danger?: boolean;
+  onSubmit: (values: Record<string, string>) => Promise<void> | void;
+  onClose: () => void;
+}) {
+  const [values, setValues] = useState(() => Object.fromEntries(fields.map((field) => [field.name, field.initial ?? ""])));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <Modal title={title} description={description} onClose={busy ? undefined : onClose}>
+      <form
+        className="form-stack"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setBusy(true);
+          setError("");
+          try {
+            await onSubmit(values);
+            onClose();
+          } catch (failure) {
+            setError(failure instanceof Error ? failure.message : String(failure));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {fields.map((field, index) => (
+          <Field key={field.name} label={field.label} hint={field.hint}>
+            <input
+              type={field.type ?? "text"}
+              value={values[field.name]}
+              required={field.required}
+              min={field.min}
+              max={field.max}
+              step={field.step}
+              autoFocus={index === 0}
+              onChange={(event) => setValues((current) => ({ ...current, [field.name]: event.target.value }))}
+            />
+          </Field>
+        ))}
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
+        <div className="form-actions">
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant={danger ? "danger" : "primary"} type="submit" disabled={busy}>
+            {busy ? "Working…" : submitLabel}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -314,14 +450,14 @@ export function EmptyState({
 }: {
   icon?: IconName;
   title: string;
-  description: string;
+  description?: string;
   action?: ReactNode;
 }) {
   return (
     <div className="empty-state">
       <Icon name={icon} />
       <h3>{title}</h3>
-      <p>{description}</p>
+      {description ? <p>{description}</p> : null}
       {action}
     </div>
   );
@@ -329,20 +465,23 @@ export function EmptyState({
 
 export function LoginScreen({
   role,
-  subtitle,
   helper,
   onSubmit,
   offlineHint,
   rememberedUsernames = [],
   onCreateAccount,
+  children,
 }: {
   role: Role;
-  subtitle: string;
+  /** @deprecated The marketing panel this fed was removed; ignored. */
+  subtitle?: string;
   helper?: string;
   onSubmit: (username: string, password: string) => Promise<void>;
   offlineHint?: string;
   rememberedUsernames?: string[];
   onCreateAccount?: () => void;
+  /** Secondary links shown under the form (recovery, school connection…). */
+  children?: ReactNode;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -364,18 +503,11 @@ export function LoginScreen({
 
   return (
     <div className="auth-screen">
-      <div className="auth-visual">
-        <BrandMark size={64} />
-        <p className="eyebrow">Learning, clearly organised</p>
-        <h1>A calmer place for schoolwork.</h1>
-        <p>{subtitle}</p>
-        <div className="auth-grid-decoration" />
-      </div>
       <form className="auth-card" onSubmit={submit}>
         <div className="auth-heading">
-          <span className="role-chip">{role}</span>
-          <h2>Welcome to Cinder</h2>
-          <p>{helper ?? "Sign in with the account created by your teacher."}</p>
+          <BrandMark size={40} />
+          <h1>Sign in to Cinder {role === "teacher" ? "Teacher" : "Student"}</h1>
+          <p>{helper ?? "Use the account your teacher created for you."}</p>
         </div>
         {rememberedUsernames.length ? (
           <div className="account-switcher" aria-label="Accounts on this device">
@@ -397,7 +529,6 @@ export function LoginScreen({
                 </button>
               ))}
             </div>
-            <small>Only usernames are remembered. Passwords stay private.</small>
           </div>
         ) : null}
         <Field label="Username">
@@ -416,21 +547,75 @@ export function LoginScreen({
             autoComplete="current-password"
           />
         </Field>
-        {error ? <p className="form-error">{error}</p> : null}
-        <Button
-          variant="primary"
-          type="submit"
-          disabled={busy || !username.trim() || !password}
-        >
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
+        <Button variant="primary" type="submit" disabled={busy || !username.trim() || !password}>
           {busy ? "Signing in…" : "Sign in"}
         </Button>
-        {onCreateAccount ? (
-          <button className="auth-secondary-action" type="button" onClick={onCreateAccount}>
-            Create a teacher account
-          </button>
-        ) : null}
         {offlineHint ? <p className="form-hint">{offlineHint}</p> : null}
+        {onCreateAccount || children ? (
+          <div className="auth-actions">
+            {onCreateAccount ? (
+              <button className="auth-secondary-action" type="button" onClick={onCreateAccount}>
+                Create a teacher account
+              </button>
+            ) : null}
+            {children}
+          </div>
+        ) : null}
       </form>
+    </div>
+  );
+}
+
+/** Replaces sign-in when the Host is older than this app: nothing works until Host is updated. */
+export function HostOutdatedScreen({
+  appName,
+  baseUrl,
+  onOpenConnection,
+}: {
+  appName: string;
+  baseUrl: string;
+  onOpenConnection: () => void;
+}) {
+  return (
+    <div className="auth-screen">
+      <div className="auth-card host-outdated-card" role="alert">
+        <div className="auth-heading">
+          <BrandMark size={40} />
+          <h1>Update Cinder Host first</h1>
+          <p>
+            Cinder Host at {hostAddressLabel(baseUrl)} is an older version. {appName} connects securely and cannot
+            talk to it until Host is updated.
+          </p>
+        </div>
+        <ol>
+          <li>Open Cinder Host on the Host computer.</li>
+          <li>Go to Settings, then Application updates, and install the update.</li>
+          <li>Return here and select Check again.</li>
+        </ol>
+        <p className="form-hint">If you cannot update Host yourself, ask whoever looks after it at your school.</p>
+        <Button variant="primary" onClick={() => window.location.reload()}>
+          Check again
+        </Button>
+        <div className="auth-actions">
+          <button className="auth-secondary-action" type="button" onClick={onOpenConnection}>
+            School connection
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Non-blocking version for people already signed in, so open work stays mounted. */
+export function HostOutdatedNotice({ onOpenConnection }: { onOpenConnection: () => void }) {
+  return (
+    <div className="host-outdated-notice" role="status">
+      <span>
+        <strong>Cinder Host needs updating.</strong> Nothing will sync until it is updated on the
+        Host computer.
+      </span>
+      <Button onClick={onOpenConnection}>School connection</Button>
     </div>
   );
 }
@@ -449,11 +634,7 @@ export function PasswordChange({
   const [error, setError] = useState("");
 
   return (
-    <Modal
-      title="Create your password"
-      description="Replace the temporary PIN before continuing."
-      lock
-    >
+    <Modal title="Choose your password" description="Replace the temporary PIN or password you were given before you continue." lock>
       <form
         className="form-stack"
         onSubmit={async (event) => {
@@ -465,27 +646,18 @@ export function PasswordChange({
           try {
             await onChange(current, next);
           } catch (failure) {
-            setError(
-              failure instanceof Error
-                ? failure.message
-                : "Password could not be changed.",
-            );
+            setError(failure instanceof Error ? failure.message : "Password could not be changed.");
           } finally {
             setBusy(false);
           }
         }}
       >
         {!currentPassword ? (
-          <Field label="Current temporary PIN">
-            <input
-              type="password"
-              value={current}
-              onChange={(event) => setCurrent(event.target.value)}
-              autoFocus
-            />
+          <Field label="Temporary PIN or password">
+            <input type="password" value={current} onChange={(event) => setCurrent(event.target.value)} autoFocus />
           </Field>
         ) : null}
-        <Field label="New password" hint="Use at least 8 characters.">
+        <Field label="New password" hint="At least 8 characters.">
           <input
             type="password"
             value={next}
@@ -494,16 +666,14 @@ export function PasswordChange({
           />
         </Field>
         <Field label="Confirm password">
-          <input
-            type="password"
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-          />
+          <input type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} />
         </Field>
-        {error ? <p className="form-error">{error}</p> : null}
-        <Button variant="primary" type="submit" disabled={busy}>
-          Save password
-        </Button>
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
+        <div className="form-actions">
+          <Button variant="primary" type="submit" disabled={busy}>
+            Save password
+          </Button>
+        </div>
       </form>
     </Modal>
   );

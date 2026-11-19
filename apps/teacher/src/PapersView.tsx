@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { save as showSaveDialog } from "@tauri-apps/plugin-dialog";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import {
   useCallback,
   useEffect,
@@ -14,6 +14,7 @@ import {
   Icon,
   CinderApi,
   PageHeader,
+  PromptDialog,
   openExternalUrl,
   type Classroom,
   type PaperCandidate,
@@ -149,7 +150,7 @@ async function extractPdfText(blob: Blob, name: string): Promise<ExtractedPdf> {
   if (blob.type && blob.type !== "application/pdf") {
     throw new Error(`${name} is an image, not a text PDF.`);
   }
-  const pdfjs = await import("pdfjs-dist");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
   const task = pdfjs.getDocument({
     data: await blob.arrayBuffer(),
@@ -230,6 +231,7 @@ function PaperDocumentView({
   editable?: boolean;
   onChange?: (paper: GeneratedPaper) => void;
 }) {
+  const [diagramError, setDiagramError] = useState<{ index: number; message: string } | null>(null);
   const details = [
     boardName(metadata.board),
     metadata.syllabusCode ? `Syllabus ${metadata.syllabusCode}` : "",
@@ -467,6 +469,7 @@ function PaperDocumentView({
                           const file = input.files?.[0];
                           input.value = "";
                           if (!file) return;
+                          setDiagramError(null);
                           void readDiagramFile(file)
                             .then((imageDataUrl) =>
                               replaceQuestion(questionIndex, {
@@ -479,15 +482,20 @@ function PaperDocumentView({
                               }),
                             )
                             .catch((failure) =>
-                              window.alert(
-                                failure instanceof Error
-                                  ? failure.message
-                                  : "The diagram image could not be attached.",
-                              ),
+                              setDiagramError({
+                                index: questionIndex,
+                                message:
+                                  failure instanceof Error
+                                    ? failure.message
+                                    : "The diagram image could not be attached.",
+                              }),
                             );
                         }}
                       />
                     </label>
+                    {diagramError?.index === questionIndex ? (
+                      <p className="form-error" role="alert">{diagramError.message}</p>
+                    ) : null}
                     {question.diagram ? (
                       <button
                         type="button"
@@ -547,6 +555,7 @@ export function PapersView({
   classrooms: Classroom[];
 }) {
   const [savedPapers, setSavedPapers] = useState<SavedQuestionPaper[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState<SavedQuestionPaper | null>(null);
   const [papersLoading, setPapersLoading] = useState(true);
   const [papersError, setPapersError] = useState("");
   const [activePaperId, setActivePaperId] = useState(() =>
@@ -593,8 +602,11 @@ export function PapersView({
     };
   }, [api]);
 
+  // A paper deleted while open must not be saved back by the editor's pending or closing autosave.
+  const deletedPaperIds = useRef(new Set<string>());
   const savePaperRecord = useCallback(
     async (paper: SavedQuestionPaper) => {
+      if (deletedPaperIds.current.has(paper.id)) return;
       await saveQuestionPaper(api, paper);
       localStorage.setItem(ACTIVE_PAPER_KEY, paper.id);
       if (!mountedRef.current) return;
@@ -621,7 +633,13 @@ export function PapersView({
 
   const removePaper = useCallback(
     async (id: string) => {
-      await deleteQuestionPaper(api, id);
+      deletedPaperIds.current.add(id);
+      try {
+        await deleteQuestionPaper(api, id);
+      } catch (failure) {
+        deletedPaperIds.current.delete(id);
+        throw failure;
+      }
       setSavedPapers((current) => current.filter((paper) => paper.id !== id));
       if (activePaperId === id) {
         setActivePaperId(null);
@@ -640,11 +658,9 @@ export function PapersView({
     : savedPapers;
 
   return (
-    <div className="page papers-page">
+    <div className="papers-page">
       <PageHeader
-        eyebrow="Assessment"
-        title="Question papers"
-        description="Build a paper from official past papers, keep its marking scheme private, then publish it to a classroom."
+        title="Papers"
         action={<Button variant="primary" icon="plus" onClick={startNewPaper}>New paper</Button>}
       />
       <div className="papers-workspace">
@@ -686,11 +702,7 @@ export function PapersView({
                     type="button"
                     className="papers-library-delete"
                     aria-label={`Delete ${paper.title}`}
-                    onClick={() => {
-                      if (window.confirm(`Delete “${paper.title}” from the school server?`)) {
-                        void removePaper(paper.id);
-                      }
-                    }}
+                    onClick={() => setConfirmDelete(paper)}
                   >
                     <Icon name="trash" />
                   </button>
@@ -700,7 +712,7 @@ export function PapersView({
               <p className="papers-library-empty">
                 {savedPapers.length
                   ? "No paper matches that filter."
-                  : "Papers you create are saved here on the school server."}
+                  : "No saved papers yet."}
               </p>
             )}
           </div>
@@ -722,6 +734,17 @@ export function PapersView({
           />
         )}
       </div>
+      {confirmDelete ? (
+        <PromptDialog
+          title={`Delete “${confirmDelete.title}”?`}
+          description="It is removed from the school server. This cannot be undone."
+          fields={[]}
+          submitLabel="Delete paper"
+          danger
+          onSubmit={() => removePaper(confirmDelete.id)}
+          onClose={() => setConfirmDelete(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -738,6 +761,8 @@ function initialPaperSpec(paper: SavedQuestionPaper | null): GeneratedPaper {
     return EMPTY_GENERATED_PAPER;
   }
 }
+
+const STEP_LABEL = { options: "Setup", feed: "Sources", editing: "Paper" } as const;
 
 const DEFAULT_PAPER_ADVANCED: PaperAdvancedOptions = {
   year: String(new Date().getFullYear()),
@@ -769,6 +794,9 @@ function QuestionPaperStudio({
   onCreateNew: () => void;
 }) {
   const [materials, setMaterials] = useState<StudyNode[]>([]);
+  // null until known; an older Host without the route is treated as unknown, not off.
+  const [aiStatus, setAiStatus] = useState<{ drafting: boolean; search: boolean } | null>(null);
+  useEffect(() => { void api.aiStatus().then(setAiStatus).catch(() => setAiStatus(null)); }, [api]);
   const [selected, setSelected] = useState<string[]>([]);
   const [localFiles, setLocalFiles] = useState<File[]>([]);
   const [paperId, setPaperId] = useState(activePaper?.id ?? "");
@@ -784,10 +812,8 @@ function QuestionPaperStudio({
   );
   const [board, setBoard] = useState<ExamBoard>(activePaper?.board ?? "CIE");
   const [syllabusCode, setSyllabusCode] = useState(
-    activePaper?.syllabusCode ??
-      classrooms.find((classroom) => classroom.id === activePaper?.classroomId)?.subject_code ??
-      classrooms[0]?.subject_code ??
-      "",
+    // A classroom's own subject code (e.g. "MATH9") is not an exam syllabus code.
+    activePaper?.syllabusCode ?? "",
   );
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(
     activePaper?.difficulty ?? 3,
@@ -826,6 +852,7 @@ function QuestionPaperStudio({
   const [status, setStatus] = useState(activePaper ? "Saved paper opened." : "");
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [generationStage, setGenerationStage] = useState("");
   const [previewRevision, setPreviewRevision] = useState(0);
   const latestPaperRef = useRef<SavedQuestionPaper | null>(activePaper);
@@ -1331,9 +1358,6 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
 
   const deleteCurrentPaper = async () => {
     if (!paperId || deleting) return;
-    if (!window.confirm(`Delete “${metadata.title}” from the school server? This cannot be undone.`)) {
-      return;
-    }
     discardingPaperRef.current = true;
     setDeleting(true);
     try {
@@ -1364,15 +1388,15 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
             onClick={() => setWorkspaceSection(item)}
           >
             <span>{index + 1}</span>
-            {item[0].toUpperCase() + item.slice(1)}
+            {STEP_LABEL[item]}
           </button>
         ))}
       </nav>
 
       {workspaceSection === "options" ? <section className="paper-section paper-workflow-section" aria-labelledby="paper-options-heading">
         <div className="paper-section-head">
-          <div><span className="eyebrow">Step 1</span><h2 id="paper-options-heading">Options</h2></div>
-          <span className="paper-section-note">Set the shape of the paper.</span>
+          <div><span className="eyebrow">Step 1</span><h2 id="paper-options-heading">Setup</h2></div>
+          <span className="paper-section-note" />
         </div>
         <div className="paper-grid paper-options-grid">
           <Field label="Classroom">
@@ -1382,7 +1406,6 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
                 const id = event.target.value;
                 setClassroomId(id);
                 setSelected([]);
-                setSyllabusCode(classrooms.find((item) => item.id === id)?.subject_code ?? "");
               }}
             >
               <option value="">Choose a classroom</option>
@@ -1418,24 +1441,24 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           </Field>
         </div>
         <div className="paper-section-actions">
-          <Button variant="primary" onClick={() => setWorkspaceSection("feed")}>Continue to feed</Button>
+          <Button variant="primary" onClick={() => setWorkspaceSection("feed")}>Next: sources</Button>
         </div>
       </section> : null}
 
       {workspaceSection === "feed" ? <><section className="paper-section paper-workflow-section" aria-labelledby="paper-feed-heading">
         <div className="paper-section-head">
-          <div><span className="eyebrow">Step 2</span><h2 id="paper-feed-heading">Feed</h2></div>
+          <div><span className="eyebrow">Step 2</span><h2 id="paper-feed-heading">Sources</h2></div>
           <span className="paper-section-note">
             {referenceCount
               ? `${referenceCount} reference${referenceCount === 1 ? "" : "s"} selected`
-              : "AI can work from your options alone"}
+              : "Optional: AI can write from the setup alone"}
           </span>
         </div>
 
         <Field label="What should the paper focus on?" hint="Question types, learning goals, accommodations or anything the options do not cover.">
           <textarea maxLength={2000} value={teacherBrief} placeholder="For example: include one data-response question and avoid logarithms." onChange={(event) => setTeacherBrief(event.target.value)} />
         </Field>
-        <Field label="How should AI use the feed?">
+        <Field label="How should AI use the sources?">
           <select
             value={sourceMode}
             onChange={(event) => {
@@ -1488,14 +1511,16 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           </Field>
           <Button
             variant="secondary"
-            disabled={searching}
+            disabled={searching || aiStatus?.search === false}
             onClick={() => void searchOfficialPapers()}
           >
             {searching ? "Searching…" : "Search"}
           </Button>
         </div>
         <p className="paper-help">
-          Only an examination board's own site is searched, and only the paper you choose is downloaded.
+          {aiStatus?.search === false
+            ? "Searching online needs a Google key in Cinder Host, Settings. You can still add PDFs from this computer or the classroom."
+            : "Only an examination board's own site is searched, and only the paper you choose is downloaded."}
         </p>
 
         {searchResults.length ? (
@@ -1566,17 +1591,20 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
 
       </section>
 
+      {aiStatus?.drafting === false ? (
+        <p className="notice">AI drafting is not set up on Cinder Host, so you write this paper yourself. Whoever runs Cinder Host can turn it on in Settings.</p>
+      ) : null}
       <div className="paper-action-bar">
         <Button
           variant="primary"
           onClick={() => void generate()}
-          disabled={busy || !title.trim() || !classroomId}
+          disabled={busy || !title.trim() || !classroomId || aiStatus?.drafting === false}
         >
-          {busy ? "Creating paper…" : paper.questions.length ? "Create paper again" : "Create paper"}
+          {busy ? "Drafting…" : paper.questions.length ? "Draft again with AI" : "Draft with AI"}
         </Button>
-        <Button variant="secondary" onClick={() => setWorkspaceSection("editing")}>Open editing</Button>
+        <Button variant="secondary" onClick={() => setWorkspaceSection("editing")}>Write it myself</Button>
         {paperId ? (
-          <Button variant="ghost" disabled={busy || deleting} onClick={() => void deleteCurrentPaper()}>
+          <Button variant="ghost" disabled={busy || deleting} onClick={() => setConfirmingDelete(true)}>
             {deleting ? "Deleting…" : "Delete this paper"}
           </Button>
         ) : null}
@@ -1590,7 +1618,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
 
       {workspaceSection === "editing" ? <section className="paper-section paper-preview-section paper-workflow-section" aria-labelledby="paper-preview-heading">
         <div className="paper-section-head">
-          <div><span className="eyebrow">Step 3</span><h2 id="paper-preview-heading">Editing</h2></div>
+          <div><span className="eyebrow">Step 3</span><h2 id="paper-preview-heading">Paper</h2></div>
           <span className="paper-section-note">
             {paperId ? "Saved to the school server as you work." : "Draft not saved yet."}
           </span>
@@ -1695,7 +1723,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
                 <h3>Your questions will appear here.</h3>
                 <p>Choose what the AI should use in Feed, or add a question by hand.</p>
                 <div>
-                  <Button variant="primary" onClick={() => setWorkspaceSection("feed")}>Open feed</Button>
+                  <Button variant="primary" onClick={() => setWorkspaceSection("feed")}>Choose sources</Button>
                   <Button variant="secondary" icon="plus" onClick={addBlankQuestion}>Add question</Button>
                 </div>
               </div>
@@ -1711,6 +1739,17 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           </div>
         ) : null}
       </section> : null}
+      {confirmingDelete ? (
+        <PromptDialog
+          title={`Delete “${metadata.title}”?`}
+          description="It is removed from the school server. This cannot be undone."
+          fields={[]}
+          submitLabel="Delete paper"
+          danger
+          onSubmit={deleteCurrentPaper}
+          onClose={() => setConfirmingDelete(false)}
+        />
+      ) : null}
     </div>
   );
 }

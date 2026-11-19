@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:student"],
       "port": 5175
+    },
+    {
+      "name": "cinder-host",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:host"],
+      "port": 5176
     }
   ]
 }

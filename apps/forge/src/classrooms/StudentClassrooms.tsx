@@ -2,6 +2,15 @@ import { invoke } from "@tauri-apps/api/core";
 import DOMPurify from "dompurify";
 import {
   ApiError,
+  Badge,
+  Button,
+  EmptyState,
+  Field,
+  formatDateTime,
+  Icon,
+  PageHeader,
+  Panel,
+  Tabs,
   cacheGet,
   cacheSet,
   forgeQuillHtmlToDocument,
@@ -24,19 +33,16 @@ import {
   classroomCacheKey,
   classroomScope,
   formatAssignmentDue,
-  shouldRetryOutboxFailure,
   submissionOutboxKey,
 } from "./classroomState";
-import "./classrooms.css";
 import { StudentQuizzes } from "./StudentQuizzes";
+import { REJECTED_HAND_IN, sendQueuedHandIns, type SubmissionPayload } from "./outbox";
 
-type ClassroomSection = "overview" | "work" | "quizzes" | "materials" | "marks";
-type SubmissionPayload = {
-  assignmentId: string;
-  doc: Record<string, unknown>;
-  text: string;
-  note: string;
-};
+type ClassroomSection = "work" | "quizzes" | "materials" | "marks";
+type StartNote = (input: { title: string; topic: string; bodyHtml: string; assignmentId: string }) => void;
+
+/** Where to land when another page sends the student here. */
+export type ClassroomFocus = { assignmentId?: string; classroomId?: string; deliveryId?: string };
 
 function isTauri() {
   return "__TAURI_INTERNALS__" in window;
@@ -46,11 +52,21 @@ function errorMessage(failure: unknown) {
   return failure instanceof Error ? failure.message : "That action could not be completed.";
 }
 
-function submissionLabel(submission: Submission | null | undefined, queued: boolean) {
+function submissionLabel(submission: Submission | null | undefined, queued: boolean, maxPoints?: number) {
   if (queued) return "Waiting to send";
-  if (!submission || submission.status === "withdrawn") return "Not submitted";
-  if (submission.grade?.published) return "Marked";
-  return submission.status === "resubmitted" ? "Resubmitted" : "Submitted";
+  if (!submission || submission.status === "withdrawn") return "Not handed in";
+  if (submission.grade?.published) {
+    const { points, grade_label: label } = submission.grade;
+    const mark = points !== null && maxPoints ? `${points}/${maxPoints}` : "";
+    return [mark, label].filter(Boolean).join(" · ") || "Marked";
+  }
+  return submission.status === "resubmitted" ? "Handed in again" : "Handed in";
+}
+
+function statusTone(submission: Submission | null | undefined, queued: boolean) {
+  if (queued) return "warning" as const;
+  if (!submission || submission.status === "withdrawn") return "neutral" as const;
+  return submission.grade?.published ? ("good" as const) : ("accent" as const);
 }
 
 async function openMaterial(
@@ -85,8 +101,11 @@ export function StudentClassrooms({
   token,
   online,
   notes,
+  focus,
   liveTask,
   onLiveTaskState,
+  onOpenNote,
+  onStartNote,
 }: {
   accountId: string;
   api: CinderApi;
@@ -94,8 +113,11 @@ export function StudentClassrooms({
   token: string;
   online: boolean;
   notes: StudioNote[];
+  focus?: ClassroomFocus | null;
   liveTask: LiveSessionTask | null;
   onLiveTaskState: (state: LiveSessionTaskState) => Promise<void>;
+  onOpenNote: (id: string) => void;
+  onStartNote: StartNote;
 }) {
   const scope = useMemo(() => classroomScope(baseUrl, accountId), [accountId, baseUrl]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
@@ -103,9 +125,9 @@ export function StudentClassrooms({
   const [submissions, setSubmissions] = useState<Record<string, Submission | null>>({});
   const [nodes, setNodes] = useState<StudyNode[]>([]);
   const [queued, setQueued] = useState<Set<string>>(new Set());
-  const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(null);
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
-  const [section, setSection] = useState<ClassroomSection>("overview");
+  const [selectedClassroomId, setSelectedClassroomId] = useState<string | null>(focus?.classroomId ?? null);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(focus?.assignmentId ?? null);
+  const [section, setSection] = useState<ClassroomSection>(focus?.deliveryId ? "quizzes" : "work");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -128,22 +150,8 @@ export function StudentClassrooms({
   }, [scope]);
 
   const flushCurrentStudent = useCallback(async () => {
-    for (const entry of await outboxEntries()) {
-      if (entry.kind !== "submission" || !belongsToClassroomScope(entry.key, scope)) continue;
-      const payload = entry.payload as SubmissionPayload;
-      try {
-        await api.submitWork(payload.assignmentId, payload.doc, payload.text, payload.note);
-        await removeOutbox(entry.key);
-      } catch (failure) {
-        if (!(failure instanceof ApiError)) break;
-        if (shouldRetryOutboxFailure(failure.status, failure.offline)) {
-          if (failure.offline) break;
-          continue;
-        }
-        await removeOutbox(entry.key);
-        setMessage("A waiting submission was rejected by the Host and was not sent. Your original note is still saved on this device.");
-      }
-    }
+    const { rejected } = await sendQueuedHandIns(api, scope);
+    if (rejected) setMessage(REJECTED_HAND_IN);
     await readQueued();
   }, [api, readQueued, scope]);
 
@@ -217,6 +225,18 @@ export function StudentClassrooms({
     }
   }, [api, assignments, baseUrl, liveTask?.id, loading, nodes, token]);
 
+  // Home or a note opens this page on one item, once. Later reloads (after a hand-in or a
+  // reconnect) must not pull the student back to it.
+  const pendingFocusAssignment = useRef(focus?.assignmentId ?? null);
+  const [focusDeliveryId, setFocusDeliveryId] = useState(focus?.deliveryId ?? null);
+  useEffect(() => {
+    // A focused assignment also opens its classroom, so Back lands somewhere useful.
+    if (!pendingFocusAssignment.current || loading) return;
+    const assignment = assignments.find((item) => item.id === pendingFocusAssignment.current);
+    pendingFocusAssignment.current = null;
+    if (assignment) setSelectedClassroomId(assignment.classroom_id);
+  }, [assignments, loading]);
+
   const selectedClassroom = classrooms.find((room) => room.id === selectedClassroomId) ?? null;
   const selectedAssignment = assignments.find((item) => item.id === selectedAssignmentId) ?? null;
 
@@ -256,6 +276,8 @@ export function StudentClassrooms({
         onQueued={readQueued}
         liveTask={liveTask}
         onLiveTaskState={onLiveTaskState}
+        onOpenNote={onOpenNote}
+        onStartNote={onStartNote}
       />
     );
   }
@@ -263,99 +285,97 @@ export function StudentClassrooms({
   if (selectedClassroom) {
     const roomAssignments = assignments.filter((item) => item.classroom_id === selectedClassroom.id);
     const materials = nodes.filter((node) => node.classroom_id === selectedClassroom.id && node.kind === "pdf");
+    const marked = roomAssignments.filter((assignment) => submissions[assignment.id]?.grade?.published);
     return (
-      <div className="forge-page classroom-page">
-        <header className="classroom-header">
-          <button className="forge-button secondary" type="button" onClick={() => setSelectedClassroomId(null)}>All classrooms</button>
-          <span className="forge-kicker">{selectedClassroom.subject_code || "Classroom"}</span>
-          <h1>{selectedClassroom.name}</h1>
-          <p>{selectedClassroom.description || `Managed by ${selectedClassroom.owner_teacher_name}`}</p>
-        </header>
-        <nav className="classroom-sections" aria-label="Classroom sections">
-          {(["overview", "work", "quizzes", "materials", "marks"] as ClassroomSection[]).map((item) => (
-            <button className={section === item ? "active" : ""} aria-current={section === item ? "page" : undefined} key={item} type="button" onClick={() => setSection(item)}>{item}</button>
-          ))}
-        </nav>
-        {section === "overview" ? (
-          <div className="classroom-columns">
-            <ClassroomList title="Work due" empty="No published work here.">
-              {roomAssignments.filter((item) => item.status !== "closed").map((assignment) => (
-                <AssignmentButton key={assignment.id} assignment={assignment} status={submissionLabel(submissions[assignment.id], queued.has(assignment.id))} onOpen={() => setSelectedAssignmentId(assignment.id)} />
+      <div className="workspace">
+        <div className="page">
+          <PageHeader
+            back={{ label: "Classrooms", onClick: () => setSelectedClassroomId(null) }}
+            title={selectedClassroom.name}
+            description={[selectedClassroom.owner_teacher_name, selectedClassroom.description].filter(Boolean).join(" · ")}
+          />
+          <Tabs
+            label="Classroom sections"
+            active={section}
+            onChange={setSection}
+            tabs={[
+              { id: "work", label: "Work", count: roomAssignments.length },
+              { id: "quizzes", label: "Quizzes" },
+              { id: "materials", label: "Materials", count: materials.length },
+              { id: "marks", label: "Marks", count: marked.length },
+            ]}
+          />
+          {message ? <p className="form-error" role="alert">{message}</p> : null}
+          {section === "work" ? (
+            <ClassroomList empty="No work has been set yet." icon="assignments">
+              {roomAssignments.map((assignment) => (
+                <AssignmentButton key={assignment.id} assignment={assignment} submission={submissions[assignment.id]} queued={queued.has(assignment.id)} onOpen={() => setSelectedAssignmentId(assignment.id)} />
               ))}
             </ClassroomList>
-            <ClassroomList title="Latest materials" empty="No materials have been shared.">
-              {materials.slice(0, 5).map((material) => <MaterialButton key={material.id} material={material} onOpen={() => openMaterial(api, baseUrl, token, material)} />)}
+          ) : null}
+          {section === "quizzes" ? <StudentQuizzes api={api} classroomId={selectedClassroom.id} online={online} focusDeliveryId={liveTask?.kind === "quiz" ? liveTask.target_id : focusDeliveryId} onFocusOpened={() => setFocusDeliveryId(null)} /> : null}
+          {section === "materials" ? (
+            <ClassroomList empty="No materials have been shared yet." icon="pdf">
+              {materials.map((material) => <MaterialButton key={material.id} material={material} onOpen={() => openMaterial(api, baseUrl, token, material)} />)}
             </ClassroomList>
-          </div>
-        ) : null}
-        {section === "work" ? (
-          <ClassroomList title="Assignments" empty="No assignments have been published.">
-            {roomAssignments.map((assignment) => (
-              <AssignmentButton key={assignment.id} assignment={assignment} status={submissionLabel(submissions[assignment.id], queued.has(assignment.id))} onOpen={() => setSelectedAssignmentId(assignment.id)} />
-            ))}
-          </ClassroomList>
-        ) : null}
-        {section === "quizzes" ? <StudentQuizzes api={api} classroomId={selectedClassroom.id} online={online} focusDeliveryId={liveTask?.kind === "quiz" ? liveTask.target_id : null} /> : null}
-        {section === "materials" ? (
-          <ClassroomList title="Materials" empty="No materials have been shared.">
-            {materials.map((material) => <MaterialButton key={material.id} material={material} onOpen={() => openMaterial(api, baseUrl, token, material)} />)}
-          </ClassroomList>
-        ) : null}
-        {section === "marks" ? (
-          <ClassroomList title="Marks and feedback" empty="No marked work yet.">
-            {roomAssignments.filter((assignment) => submissions[assignment.id]?.grade?.published).map((assignment) => (
-              <AssignmentButton key={assignment.id} assignment={assignment} status={submissionLabel(submissions[assignment.id], false)} onOpen={() => setSelectedAssignmentId(assignment.id)} />
-            ))}
-          </ClassroomList>
-        ) : null}
+          ) : null}
+          {section === "marks" ? (
+            <ClassroomList empty="No marked work yet." icon="check">
+              {marked.map((assignment) => (
+                <AssignmentButton key={assignment.id} assignment={assignment} submission={submissions[assignment.id]} queued={false} onOpen={() => setSelectedAssignmentId(assignment.id)} />
+              ))}
+            </ClassroomList>
+          ) : null}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="forge-page classroom-page">
-      <header className="page-header">
-        <span className="forge-kicker">Classes</span>
-        <h1>Your classrooms</h1>
-        <p>Open class work, shared materials, marks, and feedback.</p>
-      </header>
-      <form className="classroom-join" onSubmit={joinClassroom}>
-        <label htmlFor="classroom-code">Class code</label>
-        <input id="classroom-code" name="code" inputMode="text" autoComplete="off" placeholder="Enter the code from your teacher" maxLength={32} required />
-        <button className="forge-button primary" disabled={!online || busy} type="submit">{busy ? "Joining…" : "Join classroom"}</button>
-        {!online ? <small>Connect to the Host to join a new classroom.</small> : null}
-      </form>
-      {message ? <p className="form-error" role="alert">{message}</p> : null}
-      {loading ? <p className="classroom-muted">Loading classrooms…</p> : null}
-      {!loading && !classrooms.length ? <p className="classroom-empty">No classrooms yet. Enter the code given by your teacher.</p> : null}
-      <div className="classroom-grid">
-        {classrooms.map((room) => {
-          const work = assignments.filter((assignment) => assignment.classroom_id === room.id && assignment.status !== "closed");
-          return (
-            <button className="classroom-card" key={room.id} type="button" onClick={() => setSelectedClassroomId(room.id)}>
-              <span className="classroom-card-color" style={{ backgroundColor: room.color }} />
-              <span className="forge-kicker">{room.subject_code || "Classroom"}</span>
-              <strong>{room.name}</strong>
-              <span>{room.owner_teacher_name}</span>
-              <small>{work.length} open assignment{work.length === 1 ? "" : "s"}</small>
-            </button>
-          );
-        })}
+    <div className="workspace">
+      <div className="page">
+        <PageHeader title="Classrooms" />
+        {message ? <p className="form-error" role="alert">{message}</p> : null}
+        {loading && !classrooms.length ? <p className="loading-line">Loading…</p> : null}
+        {!loading && !classrooms.length ? (
+          <Panel><EmptyState icon="classrooms" title="No classrooms yet" description="Enter the class code your teacher gives you below." /></Panel>
+        ) : null}
+        <div className="card-grid">
+          {classrooms.map((room) => {
+            const open = assignments.filter((assignment) => assignment.classroom_id === room.id && assignment.status === "published" && (!submissions[assignment.id] || submissions[assignment.id]?.status === "withdrawn"));
+            return (
+              <button className="subject-card" key={room.id} type="button" style={{ ["--subject-color" as string]: room.color }} onClick={() => setSelectedClassroomId(room.id)}>
+                <h3>{room.name}</h3>
+                <p>{room.owner_teacher_name}</p>
+                <footer>{open.length ? `${open.length} to hand in` : "Nothing to hand in"}</footer>
+              </button>
+            );
+          })}
+        </div>
+        <form className="join-row" onSubmit={joinClassroom}>
+          <label className="field">
+            <span>Join a classroom</span>
+            <input name="code" inputMode="text" autoComplete="off" placeholder="Class code from your teacher" maxLength={32} required />
+          </label>
+          <Button type="submit" disabled={!online || busy}>{busy ? "Joining…" : "Join"}</Button>
+        </form>
+        {!online ? <p className="form-hint">Connect to Cinder Host to join a classroom.</p> : null}
       </div>
     </div>
   );
 }
 
-function ClassroomList({ title, empty, children }: { title: string; empty: string; children: ReactNode }) {
+function ClassroomList({ empty, icon, children }: { empty: string; icon: "assignments" | "pdf" | "check"; children: ReactNode }) {
   const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
-  return <section className="forge-panel classroom-list"><h2>{title}</h2>{hasChildren ? children : <p className="classroom-muted">{empty}</p>}</section>;
+  return <Panel className="panel-flush">{hasChildren ? <div className="list">{children}</div> : <EmptyState icon={icon} title={empty} />}</Panel>;
 }
 
-function AssignmentButton({ assignment, status, onOpen }: { assignment: Assignment; status: string; onOpen: () => void }) {
+function AssignmentButton({ assignment, submission, queued, onOpen }: { assignment: Assignment; submission: Submission | null | undefined; queued: boolean; onOpen: () => void }) {
   return (
-    <button className="classroom-row" type="button" onClick={onOpen}>
-      <span><strong>{assignment.title}</strong><small>{formatAssignmentDue(assignment.due_at)}</small></span>
-      <span>{status}</span>
+    <button className="list-item" type="button" onClick={onOpen}>
+      <span className="list-icon"><Icon name="assignments" /></span>
+      <span className="list-copy"><strong>{assignment.title}</strong><span>{assignment.status === "closed" ? "Closed" : formatAssignmentDue(assignment.due_at)}</span></span>
+      <Badge tone={statusTone(submission, queued)}>{submissionLabel(submission, queued, assignment.max_points)}</Badge>
     </button>
   );
 }
@@ -364,20 +384,35 @@ function MaterialButton({ material, onOpen }: { material: StudyNode; onOpen: () 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return (
-    <div>
-      <button className="classroom-row" disabled={busy} type="button" onClick={async () => {
+    <>
+      <button className="list-item" disabled={busy} type="button" onClick={async () => {
         setBusy(true);
         setError("");
         try { await onOpen(); }
         catch (failure) { setError(errorMessage(failure)); }
         finally { setBusy(false); }
-      }}><span><strong>{material.name}</strong><small>Shared material</small></span><span>{busy ? "Opening…" : "Open"}</span></button>
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
-    </div>
+      }}>
+        <span className="list-icon"><Icon name="pdf" /></span>
+        <span className="list-copy"><strong>{material.name}</strong></span>
+        <span className="list-meta">{busy ? "Opening…" : "Open"}</span>
+      </button>
+      {error ? <p className="form-error panel-message" role="alert">{error}</p> : null}
+    </>
   );
 }
 
-function AssignmentDetail({ api, assignment, current, queued, notes, online, syncing, scope, onBack, onChanged, onQueued, liveTask, onLiveTaskState }: {
+/** Text with one line per paragraph; textContent alone runs paragraphs together. */
+function htmlToText(html: string) {
+  const body = new DOMParser().parseFromString(DOMPurify.sanitize(html), "text/html").body;
+  const blocks = [...body.children].map((block) => block.textContent ?? "");
+  return (blocks.length ? blocks.join("\n") : body.textContent ?? "").trim();
+}
+
+function plainPreview(html: string) {
+  return htmlToText(html).replace(/\s+/g, " ");
+}
+
+function AssignmentDetail({ api, assignment, current, queued, notes, online, syncing, scope, onBack, onChanged, onQueued, liveTask, onLiveTaskState, onOpenNote, onStartNote }: {
   api: CinderApi;
   assignment: Assignment;
   current: Submission | null | undefined;
@@ -391,14 +426,21 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
   onQueued: () => Promise<void>;
   liveTask: LiveSessionTask | null;
   onLiveTaskState: (state: LiveSessionTaskState) => Promise<void>;
+  onOpenNote: (id: string) => void;
+  onStartNote: StartNote;
 }) {
   const availableNotes = notes.filter((note) => !note.deletedAt);
-  const [noteId, setNoteId] = useState(availableNotes[0]?.id ?? "");
+  const linked = availableNotes.find((note) => note.assignmentId === assignment.id) ?? null;
+  const [choosing, setChoosing] = useState(false);
+  const [noteId, setNoteId] = useState(linked?.id ?? availableNotes[0]?.id ?? "");
+  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [comments, setComments] = useState<SubmissionComment[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const closed = assignment.status === "closed";
   const graded = current?.status === "graded" || current?.grade?.published === true;
+  const handedIn = Boolean(current && current.status !== "withdrawn");
+  const chosen = choosing ? availableNotes.find((note) => note.id === noteId) ?? null : linked;
 
   useEffect(() => {
     let cancelled = false;
@@ -408,19 +450,19 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
   }, [api, current?.id, online]);
 
   async function submit() {
-    const note = availableNotes.find((item) => item.id === noteId);
+    const note = chosen;
     if (!note || syncing || graded) return;
     setBusy(true);
     setMessage("");
     try {
       const cleanHtml = DOMPurify.sanitize(note.bodyHtml);
       const doc = structuredClone(forgeQuillHtmlToDocument(cleanHtml));
-      const text = new DOMParser().parseFromString(cleanHtml, "text/html").body.textContent?.trim() ?? "";
-      if (!text) throw new Error("The selected note is empty.");
+      const text = htmlToText(cleanHtml);
+      if (!text) throw new Error("That note is empty. Write your answer first.");
       if (new TextEncoder().encode(text).length > 1024 * 1024 || new TextEncoder().encode(JSON.stringify(doc)).length > 2 * 1024 * 1024) {
-        throw new Error("This note is too large to submit.");
+        throw new Error("This note is too large to hand in.");
       }
-      const changeNote = current ? `Resubmitted from “${note.title}”` : `Submitted from “${note.title}”`;
+      const changeNote = current ? `Handed in again from “${note.title}”` : `Handed in from “${note.title}”`;
       const payload = { assignmentId: assignment.id, doc, text, note: changeNote } satisfies SubmissionPayload;
       if (online) {
         await removeOutbox(submissionOutboxKey(scope, assignment.id));
@@ -429,20 +471,17 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
         } catch (failure) {
           if (!(failure instanceof ApiError && failure.offline)) throw failure;
           await queueOffline({ key: submissionOutboxKey(scope, assignment.id), kind: "submission", payload });
-          setMessage("The Host went offline. This version will be sent when this account reconnects.");
+          setMessage("Cinder Host went offline. Your work will be sent when you reconnect.");
           await onQueued();
           return;
         }
-        setMessage("Work submitted. This saved version will not change when you edit the note.");
+        setMessage("Handed in. Later changes to the note do not change what your teacher sees.");
+        setChoosing(false);
         if (liveTask?.kind === "assignment" && liveTask.target_id === assignment.id) await onLiveTaskState("completed").catch(() => undefined);
         await onChanged();
       } else {
-        await queueOffline({
-          key: submissionOutboxKey(scope, assignment.id),
-          kind: "submission",
-          payload,
-        });
-        setMessage("Saved on this device. It will be sent when this account reconnects.");
+        await queueOffline({ key: submissionOutboxKey(scope, assignment.id), kind: "submission", payload });
+        setMessage("Saved on this computer. It will be sent when you reconnect.");
         await onQueued();
       }
     } catch (failure) {
@@ -455,13 +494,14 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
 
   async function withdraw() {
     if (syncing) return;
+    setConfirmWithdraw(false);
     if (queued) {
       setBusy(true);
       setMessage("");
       try {
         await removeOutbox(submissionOutboxKey(scope, assignment.id));
         await onQueued();
-        setMessage("The waiting submission was cancelled.");
+        setMessage("The waiting work was cancelled.");
       } catch (failure) {
         setMessage(errorMessage(failure));
       } finally {
@@ -470,12 +510,11 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
       return;
     }
     if (!online || !current || current.status === "withdrawn" || graded) return;
-    if (!window.confirm("Take back this submission? You can submit a note again while the assignment stays open.")) return;
     setBusy(true);
     setMessage("");
     try {
       await api.withdrawWork(assignment.id);
-      setMessage("Submission taken back.");
+      setMessage("Taken back. You can hand in again while the assignment is open.");
       await onChanged();
     } catch (failure) {
       setMessage(errorMessage(failure));
@@ -484,39 +523,81 @@ function AssignmentDetail({ api, assignment, current, queued, notes, online, syn
     }
   }
 
+  const canHandIn = !closed && !graded && !busy && !syncing && Boolean(chosen);
+
   return (
-    <div className="forge-page assignment-detail">
-      <button className="forge-button secondary" type="button" onClick={onBack}>Back to classroom</button>
-      <header className="page-header">
-        <span className="forge-kicker">{assignment.classroom_name}</span>
-        <h1>{assignment.title}</h1>
-        <p>{assignment.instructions || "Your teacher has not added instructions."}</p>
-        <small>{formatAssignmentDue(assignment.due_at)} · {assignment.max_points} points</small>
-      </header>
-      <section className="forge-panel assignment-submit-panel">
-        <h2>Hand in a saved note</h2>
-        <p>The current contents become a fixed submission. Later edits to your note do not change it.</p>
-        <label htmlFor="submission-note">Note</label>
-        <select id="submission-note" value={noteId} onChange={(event) => setNoteId(event.target.value)} disabled={closed || graded || busy}>
-          {!availableNotes.length ? <option value="">No saved notes available</option> : null}
-          {availableNotes.map((note) => <option key={note.id} value={note.id}>{note.title}</option>)}
-        </select>
-        <div className="panel-actions">
-          <button className="forge-button primary" disabled={closed || graded || busy || syncing || !noteId} type="button" onClick={() => void submit()}>{busy || syncing ? "Saving…" : graded ? "Graded" : current && current.status !== "withdrawn" ? "Resubmit note" : "Submit note"}</button>
-          {queued || (current && current.status !== "withdrawn" && !graded) ? <button className="forge-button secondary" disabled={busy || syncing || (!queued && (closed || !online))} type="button" onClick={() => void withdraw()}>{queued ? "Cancel waiting work" : "Take back"}</button> : null}
-        </div>
-        {graded ? <p className="classroom-muted">Your teacher has graded this version, so it is now final.</p> : null}
-        <p className="classroom-muted">Status: {submissionLabel(current, queued)}</p>
-        {message ? <p role="status">{message}</p> : null}
-      </section>
-      {current?.grade?.published ? (
-        <section className="forge-panel assignment-feedback">
-          <h2>Mark and feedback</h2>
-          <strong>{current.grade.points ?? "—"} / {assignment.max_points}{current.grade.grade_label ? ` · ${current.grade.grade_label}` : ""}</strong>
-          <p>{current.grade.feedback || "No written feedback."}</p>
-          {comments.map((comment) => <blockquote key={comment.id}><strong>{comment.author_name}</strong><p>{comment.body}</p></blockquote>)}
-        </section>
-      ) : null}
+    <div className="workspace">
+      <div className="page">
+        <PageHeader
+          back={{ label: assignment.classroom_name, onClick: onBack }}
+          title={assignment.title}
+          description={`${closed ? "Closed" : formatAssignmentDue(assignment.due_at)} · ${assignment.max_points} points`}
+          action={<Badge tone={statusTone(current, queued)}>{submissionLabel(current, queued, assignment.max_points)}</Badge>}
+        />
+        <p className="assignment-instructions">{assignment.instructions || "No instructions were added."}</p>
+
+        {current?.grade?.published ? (
+          <Panel title="Mark and feedback">
+            <div className="form-stack">
+              <p className="mark-line">{current.grade.points ?? "—"} / {assignment.max_points}{current.grade.grade_label ? ` · ${current.grade.grade_label}` : ""}</p>
+              <p>{current.grade.feedback || "No written feedback."}</p>
+              {comments.map((comment) => <blockquote className="comment" key={comment.id}><strong>{comment.author_name}</strong><p>{comment.body}</p></blockquote>)}
+            </div>
+          </Panel>
+        ) : null}
+
+        {!graded && !(closed && !handedIn) ? (
+          <Panel title="Your answer">
+            <div className="form-stack">
+              {chosen && !choosing ? (
+                <div className="answer-note">
+                  <span className="list-icon"><Icon name="notes" /></span>
+                  <span className="list-copy"><strong>{chosen.title}</strong><span>{plainPreview(chosen.bodyHtml).slice(0, 140) || "Empty note"}</span></span>
+                  <Button size="small" onClick={() => onOpenNote(chosen.id)}>Open note</Button>
+                </div>
+              ) : null}
+              {!chosen && !choosing ? <p className="muted">{handedIn ? "To change your answer, write a new version in a note and hand it in again." : "Write your answer in a note, then come back here to hand it in."}</p> : null}
+              {choosing ? (
+                <Field label="Hand in this note">
+                  <select value={noteId} onChange={(event) => setNoteId(event.target.value)} disabled={busy}>
+                    {!availableNotes.length ? <option value="">No notes yet</option> : null}
+                    {availableNotes.map((note) => <option key={note.id} value={note.id}>{note.title}</option>)}
+                  </select>
+                </Field>
+              ) : null}
+              {!closed ? (
+                <div className="panel-actions">
+                  {!chosen && !choosing ? (
+                    <Button variant="primary" icon="edit" onClick={() => onStartNote({ title: assignment.title, topic: assignment.classroom_name, bodyHtml: "", assignmentId: assignment.id })}>Start writing</Button>
+                  ) : (
+                    <Button variant="primary" disabled={!canHandIn} onClick={() => void submit()}>{busy || syncing ? "Sending…" : handedIn ? "Hand in again" : "Hand in"}</Button>
+                  )}
+                  {availableNotes.length && !choosing ? <Button variant="ghost" onClick={() => setChoosing(true)}>Use a different note</Button> : null}
+                  {choosing ? <Button variant="ghost" onClick={() => setChoosing(false)}>Cancel</Button> : null}
+                  {queued || handedIn ? (
+                    confirmWithdraw ? (
+                      <>
+                        <Button variant="danger" disabled={busy || syncing} onClick={() => void withdraw()}>{queued ? "Cancel sending" : "Take it back"}</Button>
+                        <Button variant="ghost" onClick={() => setConfirmWithdraw(false)}>Keep it</Button>
+                      </>
+                    ) : (
+                      <Button variant="ghost" disabled={busy || syncing || (!queued && !online)} onClick={() => setConfirmWithdraw(true)}>{queued ? "Cancel sending…" : "Take back…"}</Button>
+                    )
+                  ) : null}
+                </div>
+              ) : null}
+              {message ? <p role="status" className="form-hint">{message}</p> : null}
+            </div>
+          </Panel>
+        ) : null}
+        {closed && !handedIn ? <p className="muted">This assignment is closed.</p> : null}
+
+        {handedIn && current?.version ? (
+          <Panel title="What you handed in" action={<span className="list-meta">{formatDateTime(current.version.created_at)}{current.version.late ? " · After the due date" : ""}</span>}>
+            <p className="handed-in-text">{current.version.plaintext}</p>
+          </Panel>
+        ) : null}
+      </div>
     </div>
   );
 }

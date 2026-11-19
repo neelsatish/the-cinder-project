@@ -52,9 +52,10 @@ async fn start(
     state
         .db(move |conn| {
             validate_module(&req.module_id, &req.module_name)?;
-            if !(5..=30).contains(&req.duration_minutes) {
+            // Up to a full lesson; schools run 35 to 60 minute periods.
+            if !(5..=60).contains(&req.duration_minutes) {
                 return Err(HostError::BadRequest(
-                    "Session duration must be between 5 and 30 minutes.".into(),
+                    "A live class can last from 5 to 60 minutes.".into(),
                 ));
             }
             require_teacher_access(conn, req.classroom_id, teacher_id)?;
@@ -1141,16 +1142,25 @@ mod tests {
             Err(crate::error::HostError::Forbidden)
         ));
 
+        let long = start(
+            State(state.clone()),
+            current(co_teacher, "co", Role::Teacher),
+            Json(request(61)),
+        )
+        .await;
+        assert!(matches!(long, Err(crate::error::HostError::BadRequest(_))));
+
+        // A full 60-minute lesson must fit the table's own limit, not only the route's.
         let Json(session) = start(
             State(state.clone()),
             current(co_teacher, "co", Role::Teacher),
-            Json(request(10)),
+            Json(request(60)),
         )
         .await
         .unwrap();
         assert_eq!(session.classroom_id, classroom);
         assert_eq!(session.join_code.len(), 10);
-        assert_eq!(session.duration_minutes, 10);
+        assert_eq!(session.duration_minutes, 60);
 
         let duplicate = start(
             State(state.clone()),
@@ -1358,7 +1368,7 @@ mod tests {
             Path(session.id),
             Json(SubmitLiveSessionResultRequest {
                 score: 90.0,
-                elapsed_seconds: 601,
+                elapsed_seconds: 3601,
             }),
         )
         .await;

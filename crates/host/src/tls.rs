@@ -250,7 +250,22 @@ mod tests {
         );
         let (port, identity, _stop) = start(school.path()).await;
 
-        // First contact, over TLS, pins this Host's certificate.
+        // First contact only reveals the certificate; no request is sent until
+        // the person compares the code displayed on Cinder Host.
+        assert!(matches!(
+            send(pins.path(), &[], get(port, "/api/health"), vec![]).await,
+            Err(HostRequestError::Untrusted)
+        ));
+        let address = format!("http://127.0.0.1:{port}");
+        let inspected = cinder_core::host_client::inspect(pins.path(), &[], &address)
+            .await
+            .unwrap();
+        assert_eq!(inspected.status, "new");
+        assert_eq!(inspected.fingerprint, identity.fingerprint);
+        assert_eq!(inspected.code, identity.display_fingerprint());
+        cinder_core::host_client::trust(pins.path(), &[], &address, &inspected.fingerprint)
+            .await
+            .unwrap();
         let health = send(pins.path(), &[], get(port, "/api/health"), vec![])
             .await
             .unwrap();
@@ -286,6 +301,37 @@ mod tests {
         .unwrap();
         let refused = send(pins.path(), &[], get(other_port, "/api/health"), vec![]).await;
         assert!(matches!(refused, Err(HostRequestError::IdentityChanged)));
+        let replacement_address = format!("http://127.0.0.1:{other_port}");
+        let replacement = cinder_core::host_client::inspect(pins.path(), &[], &replacement_address)
+            .await
+            .unwrap();
+        assert_eq!(replacement.status, "changed");
+        assert_eq!(replacement.code, other.display_fingerprint());
+        assert!(matches!(
+            cinder_core::host_client::trust(
+                pins.path(),
+                &[],
+                &replacement_address,
+                &identity.fingerprint
+            )
+            .await,
+            Err(HostRequestError::IdentityChanged)
+        ));
+        cinder_core::host_client::trust(
+            pins.path(),
+            &[],
+            &replacement_address,
+            &replacement.fingerprint,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            send(pins.path(), &[], get(other_port, "/api/health"), vec![])
+                .await
+                .unwrap()
+                .status,
+            200
+        );
 
         // Plain HTTP is still answered for this computer (local development).
         let plain = reqwest::get(format!("http://127.0.0.1:{port}/api/health"))
@@ -302,7 +348,12 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         // How Cinder Host 0.10.6 and earlier served: plain HTTP only.
         tokio::spawn(async move { axum::serve(listener, crate::router(state)).await });
-        let result = send(pins.path(), &[], get(port, "/api/health"), vec![]).await;
+        let result = cinder_core::host_client::inspect(
+            pins.path(),
+            &[],
+            &format!("http://127.0.0.1:{port}"),
+        )
+        .await;
         assert!(
             matches!(result, Err(HostRequestError::HostOutdated)),
             "{:?}",

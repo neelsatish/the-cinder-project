@@ -7,20 +7,23 @@
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use axum::extract::State;
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::Utc;
 use cinder_ai::{ChatClient, TokenUsage};
 use cinder_core::{AiSettings, ChatRequest, ChatResponse, ChatRole, SaveAiSettings};
 use rand::{rngs::OsRng, RngCore};
 use rusqlite::OptionalExtension;
+use serde::Serialize;
 
 use crate::auth::CurrentUser;
 use crate::error::{HostError, HostResult};
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/api/ai/chat", post(chat))
+    Router::new()
+        .route("/api/ai/chat", post(chat))
+        .route("/api/ai/status", get(status))
 }
 
 const KEY_BASE_URL: &str = "ai.base_url";
@@ -326,6 +329,31 @@ pub(crate) fn record_ai_usage(
     Ok(())
 }
 
+/// What Teacher may know about AI: whether each part is set up, so the paper
+/// creator can say so up front. Never a key, an address or a model name.
+#[derive(Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct AiStatus {
+    /// A text model is configured, so papers can be drafted.
+    drafting: bool,
+    /// A Google key is stored, so past papers and figures can be found online.
+    search: bool,
+}
+
+fn ai_status(conn: &rusqlite::Connection) -> HostResult<AiStatus> {
+    let present = |key| -> HostResult<bool> {
+        Ok(get_setting(conn, key)?.is_some_and(|value| !value.trim().is_empty()))
+    };
+    Ok(AiStatus {
+        drafting: present(KEY_BASE_URL)?,
+        search: present(KEY_GOOGLE_API_KEY)?,
+    })
+}
+
+async fn status(State(state): State<AppState>, user: CurrentUser) -> HostResult<Json<AiStatus>> {
+    user.require_teacher()?;
+    state.db(|conn| Ok(Json(ai_status(conn)?))).await
+}
+
 async fn chat(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -447,6 +475,41 @@ async fn chat(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn status_reports_only_whether_each_part_is_set_up() {
+        let pool = crate::db::open_in_memory().unwrap();
+        let conn = pool.get().unwrap();
+        assert_eq!(
+            ai_status(&conn).unwrap(),
+            AiStatus {
+                drafting: false,
+                search: false
+            }
+        );
+        store_ai(
+            &conn,
+            &[7u8; 32],
+            SaveAiSettings {
+                base_url: Some("https://api.example.com/v1".into()),
+                model: "some-text-model".into(),
+                api_key: Some("text-key".into()),
+                google_key: None,
+                google_model: None,
+            },
+        )
+        .unwrap();
+        let status = ai_status(&conn).unwrap();
+        assert_eq!(
+            status,
+            AiStatus {
+                drafting: true,
+                search: false
+            }
+        );
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(!json.contains("example.com") && !json.contains("text-key"));
+    }
 
     #[test]
     fn settings_round_trip_and_keys_are_encrypted_at_rest() {

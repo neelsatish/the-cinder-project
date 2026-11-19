@@ -83,12 +83,13 @@ export function saveSessionValue(
   });
 }
 
-export function clearSessionValue(keys: readonly string[]) {
+export function clearSessionValue(keys: readonly string[], requireNative = false) {
   return runSessionOperation(async () => {
     if (isTauriRuntime()) {
       try {
         await invoke("clear_secure_session");
-      } catch {
+      } catch (error) {
+        if (requireNative) throw error;
         // Server-side logout invalidates the token even if local cleanup fails.
       }
     }

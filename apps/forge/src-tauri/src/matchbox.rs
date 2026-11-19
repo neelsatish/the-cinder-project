@@ -181,6 +181,44 @@ pub fn forget_host_identity(app: tauri::AppHandle, base_url: String) -> Result<(
 }
 
 #[tauri::command]
+pub async fn inspect_host_identity(
+    app: tauri::AppHandle,
+    pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
+    base_url: String,
+) -> Result<cinder_core::host_client::HostIdentity, String> {
+    let normalized = normalize_classroom_url(&base_url)?;
+    pending.set(&normalized);
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    cinder_core::host_client::inspect(
+        &dir,
+        &pending.allowed(read_config(&dir).host_url),
+        &normalized,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn trust_host_identity(
+    app: tauri::AppHandle,
+    pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
+    base_url: String,
+    fingerprint: String,
+) -> Result<(), String> {
+    let normalized = normalize_classroom_url(&base_url)?;
+    pending.set(&normalized);
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    cinder_core::host_client::trust(
+        &dir,
+        &pending.allowed(read_config(&dir).host_url),
+        &normalized,
+        &fingerprint,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn discover_hosts() -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(discover)
         .await

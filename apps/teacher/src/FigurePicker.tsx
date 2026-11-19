@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { Button, Field, type CinderApi, type PaperFigure } from "@cinder/ui";
 import type { PaperDiagram } from "./paperLogic";
 
@@ -28,7 +28,7 @@ const RENDER_SCALE = 2;
 const MAX_DIAGRAM_CHARS = 7_000_000;
 
 async function renderPage(blob: Blob, pageNumber: number) {
-  const pdfjs = await import("pdfjs-dist");
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
   const task = pdfjs.getDocument({ data: await blob.arrayBuffer() });
   const pdf = await task.promise;

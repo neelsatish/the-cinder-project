@@ -78,10 +78,9 @@ valid update signature.
 | [Platform support](docs/platform-support.md) | Shared Windows/Linux architecture, builds and update rules |
 | [Security](docs/security.md) | Implemented protections, residual risks and deployment checklist |
 | [Handoff](handoff.md) | Current product state, open decisions and working rules |
-| [Product overview](docs/product-overview.md) | Mission, principles and deliberate limits |
-| [Product and delivery plan](docs/product-plan.md) | Architecture, data rules and acceptance checklist |
 | [Backup and recovery](docs/backup-and-recovery.md) | Backup design; encrypted manual and daily backups and restore are built |
 | [Changelog](CHANGELOG.md) | Bullet-point release notes |
+| [Archive](docs/archive/) | Earlier plans, product overview and handoffs, kept as history |
 
 ## Developer setup
 

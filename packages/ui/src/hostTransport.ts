@@ -8,7 +8,7 @@
  * Host answers over HTTP for this computer only.
  */
 
-/** A failure the native side named: a changed certificate, an outdated Host. */
+/** A failure the native side named: untrusted or changed certificate, outdated Host. */
 export class HostTransportError extends Error {
   readonly code: string;
 
@@ -19,13 +19,39 @@ export class HostTransportError extends Error {
   }
 }
 
-const NAMED_FAILURES = ["host_identity_changed", "host_outdated", "invalid"];
+/** True when the native side reported a Host too old to speak HTTPS (an ApiError code or a raw invoke error). */
+export function isHostOutdated(error: unknown) {
+  return (error as { code?: unknown } | null)?.code === "host_outdated" || String(error).startsWith("host_outdated:");
+}
+
+const NAMED_FAILURES = ["host_untrusted", "host_identity_changed", "host_outdated", "invalid"];
 
 function inTauri() {
   return (
     typeof window !== "undefined" &&
     "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
   );
+}
+
+/**
+ * The Host address as the app really reaches it, for display only. The
+ * installed apps upgrade a saved http:// address to HTTPS on the same port
+ * (`cinder_core::host_client::https_url`). The saved string is left as typed,
+ * because sign-in and the offline store are keyed by it.
+ */
+export function hostAddressLabel(baseUrl: string) {
+  if (!inTauri()) return baseUrl;
+  try {
+    const url = new URL(baseUrl.trim());
+    if (url.protocol !== "http:") return baseUrl;
+    // An implicit port 80 stays 80, as on the native side.
+    const port = url.port || "80";
+    url.protocol = "https:";
+    url.port = port;
+    return url.pathname === "/" ? url.origin : url.href;
+  } catch {
+    return baseUrl;
+  }
 }
 
 /** 4-byte big-endian length, a JSON header, then the raw body. */
