@@ -11,6 +11,7 @@ import {
 } from "../src/teacherSession.ts";
 import { isCinderHealthResponse } from "../../../packages/ui/src/health.ts";
 import { assignmentForHeader, formatAssignmentHeader } from "../src/gradebookHeaders.ts";
+import { createGradeCells } from "../src/gradebookCells.ts";
 
 test("gradebook assignment headers stay readable and resolvable", () => {
   const assignment = { id: "work-1", title: "Writing Work 1", max_points: 100 };
@@ -146,4 +147,46 @@ test("health identity requires Cinder's ok flag and a version", () => {
   assert.equal(isCinderHealthResponse({ ok: true, version: "" }), false);
   assert.equal(isCinderHealthResponse({ ok: false, version: "0.9.10" }), false);
   assert.equal(isCinderHealthResponse("healthy"), false);
+});
+
+test("a Host refresh keeps a typed mark that is still waiting to be saved", () => {
+  const cells = createGradeCells();
+  assert.equal(cells.fromHost("priya:essay", "10"), "10");
+  assert.equal(cells.edited("priya:essay", 15), "15");
+  // Another cell's save refreshes the sheet before this one is sent.
+  assert.equal(cells.fromHost("priya:essay", "10"), "15");
+  assert.equal(cells.isWaiting("priya:essay"), true);
+  assert.equal(cells.settled("priya:essay", "15", true), null);
+  assert.equal(cells.fromHost("priya:essay", "15"), "15");
+  assert.equal(cells.isWaiting("priya:essay"), false);
+});
+
+test("the Gradebook's own writes are not mistaken for typed marks", () => {
+  const cells = createGradeCells();
+  cells.fromHost("sam:essay", "17");
+  assert.equal(cells.edited("sam:essay", 17), null);
+  assert.equal(cells.edited("sam:essay", "17.0"), null);
+  cells.fromHost("sam:quiz", "");
+  assert.equal(cells.edited("sam:quiz", null), null);
+  assert.equal(cells.edited("sam:quiz", "  "), null);
+});
+
+test("a failed save puts back the last confirmed mark, not the one shown early", () => {
+  const cells = createGradeCells();
+  cells.fromHost("tom:essay", "10");
+  cells.edited("tom:essay", "15");
+  // Teacher shows the typed mark straight away, which reaches the sheet as if from the Host.
+  assert.equal(cells.fromHost("tom:essay", "15"), "15");
+  assert.equal(cells.settled("tom:essay", "15", false), "10");
+  assert.equal(cells.edited("tom:essay", 10), null);
+});
+
+test("an older failed save does not undo a newer typed mark", () => {
+  const cells = createGradeCells();
+  cells.fromHost("zara:essay", "10");
+  cells.edited("zara:essay", "15");
+  cells.edited("zara:essay", "16");
+  assert.equal(cells.settled("zara:essay", "15", false), null);
+  assert.equal(cells.settled("zara:essay", "16", true), null);
+  assert.equal(cells.fromHost("zara:essay", "16"), "16");
 });

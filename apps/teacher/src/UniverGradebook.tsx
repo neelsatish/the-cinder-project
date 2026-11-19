@@ -16,6 +16,7 @@ import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import sheetsEnUS from "@univerjs/preset-sheets-core/locales/en-US";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import { useTheme, type Assignment, type User } from "@cinder/ui";
+import { createGradeCells } from "./gradebookCells";
 import { assignmentForHeader, formatAssignmentHeader, NOT_HANDED_IN } from "./gradebookHeaders";
 
 export type UniverGradebookHandle = {
@@ -231,17 +232,17 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
       let renderedRosterCount = propsRef.current.roster.length;
       let renderedAssignmentCount = propsRef.current.assignments.length;
       const gradeTimers = new Map<string, number>();
-      const gradeVersions = new Map<string, number>();
-      const gradeValues = new Map<string, string>();
-      const persistedGradeValues = new Map<string, string>();
+      // Saves waiting for their timer, run at once if the Gradebook closes first.
+      const gradeSaves = new Map<string, () => void>();
+      const cells = createGradeCells();
+      const cellValue = (value: string) =>
+        value === "" ? { v: null } : Number.isFinite(Number(value)) ? Number(value) : value;
 
       syncAuthoritativeRef.current = () => {
         const active = univerAPI.getWorkbook(workbook.getId());
         const gradeSheet = active?.getSheetByName("Gradebook");
         if (!active || !gradeSheet) return;
         synchronizing = true;
-        gradeTimers.forEach((timer) => window.clearTimeout(timer));
-        gradeTimers.clear();
 
         const nextAssignmentCount = propsRef.current.assignments.length;
         if (nextAssignmentCount > renderedAssignmentCount) {
@@ -284,36 +285,24 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
             .setVerticalAlignment("middle");
         });
 
-        gradeValues.clear();
-        persistedGradeValues.clear();
         propsRef.current.roster.forEach((student, row) => {
           gradeSheet.getRange(row + 1, 0).setValue(student.display_name);
           gradeSheet.getRange(row + 1, 1).setValue(student.username);
           propsRef.current.assignments.forEach((assignment, column) => {
             const key = `${student.id}:${assignment.id}`;
-            const value = propsRef.current.submitted(student.id, assignment.id)
-              ? (propsRef.current.scores[key] ?? "")
-              : NOT_HANDED_IN;
-            gradeSheet
-              .getRange(row + 1, column + 2)
-              .setValue(
-                value === ""
-                  ? { v: null }
-                  : Number.isFinite(Number(value))
-                    ? Number(value)
-                    : value,
-              );
-            gradeValues.set(key, value === NOT_HANDED_IN ? "" : value);
-            persistedGradeValues.set(key, value === NOT_HANDED_IN ? "" : value);
+            const submitted = propsRef.current.submitted(student.id, assignment.id);
+            // Recorded before writing, so the value listener recognises the Gradebook's own write;
+            // a mark the teacher typed that is still waiting to be saved stays on screen.
+            const shown = cells.fromHost(key, submitted ? (propsRef.current.scores[key] ?? "") : "");
+            gradeSheet.getRange(row + 1, column + 2).setValue(cellValue(submitted ? shown : NOT_HANDED_IN));
           });
         });
         renderedRosterCount = propsRef.current.roster.length;
         renderedAssignmentCount = nextAssignmentCount;
+        // Edits made from here on are judged by value, so none is ignored while the sheet settles.
+        synchronizing = false;
         window.clearTimeout(syncTimer);
-        syncTimer = window.setTimeout(() => {
-          synchronizing = false;
-          persist();
-        }, 50);
+        syncTimer = window.setTimeout(persist, 50);
       };
       resetWorkbookRef.current = () => {
         const active = univerAPI.getWorkbook(workbook.getId());
@@ -371,38 +360,32 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
                   continue;
                 }
                 const key = `${student.id}:${assignment.id}`;
-                const value = raw == null ? "" : String(raw).trim();
-                const previous = gradeValues.get(key) ?? "";
-                if (value === previous) continue;
-                gradeValues.set(key, value);
-                const version = (gradeVersions.get(key) ?? 0) + 1;
-                gradeVersions.set(key, version);
+                const mark = cells.edited(key, raw);
+                if (mark === null) continue;
+                // Bound now: the save belongs to the classroom and work shown when it was typed.
+                const save = propsRef.current.onScoreChange;
+                const run = () => {
+                  gradeTimers.delete(key);
+                  gradeSaves.delete(key);
+                  void save(student.id, assignment, mark)
+                    .catch(() => false)
+                    .then((saved) => {
+                      const back = cells.settled(key, mark, saved);
+                      if (back === null) return;
+                      try {
+                        // Columns and rows may have moved since, so find the cell again.
+                        const sheet = univerAPI.getWorkbook(workbook.getId())?.getSheetByName("Gradebook");
+                        const studentRow = propsRef.current.roster.findIndex((item) => item.id === student.id);
+                        const workColumn = propsRef.current.assignments.findIndex((item) => item.id === assignment.id);
+                        if (sheet && studentRow >= 0 && workColumn >= 0) sheet.getRange(studentRow + 1, workColumn + 2).setValue(cellValue(back));
+                      } catch {
+                        // The Gradebook has closed; the next one loads the Host's marks.
+                      }
+                    });
+                };
                 window.clearTimeout(gradeTimers.get(key));
-                gradeTimers.set(
-                  key,
-                  window.setTimeout(() => {
-                    void propsRef.current
-                      .onScoreChange(student.id, assignment, value)
-                      .then((saved) => {
-                        if (saved) {
-                          persistedGradeValues.set(key, value);
-                          return;
-                        }
-                        if (gradeVersions.get(key) !== version) return;
-                        const rollback = persistedGradeValues.get(key) ?? "";
-                        gradeValues.set(key, rollback);
-                        activeGradeSheet
-                          .getRange(row, column)
-                          .setValue(
-                            rollback === ""
-                              ? { v: null }
-                              : Number.isFinite(Number(rollback))
-                                ? Number(rollback)
-                                : rollback,
-                          );
-                      });
-                  }, 500),
-                );
+                gradeSaves.set(key, run);
+                gradeTimers.set(key, window.setTimeout(run, 500));
               }
             }
           }
@@ -412,6 +395,8 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
         window.clearTimeout(persistTimer);
         window.clearTimeout(syncTimer);
         gradeTimers.forEach((timer) => window.clearTimeout(timer));
+        // A mark typed just before leaving the Gradebook is still saved.
+        [...gradeSaves.values()].forEach((run) => run());
         persistListener.dispose();
         valueListener.dispose();
         persist();
