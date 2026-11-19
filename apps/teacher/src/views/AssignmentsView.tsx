@@ -346,7 +346,7 @@ function ReviewModal({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  // Saving a draft sets published to false on the Host, so offering it on a returned mark would take the mark back from the student.
+  // Saving with publish false hides the mark from the student, so on a returned mark it is offered only as an explicit Take back.
   const returned = Boolean(submission.grade?.published);
   useEffect(() => {
     void Promise.all([
@@ -363,7 +363,7 @@ function ReviewModal({
       if (points !== "" && (Number(points) < 0 || Number(points) > assignment.max_points)) throw new Error(`Enter a mark from 0 to ${assignment.max_points}.`);
       await api.saveGrade(submission.id, { points: points === "" ? null : Number(points), grade_label: label.trim() || null, feedback: feedback.trim(), publish });
       await onSaved();
-      setMessage(publish ? "Returned to the student." : "Saved. Not returned yet.");
+      setMessage(publish ? "Returned to the student." : returned ? "Taken back. The student no longer sees this mark." : "Saved. Not returned yet.");
     } catch (failure) {
       setError(errorText(failure, "The mark could not be saved."));
     } finally {
@@ -407,7 +407,7 @@ function ReviewModal({
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           {message ? <p className="form-success" role="status">{message}</p> : null}
           <div className="form-actions">
-            {returned ? null : <Button disabled={busy} onClick={() => void save(false)}>Save draft</Button>}
+            <Button disabled={busy} onClick={() => void save(false)}>{returned ? "Take back" : "Save draft"}</Button>
             <Button variant="primary" type="submit" disabled={busy}>{busy ? "Saving…" : returned ? "Update returned mark" : "Return to student"}</Button>
           </div>
           <div className="review-comments">

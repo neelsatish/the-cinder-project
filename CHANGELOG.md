@@ -26,7 +26,7 @@ Not yet in a published installer. The version is still 0.10.7.
 - Gradebook headers read "Title (out of 5)". "—" always means not handed in and a blank cell means handed in but not marked, in the sheet, the CSV and the printout, with a key under the sheet. A mark typed over "—" is put back with a message instead of vanishing.
 - Papers asks before deleting in Cinder's own dialog, and a diagram that cannot be attached says why beside the control.
 - Fixed: deleting the paper open in the editor from the library list saved it straight back.
-- Fixed: "Save draft" on a mark already returned took it back from the student. Once returned, marking offers "Update returned mark".
+- Fixed: "Save draft" on a mark already returned took it back from the student without saying so. Once returned, marking offers "Update returned mark", or "Take back" to hide the mark from the student until it is returned again.
 - Fixed: the hand-in and to-mark counts did not change after marking until Teacher was reloaded.
 - Fixed: Cinder Student said "Time is up" every time it opened after a timer had finished.
 - Fixed: choosing Classrooms in Student's sidebar from inside a classroom did nothing.
