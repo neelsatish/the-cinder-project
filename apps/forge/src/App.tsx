@@ -295,8 +295,9 @@ function HomePage({ api, scope, online, refreshKey, notes, liveNow, liveClassroo
     .filter((item) => item.status === "published")
     .filter((item) => { const submission = work?.submissions[item.id]; return !submission || submission.status === "withdrawn"; })
     .sort((left, right) => (left.due_at ? Date.parse(left.due_at) : Infinity) - (right.due_at ? Date.parse(right.due_at) : Infinity));
+  // Live-class quizzes are reached through the live class and close with it.
   const quizzes = (work?.quizzes ?? []).filter((delivery) =>
-    delivery.attempt_state !== "submitted" && delivery.attempt_state !== "expired" && !delivery.results_released_at
+    delivery.kind === "homework" && delivery.attempt_state !== "submitted" && delivery.attempt_state !== "expired" && !delivery.results_released_at
     && (!delivery.opens_at || Date.parse(delivery.opens_at) <= now)
     && (!delivery.due_at || Date.parse(delivery.due_at) > now));
   const recent = notes.filter((note) => !note.deletedAt).sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt)).slice(0, 5);
