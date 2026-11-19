@@ -30,7 +30,7 @@ Not yet in a published installer. The version is still 0.10.7.
 - Fixed: the hand-in and to-mark counts did not change after marking until Teacher was reloaded.
 - Fixed: Cinder Student said "Time is up" every time it opened after a timer had finished.
 - Fixed: choosing Classrooms in Student's sidebar from inside a classroom did nothing.
-- Security updates for newly published advisories: rustls and its root certificates, the SQLite bundled with Cinder Host (rusqlite 0.41), DOMPurify, ProseMirror and markdown-it. Six advisories in the zip crate used by the updater remain; fixing them needs Tauri 2.12.
+- Security updates for newly published advisories: rustls and its root certificates, the SQLite bundled with Cinder Host (rusqlite 0.41), DOMPurify, ProseMirror and markdown-it. Tauri moves to 2.12 and its updater to 2.14.1, which clears six advisories in the zip crate the updater uses on Windows.
 - Cinder Host: no more pop-up prompts. Editing people, resetting sign-in, disabling a teacher (with the replacement chosen from a list), renaming files, emptying Trash, restoring and resetting use in-app dialogs, and recovery codes and PINs appear in a dialog of their own.
 - Teacher and Student show the Host security code at first contact and after a certificate change, and need the matching code before trusting it (from earlier work on this branch).
 - An outdated Cinder Host gets its own update-Host-first screen in Teacher and Student (from earlier work on this branch).
