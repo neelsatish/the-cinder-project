@@ -301,6 +301,9 @@ export function Field({
   );
 }
 
+/** Where focus returns when a dialog closes after the dialog it was opened from has gone. */
+const dialogReturnTargets = new WeakMap<Element, HTMLElement | null>();
+
 export function Modal({
   title,
   description,
@@ -320,18 +323,26 @@ export function Modal({
   closeRef.current = onClose;
   const dialogRef = useRef<HTMLElement>(null);
   // Read during the first render: by the time effects run, a field's autoFocus has moved focus.
-  const [opener] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
+  const [opener] = useState(() => {
+    const element = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Opened from inside another dialog: if that dialog goes first (Next, Previous, a secrets
+    // dialog after a reset), focus returns to what opened that one instead.
+    const parent = element?.closest('[role="dialog"]');
+    return { element, fallback: parent ? dialogReturnTargets.get(parent) ?? null : element };
+  });
   useEffect(() => {
     // Take keyboard focus like a native dialog, unless a field already has it (autoFocus),
     // and give it back to whatever opened the dialog when it closes.
     const dialog = dialogRef.current;
+    if (dialog) dialogReturnTargets.set(dialog, opener.fallback);
     if (dialog && !dialog.contains(document.activeElement)) dialog.focus();
     return () => {
       // Only once the dialog has really gone (not a development re-run of this effect), and only
-      // when focus went with it, so a dialog replacing it (Next, Previous) keeps its own.
+      // when focus went with it, so a dialog replacing it keeps its own.
       if (dialog?.isConnected) return;
       const lost = !document.activeElement || document.activeElement === document.body;
-      if (lost && opener?.isConnected) opener.focus();
+      const target = opener.element?.isConnected ? opener.element : opener.fallback?.isConnected ? opener.fallback : null;
+      if (lost) target?.focus();
     };
   }, [opener]);
   useEffect(() => {
