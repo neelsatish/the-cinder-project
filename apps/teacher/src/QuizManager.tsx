@@ -189,6 +189,8 @@ function QuizEditor({ api, classroomId, quiz, onDone, onDuplicate }: {
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
+    const unticked = form.questions.findIndex((question) => question.kind === "single_choice" && !(question.canonical_answer && question.options.includes(question.canonical_answer as string)));
+    if (unticked >= 0) { setError(`Question ${unticked + 1}: select the correct answer.`); return; }
     setBusy(true);
     setError("");
     try {

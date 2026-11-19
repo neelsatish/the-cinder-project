@@ -26,6 +26,7 @@ export function AttendanceView({ api, classroomId, onUpdated }: { api: CinderApi
 
   const load = useCallback(async () => {
     setError("");
+    draftNotes.current.clear();
     try {
       setSheet(await api.attendance(classroomId, day));
     } catch (failure) {
