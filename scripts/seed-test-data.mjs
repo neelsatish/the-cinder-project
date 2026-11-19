@@ -18,7 +18,6 @@
 // These are test credentials for a local test school only. Never reuse them.
 
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
@@ -156,7 +155,10 @@ function startHost(exe, dataDir) {
     });
     let pin = null;
     let output = "";
-    const timer = setTimeout(() => reject(new Error(`Host did not start:\n${output}`)), 30_000);
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`Host did not start:\n${output}`));
+    }, 30_000);
     child.stdout.on("data", (chunk) => {
       output += chunk;
       pin ??= output.match(/setup PIN[^:]*:\s*(\d+)/)?.[1] ?? null;
@@ -440,20 +442,23 @@ async function main() {
 
   const exe = hostBinary();
   const { child, port, pin, log } = await startHost(exe, target);
-  const certDer = fs.readFileSync(path.join(target, "tls", "host-tls-cert.der"));
-  const client = makeClient(port, certDer);
+  const exited = child.exitCode === null ? new Promise((resolve) => child.once("exit", resolve)) : Promise.resolve();
+  let client;
   try {
+    client = makeClient(port, fs.readFileSync(path.join(target, "tls", "host-tls-cert.der")));
     await seed(client, pin);
   } catch (error) {
     console.error(`Host log (last lines):\n${log().split("\n").slice(-15).join("\n")}`);
     throw error;
   } finally {
-    client.close();
+    client?.close();
     child.kill();
+    await exited;
+    // The temporary server's own certificate and key. Cinder Host keeps its certificate outside
+    // the school data folder, so this one would only mislead (and end up in backups).
+    fs.rmSync(path.join(target, "tls"), { recursive: true, force: true });
   }
-  const fingerprint = createHash("sha256").update(certDer).digest("hex");
   console.log(`\nSeeded ${SCHOOL_NAME} into ${target}`);
-  console.log(`Host certificate SHA-256: ${fingerprint}`);
   console.log("Next: open Cinder Host, choose this folder as the school-data folder and finish setup.");
 }
 
