@@ -403,7 +403,7 @@ export function MatchboxSessionGate({ children }: { children: (session: Matchbox
         baseUrl,
         token: token ?? "",
         online,
-        refresh,
+        refresh: () => { identityPrompted.current = false; return refresh(); },
         switchAccount,
         openConnection: () => setConnectionOpen(true),
       })}
