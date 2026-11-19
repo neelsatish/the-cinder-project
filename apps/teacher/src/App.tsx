@@ -643,7 +643,7 @@ function HostConnectionModal({
     let cancelled = false;
     void normalizeHostAddress(baseUrl)
       .then((address) => inspectHostIdentity(address).then((result) => {
-        if (!cancelled) { setIdentity(result); setCheckedUrl(baseUrl.trim()); }
+        if (!cancelled) { setIdentity(result); setCheckedUrl(hostAddressLabel(baseUrl).trim()); }
       }))
       .catch(() => undefined);
     return () => { cancelled = true; };
