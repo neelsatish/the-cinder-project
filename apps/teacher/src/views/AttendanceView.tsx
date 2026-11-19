@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Button,
   EmptyState,
@@ -21,6 +21,8 @@ export function AttendanceView({ api, classroomId, onUpdated }: { api: CinderApi
   const [sheet, setSheet] = useState<AttendanceDay | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Notes typed for students not marked yet, so "Mark present" saves them too.
+  const draftNotes = useRef(new Map<string, string>());
 
   const load = useCallback(async () => {
     setError("");
@@ -48,7 +50,7 @@ export function AttendanceView({ api, classroomId, onUpdated }: { api: CinderApi
     if (!sheet) return;
     setBusy(true);
     try {
-      for (const record of sheet.records.filter((item) => !item.status)) await save(record.student_id, "present", record.note);
+      for (const record of sheet.records.filter((item) => !item.status)) await save(record.student_id, "present", draftNotes.current.get(`${day}:${record.student_id}`) ?? record.note);
       await Promise.all([load(), onUpdated()]);
     } catch {
       /* The error is already shown. */
@@ -73,7 +75,12 @@ export function AttendanceView({ api, classroomId, onUpdated }: { api: CinderApi
         {!sheet ? <p className="loading-line">Loading…</p> : sheet.records.length ? (
           <div className="attendance-grid">
             {sheet.records.map((record) => (
-              <AttendanceRow key={`${day}:${record.student_id}`} record={record} onSave={(status, note) => save(record.student_id, status, note)} />
+              <AttendanceRow
+                key={`${day}:${record.student_id}`}
+                record={record}
+                onNoteChange={(note) => draftNotes.current.set(`${day}:${record.student_id}`, note)}
+                onSave={async (status, note) => { await save(record.student_id, status, note); void onUpdated(); }}
+              />
             ))}
           </div>
         ) : (
@@ -84,7 +91,7 @@ export function AttendanceView({ api, classroomId, onUpdated }: { api: CinderApi
   );
 }
 
-function AttendanceRow({ record, onSave }: { record: AttendanceDay["records"][number]; onSave: (status: AttendanceStatus, note: string) => Promise<void> }) {
+function AttendanceRow({ record, onNoteChange, onSave }: { record: AttendanceDay["records"][number]; onNoteChange: (note: string) => void; onSave: (status: AttendanceStatus, note: string) => Promise<void> }) {
   const [note, setNote] = useState(record.note);
   const [busy, setBusy] = useState(false);
   useEffect(() => setNote(record.note), [record.note]);
@@ -121,7 +128,7 @@ function AttendanceRow({ record, onSave }: { record: AttendanceDay["records"][nu
         aria-label={`Note for ${record.student_name}`}
         placeholder="Note"
         value={note}
-        onChange={(event) => setNote(event.target.value)}
+        onChange={(event) => { setNote(event.target.value); onNoteChange(event.target.value); }}
         onBlur={() => { if (record.status && note !== record.note) void save(record.status, note); }}
       />
     </div>

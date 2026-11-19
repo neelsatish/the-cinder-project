@@ -32,7 +32,7 @@ export function LiveSessionControls({ api, classroomId, assignments = [] }: { ap
       setError("");
       void api.liveSessionHistory(classroomId).then((items) => { if (request === generation.current) setHistory(items); }).catch((failure) => { if (!(failure instanceof ApiError && failure.status === 404)) setError(failure instanceof Error ? failure.message : "Session history could not be loaded."); });
       void api.tree().then((tree) => { if (request === generation.current) setMaterials(tree.nodes.filter((node) => !node.owner_id && node.classroom_id === classroomId && node.kind === "pdf")); }).catch(() => undefined);
-      void api.quizzes(classroomId).then((items) => { if (request === generation.current) setQuizzes(items.filter((quiz) => quiz.published_version)); }).catch(() => undefined);
+      void api.quizzes(classroomId).then((items) => { if (request === generation.current) setQuizzes(items.filter((quiz) => quiz.questions.length)); }).catch(() => undefined);
     } catch (failure) {
       if (request === generation.current) setError(failure instanceof Error ? failure.message : "Live classroom could not be loaded.");
     }
@@ -76,6 +76,8 @@ export function LiveSessionControls({ api, classroomId, assignments = [] }: { ap
     if (!session) return;
     setBusy(true); setError("");
     try {
+      // Publishing first freezes exactly what the class will see, as setting homework does.
+      if (kind === "quiz") await api.publishQuiz(targetId);
       const assignedTarget = kind === "quiz" ? (await api.deliverQuiz(targetId, { kind: "live", live_session_id: session.id })).id : targetId || null;
       await api.assignLiveSessionTask(session.id, { kind, target_id: assignedTarget, title: title.trim(), instructions: instructions.trim() });
       setTitle(""); setInstructions(""); setTargetId(""); await refresh();

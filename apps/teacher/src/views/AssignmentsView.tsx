@@ -129,13 +129,16 @@ function AssignmentDetail({
   onUpdated: () => Promise<void>;
 }) {
   const [submissions, setSubmissions] = useState<Submission[] | null>(null);
-  const [reviewIndex, setReviewIndex] = useState<number | null>(null);
+  // Tracked by id: the list reloads after each save and must not swap the student being marked.
+  const [reviewId, setReviewId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
   const load = useCallback(async () => {
     try {
-      setSubmissions((await api.submissions(assignment.id)).filter((item) => item.status !== "withdrawn"));
+      // The Host lists by last change, so marking would reorder it; keep hand-in order instead.
+      const handedInAt = (item: Submission) => Date.parse(item.submitted_at ?? item.updated_at);
+      setSubmissions((await api.submissions(assignment.id)).filter((item) => item.status !== "withdrawn").sort((a, b) => handedInAt(b) - handedInAt(a)));
     } catch (failure) {
       setError(errorText(failure, "Handed-in work could not be loaded."));
     }
@@ -144,6 +147,7 @@ function AssignmentDetail({
 
   const handedIn = useMemo(() => new Set((submissions ?? []).map((item) => item.student_id)), [submissions]);
   const missing = roster.filter((student) => !handedIn.has(student.id));
+  const reviewIndex = submissions && reviewId ? submissions.findIndex((item) => item.id === reviewId) : -1;
 
   async function setStatus(status: Assignment["status"]) {
     setError("");
@@ -187,10 +191,10 @@ function AssignmentDetail({
       <Panel title={`Handed in${submissions ? ` (${submissions.length})` : ""}`} className="panel-flush">
         {!submissions ? <p className="loading-line">Loading…</p> : submissions.length ? (
           <div className="list">
-            {submissions.map((submission, index) => {
+            {submissions.map((submission) => {
               const mark = markLabel(submission, assignment.max_points);
               return (
-                <button type="button" className="list-item" key={submission.id} onClick={() => setReviewIndex(index)}>
+                <button type="button" className="list-item" key={submission.id} onClick={() => setReviewId(submission.id)}>
                   <span className="account-initial" aria-hidden="true">{submission.student_name.slice(0, 1).toUpperCase()}</span>
                   <span className="list-copy">
                     <strong>{submission.student_name}</strong>
@@ -221,16 +225,16 @@ function AssignmentDetail({
           ) : <p className="panel-note">Everyone in this classroom has handed in.</p>}
         </Panel>
       ) : null}
-      {reviewIndex !== null && submissions?.[reviewIndex] ? (
+      {submissions && reviewIndex >= 0 ? (
         <ReviewModal
           key={submissions[reviewIndex].id}
           api={api}
           assignment={assignment}
           submission={submissions[reviewIndex]}
           position={`${reviewIndex + 1} of ${submissions.length}`}
-          onPrevious={reviewIndex > 0 ? () => setReviewIndex(reviewIndex - 1) : undefined}
-          onNext={reviewIndex < submissions.length - 1 ? () => setReviewIndex(reviewIndex + 1) : undefined}
-          onClose={() => setReviewIndex(null)}
+          onPrevious={reviewIndex > 0 ? () => setReviewId(submissions[reviewIndex - 1].id) : undefined}
+          onNext={reviewIndex < submissions.length - 1 ? () => setReviewId(submissions[reviewIndex + 1].id) : undefined}
+          onClose={() => setReviewId(null)}
           onSaved={async () => { await load(); await onUpdated(); }}
         />
       ) : null}
@@ -414,7 +418,14 @@ function ReviewModal({
             <strong>Comments</strong>
             {comments.map((item) => <blockquote className="comment" key={item.id}><strong>{item.author_name}</strong><p>{item.body}</p></blockquote>)}
             <div className="inline-form">
-              <input aria-label="New comment" placeholder="Add a comment" value={comment} onChange={(event) => setComment(event.target.value)} />
+              <input
+                aria-label="New comment"
+                placeholder="Add a comment"
+                value={comment}
+                onChange={(event) => setComment(event.target.value)}
+                // Enter adds the comment; it must not submit the form and return the mark.
+                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); if (!busy) void addComment(); } }}
+              />
               <Button disabled={busy || !comment.trim()} onClick={() => void addComment()}>Add</Button>
             </div>
           </div>

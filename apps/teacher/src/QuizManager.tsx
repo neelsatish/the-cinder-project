@@ -15,7 +15,7 @@ import {
   type QuizQuestionInput,
   type QuizStatistics,
 } from "@cinder/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { errorText, formatDate } from "./teacherFiles";
 
 const blankQuestion = (): QuizQuestionInput => ({ kind: "single_choice", prompt: "", options: ["", ""], canonical_answer: "", max_points: 1, required: true });
@@ -179,6 +179,9 @@ function QuizEditor({ api, classroomId, quiz, onDone, onDuplicate }: {
   } : { title: "", instructions: "", time_limit_minutes: "", questions: [blankQuestion()] as QuizQuestionInput[] });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Duplicate copies the saved quiz, so it waits until the edits on screen are saved.
+  const opened = useRef(form);
+  const edited = form !== opened.current;
 
   function updateQuestion(index: number, patch: Partial<QuizQuestionInput>) {
     setForm((value) => ({ ...value, questions: value.questions.map((question, questionIndex) => questionIndex === index ? { ...question, ...patch } : question) }));
@@ -208,7 +211,7 @@ function QuizEditor({ api, classroomId, quiz, onDone, onDuplicate }: {
           <p className="page-description">Changes apply the next time you set the quiz. Quizzes already set keep the version students saw.</p>
         </div>
         <div className="page-action">
-          {quiz ? <Button disabled={busy} onClick={() => void onDuplicate(quiz)}>Duplicate</Button> : null}
+          {quiz ? <Button disabled={busy || edited} title={edited ? "Save your changes first" : undefined} onClick={() => void onDuplicate(quiz).catch((failure) => setError(errorText(failure, "The quiz could not be duplicated.")))}>Duplicate</Button> : null}
           <Button variant="primary" type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
         </div>
       </div>
@@ -248,7 +251,7 @@ function QuizEditor({ api, classroomId, quiz, onDone, onDuplicate }: {
                 {question.options.map((option, optionIndex) => (
                   <label className="quiz-option-edit" key={optionIndex}>
                     <input type="radio" name={`correct-${index}`} checked={Boolean(option) && question.canonical_answer === option} disabled={!option} onChange={() => updateQuestion(index, { canonical_answer: option })} aria-label={`Option ${optionIndex + 1} is correct`} />
-                    <input required value={option} placeholder={`Option ${optionIndex + 1}`} onChange={(event) => { const options = [...question.options]; const wasCorrect = question.canonical_answer === option; options[optionIndex] = event.target.value; updateQuestion(index, { options, ...(wasCorrect ? { canonical_answer: event.target.value } : {}) }); }} />
+                    <input required value={option} placeholder={`Option ${optionIndex + 1}`} onChange={(event) => { const options = [...question.options]; const wasCorrect = option !== "" && question.canonical_answer === option; options[optionIndex] = event.target.value; updateQuestion(index, { options, ...(wasCorrect ? { canonical_answer: event.target.value } : {}) }); }} />
                   </label>
                 ))}
                 <div className="panel-actions">

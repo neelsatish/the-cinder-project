@@ -203,6 +203,8 @@ function ClassroomPage({
   const [teacherAccounts, setTeacherAccounts] = useState<User[]>([]);
   const [materials, setMaterials] = useState<StudyNode[]>([]);
   const [section, setSection] = useState<ClassroomSection>(focus.section ?? "assignments");
+  // An assignment opened from Overview opens once, not every time Assignments is shown again.
+  const [focusAssignmentId, setFocusAssignmentId] = useState(focus.assignmentId);
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -269,7 +271,7 @@ function ClassroomPage({
         <Tabs
           label="Classroom sections"
           active={section}
-          onChange={setSection}
+          onChange={(next) => { setSection(next); setFocusAssignmentId(undefined); }}
           tabs={[
             { id: "assignments", label: "Assignments", count: assignments.length },
             { id: "students", label: "Students", count: roster?.students.length },
@@ -281,7 +283,7 @@ function ClassroomPage({
         />
         {!roster && !loadError ? <p className="loading-line">Loading…</p> : null}
         {roster && section === "assignments" ? (
-          <AssignmentsView api={api} classroom={roster.classroom} roster={roster.students} assignments={assignments} focusAssignmentId={focus.assignmentId} onUpdated={onUpdated} />
+          <AssignmentsView api={api} classroom={roster.classroom} roster={roster.students} assignments={assignments} focusAssignmentId={focusAssignmentId} onUpdated={onUpdated} />
         ) : null}
         {roster && section === "students" ? (
           <StudentsSection
