@@ -16,7 +16,7 @@ import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
 import sheetsEnUS from "@univerjs/preset-sheets-core/locales/en-US";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import { useTheme, type Assignment, type User } from "@cinder/ui";
-import { createGradeCells } from "./gradebookCells";
+import { createGradeCells, sameMark } from "./gradebookCells";
 import { assignmentForHeader, formatAssignmentHeader, NOT_HANDED_IN } from "./gradebookHeaders";
 
 export type UniverGradebookHandle = {
@@ -257,44 +257,45 @@ export const UniverGradebook = forwardRef<UniverGradebookHandle, Props>(
           );
         }
 
-        const rowsToClear = Math.max(
-          renderedRosterCount,
-          propsRef.current.roster.length,
-        );
-        gradeSheet
-          .getRange(0, 0, rowsToClear + 1, nextAssignmentCount + 2)
-          .clearContent();
-        gradeSheet
-          .getRange(0, 0)
-          .setValue("Student")
-          .setBackgroundColor("#f0e7de")
-          .setFontWeight("bold");
-        gradeSheet
-          .getRange(0, 1)
-          .setValue("Username")
-          .setBackgroundColor("#f0e7de")
-          .setFontWeight("bold");
-
-        propsRef.current.assignments.forEach((assignment, column) => {
+        // Rows left over from a longer class list.
+        if (renderedRosterCount > propsRef.current.roster.length) {
           gradeSheet
-            .getRange(0, column + 2)
-            .setValue(formatAssignmentHeader(assignment))
-            .setBackgroundColor("#f0e7de")
+            .getRange(
+              propsRef.current.roster.length + 1,
+              0,
+              renderedRosterCount - propsRef.current.roster.length,
+              nextAssignmentCount + 2,
+            )
+            .clearContent();
+        }
+        // Only cells whose value changed are written. Rewriting the whole sheet after every save
+        // threw away a mark the teacher was halfway through typing in another cell.
+        const write = (row: number, column: number, value: string | number | { v: null }) => {
+          const range = gradeSheet.getRange(row, column);
+          const next = typeof value === "object" ? "" : value;
+          if (sameMark(range.getValues()[0]?.[0]) === sameMark(next)) return null;
+          return range.setValue(value);
+        };
+        write(0, 0, "Student")?.setBackgroundColor("#f0e7de").setFontWeight("bold");
+        write(0, 1, "Username")?.setBackgroundColor("#f0e7de").setFontWeight("bold");
+        propsRef.current.assignments.forEach((assignment, column) => {
+          write(0, column + 2, formatAssignmentHeader(assignment))
+            ?.setBackgroundColor("#f0e7de")
             .setFontWeight("bold")
             .setWrap(true)
             .setVerticalAlignment("middle");
         });
 
         propsRef.current.roster.forEach((student, row) => {
-          gradeSheet.getRange(row + 1, 0).setValue(student.display_name);
-          gradeSheet.getRange(row + 1, 1).setValue(student.username);
+          write(row + 1, 0, student.display_name);
+          write(row + 1, 1, student.username);
           propsRef.current.assignments.forEach((assignment, column) => {
             const key = `${student.id}:${assignment.id}`;
             const submitted = propsRef.current.submitted(student.id, assignment.id);
             // Recorded before writing, so the value listener recognises the Gradebook's own write;
             // a mark the teacher typed that is still waiting to be saved stays on screen.
             const shown = cells.fromHost(key, submitted ? (propsRef.current.scores[key] ?? "") : "");
-            gradeSheet.getRange(row + 1, column + 2).setValue(cellValue(submitted ? shown : NOT_HANDED_IN));
+            write(row + 1, column + 2, cellValue(submitted ? shown : NOT_HANDED_IN));
           });
         });
         renderedRosterCount = propsRef.current.roster.length;
