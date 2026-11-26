@@ -13,6 +13,15 @@ fn main() {
         .init();
 
     tauri::Builder::default()
+        // A second copy would share the saved sign-in and the offline queue with the first, so
+        // signing out in one signed the other out later. Opening it again shows the open window.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
