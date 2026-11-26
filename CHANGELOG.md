@@ -34,9 +34,10 @@ Not yet in a published installer. The version is still 0.10.7.
 - Fixed: marks typed in the Gradebook close together could be lost when the first one saved, and a mark typed just before leaving the Gradebook was dropped.
 - Fixed: work handed in offline in Cinder Student was sent only once the Classrooms page was opened, and could be sent twice. It now goes as soon as the Host is reachable.
 - Quiz answers given offline in Cinder Student are kept on the computer until they reach the Host, instead of being lost when the quiz is left.
+- Fixed: opening Cinder Student again started a second copy, and the two copies could sign each other out. It now brings the open window forward.
 - Cinder Student says "Time is up" on a quiz whose time limit has run out, instead of "In progress".
 - PDFs in Papers and the figure picker load pdf.js's build with polyfills, so they no longer depend on very new browser features that the webview on Linux Mint may lack.
-- Security updates for newly published advisories: rustls and its root certificates, the SQLite bundled with Cinder Host (rusqlite 0.41), DOMPurify, ProseMirror and markdown-it. Tauri moves to 2.12 and its updater to 2.14.1, which clears six advisories in the zip crate the updater uses on Windows.
+- Security updates for newly published advisories: rustls and its root certificates, the SQLite bundled with Cinder Host (rusqlite 0.41), DOMPurify, ProseMirror and markdown-it. Tauri moves to 2.12 and its updater to 2.14.1, which clears six advisories in the zip crate the updater uses on Windows. Later, url and cookie for two advisories published in late November.
 - Cinder Host: no more pop-up prompts. Editing people, resetting sign-in, disabling a teacher (with the replacement chosen from a list), renaming files, emptying Trash, restoring and resetting use in-app dialogs, and recovery codes and PINs appear in a dialog of their own.
 - Teacher and Student show the Host security code at first contact and after a certificate change, and need the matching code before trusting it (from earlier work on this branch).
 - An outdated Cinder Host gets its own update-Host-first screen in Teacher and Student (from earlier work on this branch).
