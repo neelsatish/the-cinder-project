@@ -88,6 +88,15 @@ for any public claim. Update this file when you resolve a conflict.
   reference before committing. It was tested on a 0.10.7-shaped database in
   `cargo test` and on the seeded dev data folder. The Host also reports a
   timed-out quiz attempt as `attempt_state: "expired"`.
+- **Installed-app check, 26 November 2026:** the test builds were installed over
+  0.10.7 on this computer after a dated backup of the test school
+  (`Downloads/Cinder-Test-Data-backup-2026-11-26`). Clicked through: Host unlock
+  and Server page (the data folder updated cleanly), Teacher and Student saved
+  sign-in and fresh sign-in, the https:// address, the update check, Gradebook
+  entry (which found R-19), marking, returning and taking back, a 40-minute live
+  class with a task, and a student joining it. Test marks were put back; the
+  live class stays in the history. Not tried: Linux, and installing an update
+  through the updater.
 - **Test data:** `node scripts/seed-test-data.mjs <empty folder>` fills a new
   Host data folder with a labelled Cinder Test School through the classroom
   API. The test passwords are in the script. The maintainer's earlier app
