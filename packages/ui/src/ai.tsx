@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { ApiError, type CinderApi } from "./api";
-import { Modal } from "./components";
+import { Modal, PageHeader } from "./components";
 import { fitWithin, imageFilesFromClipboard } from "./imageFit";
 import type { ChatImage, StudentAiStatus } from "./types";
 
@@ -389,7 +389,7 @@ export function StudentAiHelper({ api }: { api: CinderApi }) {
   if (unavailable || (status && !status.enabled)) {
     return (
       <section className="ai-panel">
-        <h1>Study helper</h1>
+        <PageHeader title="Study helper" />
         <p className="ai-note">
           {unavailable
             ? "This school's Cinder Host needs updating before the study helper can work."
@@ -402,14 +402,12 @@ export function StudentAiHelper({ api }: { api: CinderApi }) {
   const outOfQuestions = status ? status.remaining === 0 : false;
   return (
     <section className="ai-panel" onPaste={pasteHandler(photos)}>
-      <header>
-        <h1>Study helper</h1>
-        <p className="ai-note">
-          You are talking to an AI, not a person. It can be wrong, so check anything important with
-          your teacher or a book. Your teacher can read your questions and its answers. Please do not
-          type personal details such as your address or phone number.
-        </p>
-      </header>
+      <PageHeader title="Study helper" />
+      <p className="ai-note">
+        You are talking to an AI, not a person. It can be wrong, so check anything important with
+        your teacher or a book. Your teacher can read your questions and its answers. Please do not
+        type personal details such as your address or phone number.
+      </p>
 
       {status ? (
         <p className="ai-count" aria-live="polite">

@@ -256,7 +256,7 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
         ) : page === "library" ? (
           <LibraryPage accountId={session.user.id} data={forge.data} onAddFile={addReferenceFile} onRemoveFile={removeReferenceFile} />
         ) : page === "helper" && helperOn ? (
-          <StudentAiHelper api={session.api} />
+          <div className="workspace"><div className="page"><StudentAiHelper api={session.api} /></div></div>
         ) : (
           <SettingsPage
             name={session.user.display_name}
