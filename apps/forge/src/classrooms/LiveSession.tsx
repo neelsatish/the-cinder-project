@@ -143,9 +143,21 @@ export function useStudentLiveSession({ api, baseUrl, accountId, online }: { api
 }
 
 export function LiveSessionBar({ live, online, onOpen }: { live: StudentLiveSessionController; online: boolean; onOpen: () => void }) {
-  if (!online || !live.session || live.remainingSeconds <= 0 || live.resultState === "ended" || live.resultState === "expired") return null;
+  // Only once joined: before that, Home and the sidebar badge invite the student in.
+  if (!online || !live.session || !live.joined || live.remainingSeconds <= 0 || live.resultState === "ended" || live.resultState === "expired") return null;
   const minutes = Math.floor(live.remainingSeconds / 60).toString().padStart(2, "0");
   const seconds = (live.remainingSeconds % 60).toString().padStart(2, "0");
-  const task = live.session.current_task; const active = live.resultState === "active";
-  return <section className="live-session-bar" aria-live="polite"><span><strong>{task?.title ?? live.session.module_name}</strong><small>{live.session.classroom_name}{live.sessions.length > 1 ? ` · ${live.sessions.length} live classes` : ""}</small></span><output>{minutes}:{seconds}</output><span>{live.resultState === "submitting" ? "Submitting" : live.resultState}</span>{!live.joined && active ? <button className="forge-button primary" type="button" onClick={() => void live.joinDiscovered()}>Join live class</button> : null}{live.joined && task && active ? <button className="forge-button primary" type="button" onClick={onOpen}>Open task</button> : null}{live.joined && !task ? <span>Waiting for your teacher to assign a task.</span> : null}{live.message ? <span>{live.message}</span> : null}</section>;
+  const task = live.session.current_task;
+  const active = live.resultState === "active";
+  return (
+    <section className="live-session-bar" aria-live="polite">
+      <span className="live-dot" aria-hidden="true" />
+      <span className="live-session-copy">
+        <strong>{live.session.classroom_name}</strong>
+        <small>{task ? task.title : "Waiting for your teacher to set a task"}{live.message ? ` · ${live.message}` : ""}</small>
+      </span>
+      <output aria-label="Time left in the live class">{minutes}:{seconds}</output>
+      {task && active ? <button className="button button-primary button-small" type="button" onClick={onOpen}>Open task</button> : null}
+    </section>
+  );
 }

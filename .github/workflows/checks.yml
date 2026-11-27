@@ -54,7 +54,7 @@ jobs:
       - name: Frontend checks
         run: |
           npm run typecheck
-          npm run test:gradebook-intent
+          npm run test:teacher
           npm run test:paper-logic
           npm run test:forge-notes
           npm run test:host-transport

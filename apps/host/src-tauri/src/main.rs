@@ -676,7 +676,7 @@ fn list_people(
     let conn = database(&config)?;
     let needle = format!("%{}%", search.trim());
     let role = role.unwrap_or_default();
-    let mut stmt=conn.prepare("SELECT u.id,u.username,u.display_name,u.role,u.disabled_at,(SELECT max(created_at) FROM sessions s WHERE s.user_id=u.id),COALESCE((SELECT group_concat(c.name, ', ') FROM classrooms c LEFT JOIN classroom_enrolments e ON e.classroom_id=c.id WHERE (u.role='student' AND e.student_id=u.id) OR (u.role='teacher' AND c.owner_teacher_id=u.id)), '') FROM users u WHERE (?1='' OR u.username LIKE ?1 OR u.display_name LIKE ?1) AND (?2='' OR u.role=?2) ORDER BY u.role DESC, lower(u.display_name)").map_err(|e|e.to_string())?;
+    let mut stmt=conn.prepare("SELECT u.id,u.username,u.display_name,u.role,u.disabled_at,(SELECT max(created_at) FROM sessions s WHERE s.user_id=u.id),COALESCE(CASE u.role WHEN 'teacher' THEN (SELECT group_concat(c.name, ', ') FROM classrooms c WHERE c.owner_teacher_id=u.id AND c.archived_at IS NULL) ELSE (SELECT group_concat(c.name, ', ') FROM classrooms c JOIN classroom_enrolments e ON e.classroom_id=c.id WHERE e.student_id=u.id AND c.archived_at IS NULL) END, '') FROM users u WHERE (?1='' OR u.username LIKE ?1 OR u.display_name LIKE ?1) AND (?2='' OR u.role=?2) ORDER BY u.role DESC, lower(u.display_name)").map_err(|e|e.to_string())?;
     let rows = stmt
         .query_map(params![needle, role], |r| {
             Ok(Person {

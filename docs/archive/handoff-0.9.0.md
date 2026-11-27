@@ -1,7 +1,7 @@
 # Handoff — Cinder Matchbox
 
 > **Superseded.** This is the 0.9.0 handoff, kept as history. The current one is
-> [`handoff.md`](../handoff.md) at the repository root.
+> [`handoff.md`](../../handoff.md) at the repository root.
 
 Last updated 13 August 2026, at version **0.9.0**.
 
@@ -124,7 +124,7 @@ alone is confusing without this.
    extracted from the README, project metadata unified under one name.
 6. **Brand system** (11–12 August, Claude Code). The identity was measured from the
    asset files rather than inherited from the old PDF, and written down in
-   [`../design/brand/BRAND.md`](../design/brand/BRAND.md). The eleven-blade mark was
+   [`../design/brand/BRAND.md`](../../design/brand/BRAND.md). The eleven-blade mark was
    replaced by **Ember, reduced** — five blades and a base dot, chosen from four
    directions — then given a gradient fill and real SVG sources, which the mark had
    never had.
@@ -203,7 +203,7 @@ donated and of unknown age.
 Verified 13 August: no backup or restore code exists in `crates/`. The only match
 for "backup" in the Rust sources is incidental.
 
-The design is settled in [`backup-and-recovery.md`](backup-and-recovery.md): three
+The design is settled in [`backup-and-recovery.md`](../backup-and-recovery.md): three
 copies, two kinds of media, one kept off the premises. Build order starts with a
 `VACUUM INTO` snapshot plus incremental blob sync behind a "Back up now" button.
 
@@ -425,10 +425,10 @@ on Debian 13 (glibc 2.41) will not start on it. Glibc runs forward, never backwa
 
 Read next: [`product-overview.md`](product-overview.md) for what this is and why,
 [`product-plan.md`](product-plan.md) for the architecture and data rules,
-[`backup-and-recovery.md`](backup-and-recovery.md) before touching storage,
-[`security.md`](security.md) for the 0.8.0 security review before touching auth or
-the network, [`platform-support.md`](platform-support.md) for the source layout
-(stale at 0.7.0), and [`../design/brand/BRAND.md`](../design/brand/BRAND.md) before
+[`backup-and-recovery.md`](../backup-and-recovery.md) before touching storage,
+[`security.md`](../security.md) for the 0.8.0 security review before touching auth or
+the network, [`platform-support.md`](../platform-support.md) for the source layout
+(stale at 0.7.0), and [`../design/brand/BRAND.md`](../../design/brand/BRAND.md) before
 touching anything visual.
 
 ---

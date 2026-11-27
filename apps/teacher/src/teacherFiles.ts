@@ -49,10 +49,33 @@ export async function saveTextExport(
   return true;
 }
 
-export function formatDate(value: string | null) {
-  if (!value) return "No deadline";
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+export function formatDate(value: string | null, empty = "No due date") {
+  if (!value) return empty;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return empty;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+/** Today as YYYY-MM-DD in local time (toISOString would give the UTC day). */
+export function today() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/** An ISO timestamp as the value a datetime-local input expects. */
+export function dateTimeInput(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+export function errorText(failure: unknown, fallback: string) {
+  return failure instanceof Error ? failure.message : fallback;
 }

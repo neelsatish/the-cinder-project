@@ -3,12 +3,12 @@
 Every claim that reaches a slide is listed here first and classified. Nothing
 enters the deck unclassified. Classes:
 
-- **Fact** — true of Cinder 0.10.6 today, verifiable in this repository.
+- **Fact** — true of the released Cinder 0.10.7, verifiable in this repository.
 - **Plan** — confirmed and agreed, not yet executed.
 - **Hypothesis** — what the pilot is designed to test. Must be spoken as a question.
 - **Ambition** — future direction. Must never be spoken in the present tense.
 
-## Facts (verified against 0.10.6 on 18 September 2026)
+## Facts (verified against released 0.10.7 on 23 September 2026)
 
 Rows marked 0.10.0 are unchanged since that release.
 
@@ -25,7 +25,7 @@ Rows marked 0.10.0 are unchanged since that release.
 | All machines must reach the Host computer on TCP 7373 | `docs/platform-support.md` |
 | AI is optional and teacher-only: a question-paper creator that works only if the school adds its own AI key in Host. Students never reach it. | `CHANGELOG.md` 0.10.2–0.10.6 |
 | Host can cap AI use with a monthly token allowance | `CHANGELOG.md` 0.10.6 |
-| Host makes verified manual backups and restores them | `CHANGELOG.md` 0.10.0; `docs/security.md` |
+| Host makes verified, encrypted backups and restores them; it can make one daily while open and keep the newest N | `CHANGELOG.md` 0.10.7; `docs/security.md` |
 | Core classroom work carries no subscription | Product has no billing path |
 
 ## Plans (confirmed, not yet done)
@@ -60,7 +60,7 @@ Rows marked 0.10.0 are unchanged since that release.
 | Pilot dates, student numbers, class sizes | Unconfirmed |
 | A funding figure or budget total | Equipment audit has not run |
 | AI paper creator as a selling point | Optional, needs internet and a paid key, and Google's under-18 terms question is unresolved (`docs/security.md`). If asked, answer factually; do not pitch it. |
-| Automatic or scheduled backups | Backups are manual |
+| Backups continue when Host is closed, or are copied off-site automatically | Neither is built; daily backups require Host to be open and a chosen destination |
 | Competitor pricing or capability weaknesses | Not independently verified |
 | Works on any old computer | Only x86-64 Windows 11 / Linux Mint Cinnamon |
 | Improved academic results | A short operational pilot cannot show this |

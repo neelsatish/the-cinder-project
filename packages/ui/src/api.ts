@@ -72,6 +72,10 @@ export class CinderApi {
     this.token = token;
   }
 
+  get currentToken() {
+    return this.token;
+  }
+
   private async request<T>(
     path: string,
     init: RequestInit = {},
@@ -786,6 +790,11 @@ export class CinderApi {
 
   deleteQuestionPaper(id: string) {
     return this.request<void>(`/api/papers/${id}`, { method: "DELETE" });
+  }
+
+  /** Whether AI drafting and paper search are set up on Host. Older Hosts answer 404. */
+  aiStatus() {
+    return this.request<{ drafting: boolean; search: boolean }>("/api/ai/status", {}, 4_000);
   }
 
   chat(messages: ChatMessage[], context?: string, maxOutputTokens?: number) {

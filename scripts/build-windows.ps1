@@ -11,8 +11,8 @@ try {
     npm.cmd run typecheck
     if ($LASTEXITCODE -ne 0) { throw "TypeScript checks failed." }
 
-    npm.cmd run test:gradebook-intent
-    if ($LASTEXITCODE -ne 0) { throw "Gradebook intent tests failed." }
+    npm.cmd run test:teacher
+    if ($LASTEXITCODE -ne 0) { throw "Teacher checks failed." }
 
     npm.cmd run test:paper-logic
     if ($LASTEXITCODE -ne 0) { throw "Paper logic tests failed." }

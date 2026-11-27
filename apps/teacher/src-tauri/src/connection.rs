@@ -147,6 +147,44 @@ pub fn forget_host_identity(app: tauri::AppHandle, base_url: String) -> Result<(
 }
 
 #[tauri::command]
+pub async fn inspect_host_identity(
+    app: tauri::AppHandle,
+    pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
+    base_url: String,
+) -> Result<cinder_core::host_client::HostIdentity, String> {
+    let normalized = normalize_host_url(&base_url)?;
+    pending.set(&normalized);
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    cinder_core::host_client::inspect(
+        &dir,
+        &pending.allowed(read_config(&dir).host_url),
+        &normalized,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn trust_host_identity(
+    app: tauri::AppHandle,
+    pending: tauri::State<'_, cinder_core::host_client::PendingHost>,
+    base_url: String,
+    fingerprint: String,
+) -> Result<(), String> {
+    let normalized = normalize_host_url(&base_url)?;
+    pending.set(&normalized);
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    cinder_core::host_client::trust(
+        &dir,
+        &pending.allowed(read_config(&dir).host_url),
+        &normalized,
+        &fingerprint,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn discover_hosts() -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(discover)
         .await
@@ -282,10 +320,26 @@ mod ipc_tests {
             .build()
             .unwrap();
 
-        let response = get_ipc_response(
-            &webview,
-            invoke(framed(&format!("http://127.0.0.1:{port}/api/health"))),
-        );
+        let address = format!("http://127.0.0.1:{port}");
+        let first = get_ipc_response(&webview, invoke(framed(&format!("{address}/api/health"))));
+        assert!(first
+            .unwrap_err()
+            .as_str()
+            .is_some_and(|error| error.starts_with("host_untrusted:")));
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let identity = runtime
+            .block_on(cinder_core::host_client::inspect(&data_dir, &[], &address))
+            .unwrap();
+        assert_eq!(identity.status, "new");
+        runtime
+            .block_on(cinder_core::host_client::trust(
+                &data_dir,
+                &[],
+                &address,
+                &identity.fingerprint,
+            ))
+            .unwrap();
+        let response = get_ipc_response(&webview, invoke(framed(&format!("{address}/api/health"))));
         let InvokeResponseBody::Raw(raw) = response.unwrap() else {
             panic!("the response must be raw bytes, not JSON");
         };
@@ -296,7 +350,7 @@ mod ipc_tests {
         assert_eq!(body["ok"], true);
         assert!(
             data_dir.join("trusted-hosts.json").exists(),
-            "first contact pins"
+            "a verified first contact pins"
         );
 
         // Only the saved Host, one being set up, or this computer is reachable.

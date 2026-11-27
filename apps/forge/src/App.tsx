@@ -1,40 +1,34 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppUpdater, BrandMark, ThemePicker } from "@cinder/ui";
 import {
-  ArrowLeft,
-  ArrowRight,
-  Books,
-  Broadcast,
-  ChalkboardTeacher,
-  CaretLeft,
-  CaretRight,
-  Check,
-  Clock,
-  DotsThreeVertical,
-  FilePdf,
-  GearSix,
-  House,
-  NotePencil,
-  Plus,
-  Trash,
-  X,
-} from "@phosphor-icons/react";
+  AppShell,
+  AppUpdater,
+  Badge,
+  Button,
+  cacheGet,
+  EmptyState,
+  formatDate,
+  formatWhen,
+  hostAddressLabel,
+  Icon,
+  outboxEntries,
+  PageHeader,
+  Panel,
+  ThemePicker,
+  type Assignment,
+  type CinderApi,
+  type NavigationItem,
+  type QuizDelivery,
+  type Submission,
+} from "@cinder/ui";
 
-import { Topbar } from "./components/Topbar";
 import { MatchboxSessionGate, type MatchboxSession } from "./matchboxSession";
-import { useCountdown, TimerControls, FloatingTimer, type Countdown } from "./components/Countdown";
-import {
-  ALL_WIDGETS,
-  relativeTime,
-  useForgeData,
-  type ForgeData,
-  type ReferenceFile,
-  type StudioNote,
-  type WidgetId,
-} from "./forgeData";
+import { useCountdown, SidebarTimer } from "./components/Countdown";
+import { useForgeData, type ForgeData, type ReferenceFile, type StudioNote } from "./forgeData";
 import { clearAssets, useForgeTheme, writeAsset } from "./theme";
-import { StudentClassrooms } from "./classrooms/StudentClassrooms";
+import { StudentClassrooms, type ClassroomFocus } from "./classrooms/StudentClassrooms";
+import { belongsToClassroomScope, classroomCacheKey, classroomScope } from "./classrooms/classroomState";
 import { LiveSessionBar, useStudentLiveSession } from "./classrooms/LiveSession";
+import { REJECTED_HAND_IN, sendQueuedHandIns } from "./classrooms/outbox";
 import "./studio/documents.css";
 
 // The editor pulls in Quill and KaTeX, and the PDF pane pdf.js; loading them on
@@ -42,195 +36,339 @@ import "./studio/documents.css";
 const DocumentEditor = lazy(() => import("./studio/DocumentEditor").then((module) => ({ default: module.DocumentEditor })));
 const PdfPane = lazy(() => import("./studio/PdfPane").then((module) => ({ default: module.PdfPane })));
 
-type PrimaryPage = "home" | "classrooms" | "live" | "library" | "studio";
-type Page = PrimaryPage | "settings";
-
-const NAV_ITEMS = [
-  { id: "home", label: "Home", icon: House },
-  { id: "classrooms", label: "Classrooms", icon: ChalkboardTeacher },
-  { id: "live", label: "Live Classroom", icon: Broadcast },
-  { id: "library", label: "Library", icon: Books },
-  { id: "studio", label: "Notes", icon: NotePencil },
-] as const;
-
-const SIDEBAR_KEY = "cinder.forge.sidebar.collapsed";
+type Page = "home" | "classrooms" | "live" | "notes" | "library" | "settings";
+type NoteInput = { title: string; topic: string; bodyHtml: string; assignmentId?: string };
 
 function pdfAssetKey(accountId: string, fileId: string) {
   return `account:${accountId}:pdf:${fileId}`;
 }
-
 
 export function App() {
   return <MatchboxSessionGate>{(session) => <MatchboxWorkspace key={session.user.id} session={session} />}</MatchboxSessionGate>;
 }
 
 function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
-  const [openDocumentId, setOpenDocumentId] = useState<string | null>(null);
   const forge = useForgeData(session.user.id, session.user.display_name);
   const { clearBackgroundImage } = useForgeTheme();
   const [page, setPage] = useState<Page>("home");
+  const [focus, setFocus] = useState<ClassroomFocus | null>(null);
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [toast, setToast] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [classroomsVisit, setClassroomsVisit] = useState(0);
   const timer = useCountdown(session.user.id);
   const live = useStudentLiveSession({ api: session.api, baseUrl: session.baseUrl, accountId: session.user.id, online: session.online });
-  const [search, setSearch] = useState<{ query: string; ids: string[] } | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try { return localStorage.getItem(SIDEBAR_KEY) === "true"; }
-    catch { return false; }
-  });
-
-
-
+  const liveNow = Boolean(live.session && live.remainingSeconds > 0 && live.resultState === "active");
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(""), 2600);
-    return () => window.clearTimeout(timer);
+    const handle = window.setTimeout(() => setToast(""), 2600);
+    return () => window.clearTimeout(handle);
   }, [toast]);
 
+  // Work handed in offline goes as soon as the Host answers, whichever page is open.
+  const scope = classroomScope(session.baseUrl, session.user.id);
   useEffect(() => {
-    try { localStorage.setItem(SIDEBAR_KEY, String(sidebarCollapsed)); }
-    catch { /* The layout still works for this session when storage is unavailable. */ }
-  }, [sidebarCollapsed]);
+    if (!session.online) return;
+    void sendQueuedHandIns(session.api, scope)
+      .then(({ rejected }) => { if (rejected) setToast(REJECTED_HAND_IN); })
+      .catch(() => undefined);
+  }, [scope, session.api, session.online]);
 
-  function selectPage(nextPage: Page) {
-    setPage(nextPage);
-    setSearch(null);
+  // Only when a running timer finishes: a timer saved as finished must not announce itself on every launch.
+  const timerStatus = useRef(timer.status);
+  useEffect(() => {
+    if (timer.status === "done" && timerStatus.current === "running") setToast("Time is up");
+    timerStatus.current = timer.status;
+  }, [timer.status]);
+
+  const navItems: NavigationItem<Page>[] = [
+    { id: "home", label: "Home", icon: "home" },
+    { id: "classrooms", label: "Classrooms", icon: "classrooms" },
+    { id: "live", label: "Live class", icon: "live", badge: liveNow && !live.joined ? 1 : undefined },
+    { id: "notes", label: "Notes", icon: "notes" },
+    { id: "library", label: "Library", icon: "library" },
+    { id: "settings", label: "Settings", icon: "settings" },
+  ];
+
+  function go(next: Page) {
+    setQuery("");
+    setPage(next);
+    if (next !== "classrooms") setFocus(null);
+  }
+
+  function openAssignment(assignmentId: string) {
+    setFocus({ assignmentId });
+    go("classrooms");
+  }
+
+  function openNote(id: string) {
+    setOpenNoteId(id);
+    go("notes");
+  }
+
+  function newNote(input: NoteInput = { title: "Untitled note", topic: "", bodyHtml: "" }) {
+    openNote(forge.addStudioNote(input).id);
   }
 
   async function refreshWorkspace() {
     const connected = await session.refresh();
     if (!connected) {
-      setToast("Cinder Host is unavailable");
+      setToast("Cinder Host is not reachable");
       return;
     }
+    // A rebuilt Classrooms page starts at the list, not at an item Home opened earlier.
+    setFocus(null);
     setRefreshKey((value) => value + 1);
-    setToast("Student data refreshed");
+    setToast("Up to date");
   }
 
   function openLiveTask() {
-    if (live.session?.current_task?.kind === "instruction") setPage("live");
-    else setPage("classrooms");
-    void live.acknowledgeTask(live.session?.current_task?.kind === "instruction" ? "opened" : "in_progress");
+    const kind = live.session?.current_task?.kind;
+    go(kind === "instruction" || !kind ? "live" : "classrooms");
+    if (kind) void live.acknowledgeTask(kind === "instruction" ? "opened" : "in_progress");
   }
 
   async function clearWorkspace() {
-    // IndexedDB is async and resetWorkspace is not, so the blobs have to go
-    // first — otherwise "Clear everything" leaves every uploaded textbook on
-    // a shared device. Clearing by prefix rather than by the metadata list
-    // also catches orphans: a file whose blob delete failed earlier is no
-    // longer listed in `files`, so a metadata-driven pass would miss it.
-    // `pdf:` is the pre-account-scoping key shape. The background image goes
-    // through the theme provider, which also resets the mode — deleting its
-    // blob directly would leave the appearance pointing at nothing.
+    // IndexedDB is async and resetWorkspace is not, so the blobs go first —
+    // otherwise "Clear" leaves every uploaded textbook on a shared device.
+    // Clearing by prefix also catches orphans whose metadata is already gone;
+    // `pdf:` is the pre-account-scoping key shape.
     try {
       await clearAssets([`account:${session.user.id}:`, "pdf:"]);
       await clearBackgroundImage();
     } catch {
-      setToast("Local files could not be cleared");
+      setToast("Files on this device could not be cleared");
       return;
     }
-    if (forge.resetWorkspace()) setToast("Workspace cleared");
-    else setToast("Workspace could not be completely cleared");
+    setToast(forge.resetWorkspace() ? "Notes and files cleared from this device" : "Some data could not be cleared");
   }
 
   async function addReferenceFile(file: File) {
     const id = crypto.randomUUID();
     await writeAsset(pdfAssetKey(session.user.id, id), file);
     forge.addReferenceFile({ id, name: file.name, size: file.size });
-    setToast("Reference file added");
+    setToast("Added to Library");
   }
 
   function removeReferenceFile(id: string) {
-    // Blob first: a failure here leaves a file you can still see and retry,
-    // rather than an invisible one silently eating disk.
+    // Blob first: a failure leaves a file you can still see and retry.
     void writeAsset(pdfAssetKey(session.user.id, id), null)
       .then(() => forge.removeReferenceFile(id))
       .catch(() => setToast("That file could not be removed"));
   }
 
-  function handleSearch(query: string) {
-    if (!query) {
-      setSearch({ query: "", ids: [] });
-      return;
+  return (
+    <>
+      <AppShell
+        roleLabel="Student"
+        user={session.user}
+        items={navItems}
+        active={page}
+        onNavigate={(next) => {
+          // Choosing Classrooms from inside a classroom goes back to the list.
+          if (next === "classrooms" && page === "classrooms") { setFocus(null); setClassroomsVisit((value) => value + 1); }
+          go(next);
+        }}
+        onLogout={() => void session.switchAccount()}
+        online={session.online}
+        onRefresh={() => void refreshWorkspace()}
+        search={
+          <label className="sidebar-search">
+            <Icon name="search" />
+            <input
+              type="search"
+              aria-label="Search notes and files"
+              placeholder="Search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Escape") setQuery(""); }}
+            />
+          </label>
+        }
+        footer={<SidebarTimer timer={timer} />}
+      >
+        <LiveSessionBar live={live} online={session.online} onOpen={openLiveTask} />
+        {forge.saveError ? <p role="alert" className="notice notice-error app-alert">{forge.saveError}</p> : null}
+        {query.trim() ? (
+          <SearchResults query={query.trim()} data={forge.data} onOpenNote={openNote} onOpenLibrary={() => go("library")} />
+        ) : page === "home" ? (
+          <HomePage
+            api={session.api}
+            scope={scope}
+            online={session.online}
+            refreshKey={refreshKey}
+            notes={forge.data.studioNotes}
+            liveNow={liveNow && !live.joined}
+            liveClassroom={live.session?.classroom_name ?? ""}
+            onJoinLive={() => void live.joinDiscovered().then(() => go("live"))}
+            onOpenAssignment={openAssignment}
+            onOpenQuiz={(delivery) => { setFocus({ classroomId: delivery.classroom_id, deliveryId: delivery.id }); go("classrooms"); }}
+            onOpenNote={openNote}
+            onNewNote={() => newNote()}
+          />
+        ) : page === "classrooms" ? (
+          <StudentClassrooms
+            key={`${refreshKey}-${classroomsVisit}`}
+            accountId={session.user.id}
+            api={session.api}
+            baseUrl={session.baseUrl}
+            token={session.token}
+            online={session.online}
+            notes={forge.data.studioNotes}
+            focus={focus}
+            liveTask={live.session?.current_task ?? null}
+            onLiveTaskState={live.acknowledgeTask}
+            onOpenNote={openNote}
+            onStartNote={(input) => newNote(input)}
+          />
+        ) : page === "live" ? (
+          <StudentLiveClassroom live={live} online={session.online} onOpenTask={openLiveTask} />
+        ) : page === "notes" ? (
+          <NotesPage
+            accountId={session.user.id}
+            data={forge.data}
+            openNoteId={openNoteId}
+            onSelect={setOpenNoteId}
+            onAdd={forge.addStudioNote}
+            onUpdate={forge.updateStudioNote}
+            onRemove={forge.removeStudioNote}
+            onRestore={forge.restoreStudioNote}
+            onOpenAssignment={openAssignment}
+          />
+        ) : page === "library" ? (
+          <LibraryPage accountId={session.user.id} data={forge.data} onAddFile={addReferenceFile} onRemoveFile={removeReferenceFile} />
+        ) : (
+          <SettingsPage
+            name={session.user.display_name}
+            baseUrl={session.baseUrl}
+            onOpenConnection={session.openConnection}
+            onSignOut={() => void session.switchAccount()}
+            onReset={clearWorkspace}
+          />
+        )}
+      </AppShell>
+      {toast ? <div className="toast" role="status">{toast}</div> : null}
+    </>
+  );
+}
+
+function HomePage({ api, scope, online, refreshKey, notes, liveNow, liveClassroom, onJoinLive, onOpenAssignment, onOpenQuiz, onOpenNote, onNewNote }: {
+  api: CinderApi;
+  scope: string;
+  online: boolean;
+  refreshKey: number;
+  notes: StudioNote[];
+  liveNow: boolean;
+  liveClassroom: string;
+  onJoinLive: () => void;
+  onOpenAssignment: (assignmentId: string) => void;
+  onOpenQuiz: (delivery: QuizDelivery) => void;
+  onOpenNote: (id: string) => void;
+  onNewNote: () => void;
+}) {
+  const [work, setWork] = useState<{ assignments: Assignment[]; submissions: Record<string, Submission | null>; quizzes: QuizDelivery[] } | null>(null);
+  const [queued, setQueued] = useState<Set<string>>(new Set());
+  const [unreachable, setUnreachable] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      // Send work handed in offline first, so To do shows what is really still waiting.
+      if (online) await sendQueuedHandIns(api, scope).catch(() => undefined);
+      // The classroom pages keep these cached; reading them first means Home
+      // has something to show when the Host is unreachable.
+      const [cachedAssignments, cachedSubmissions, outbox] = await Promise.all([
+        cacheGet<Assignment[]>(classroomCacheKey(scope, "assignments")),
+        cacheGet<Record<string, Submission | null>>(classroomCacheKey(scope, "submissions")),
+        outboxEntries(),
+      ]);
+      if (cancelled) return;
+      // Hand-ins made offline wait in the outbox until the Host answers.
+      setQueued(new Set(outbox
+        .filter((entry) => entry.kind === "submission" && belongsToClassroomScope(entry.key, scope))
+        .map((entry) => (entry.payload as { assignmentId: string }).assignmentId)));
+      if (cachedAssignments) setWork({ assignments: cachedAssignments, submissions: cachedSubmissions ?? {}, quizzes: [] });
+      setUnreachable(!online && !cachedAssignments);
+      if (!online) return;
+      const [assignments, quizzes] = await Promise.all([api.assignments(), api.quizDeliveries()]);
+      const open = assignments.filter((item) => item.status === "published");
+      const submissions = Object.fromEntries(await Promise.all(open.map(async (item) => [item.id, await api.mySubmission(item.id)] as const)));
+      if (!cancelled) { setWork({ assignments, submissions, quizzes }); setError(""); }
     }
-    const lower = query.toLocaleLowerCase();
-    const documentIds = forge.data.studioNotes
-      .filter((note) => !note.deletedAt && [note.title, note.topic, new DOMParser().parseFromString(note.bodyHtml, "text/html").body.textContent || ""].some((value) => value.toLocaleLowerCase().includes(lower)))
-      .map((note) => `document:${note.id}`);
-    const fileIds = forge.data.files
-      .filter((file) => file.name.toLocaleLowerCase().includes(lower))
-      .map((file) => `file:${file.id}`);
-    setSearch({ query, ids: [...documentIds, ...fileIds] });
-  }
+    load().catch((failure) => { if (!cancelled) setError(failure instanceof Error ? failure.message : "Work could not be loaded."); });
+    return () => { cancelled = true; };
+  }, [api, online, refreshKey, scope]);
+
+  const now = Date.now();
+  const due = (work?.assignments ?? [])
+    .filter((item) => item.status === "published")
+    .filter((item) => { const submission = work?.submissions[item.id]; return !submission || submission.status === "withdrawn"; })
+    .sort((left, right) => (left.due_at ? Date.parse(left.due_at) : Infinity) - (right.due_at ? Date.parse(right.due_at) : Infinity));
+  // Live-class quizzes are reached through the live class and close with it.
+  const quizzes = (work?.quizzes ?? []).filter((delivery) =>
+    delivery.kind === "homework" && delivery.attempt_state !== "submitted" && delivery.attempt_state !== "expired" && !delivery.results_released_at
+    && (!delivery.opens_at || Date.parse(delivery.opens_at) <= now)
+    && (!delivery.due_at || Date.parse(delivery.due_at) > now));
+  const recent = notes.filter((note) => !note.deletedAt).sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt)).slice(0, 5);
 
   return (
-    <div className="forge-frame" data-page={page} data-sidebar-collapsed={sidebarCollapsed}>
-      <aside className="forge-sidebar">
-        <button type="button" className="forge-brand" onClick={() => selectPage("home")}>
-          <BrandMark size={36} />
-          <span className="forge-brand-copy"><strong>Cinder Student</strong></span>
-        </button>
-        <button type="button" className="forge-sidebar-toggle" aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!sidebarCollapsed}
-          onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}>
-          {sidebarCollapsed ? <CaretRight size={16} weight="bold" /> : <CaretLeft size={16} weight="bold" />}
-        </button>
-
-        <nav className="forge-nav" aria-label="Primary navigation">
-          {NAV_ITEMS.map((item) => {
-            const NavIcon = item.icon;
-            const active = page === item.id;
-            return (
-              <button key={item.id} aria-label={item.label} title={item.label} type="button" className={`forge-nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined} onClick={() => selectPage(item.id)}>
-                <NavIcon size={19} weight={active ? "fill" : "regular"} /><span>{item.label}</span>
+    <div className="workspace">
+      <div className="page">
+        <PageHeader title="Home" />
+        {liveNow ? (
+          <div className="live-callout">
+            <Icon name="live" />
+            <span><strong>{liveClassroom} is live</strong><small>Your teacher has started a live class.</small></span>
+            <Button variant="primary" onClick={onJoinLive}>Join</Button>
+          </div>
+        ) : null}
+        <Panel title="To do" className="panel-flush">
+          {error ? <p className="form-error panel-message" role="alert">{error}</p> : null}
+          {!work && !error && unreachable ? (
+            <EmptyState icon="assignments" title="Not connected" description="Your work and quizzes appear here once this computer reaches Cinder Host." />
+          ) : null}
+          {!work && !error && !unreachable ? <p className="loading-line">Loading…</p> : null}
+          {work && !due.length && !quizzes.length ? (
+            <EmptyState icon="check" title="Nothing due" description="Work and quizzes from your classrooms appear here." />
+          ) : null}
+          <div className="list">
+            {quizzes.map((delivery) => (
+              <button key={delivery.id} type="button" className="list-item" onClick={() => onOpenQuiz(delivery)}>
+                <span className="list-icon"><Icon name="check" /></span>
+                <span className="list-copy"><strong>{delivery.title}</strong><span>{delivery.classroom_name} · Quiz{delivery.due_at ? ` · Due ${formatWhen(delivery.due_at)}` : ""}</span></span>
+                {delivery.attempt_id ? <Badge tone="accent">In progress</Badge> : null}
               </button>
-            );
-          })}
-        </nav>
-
-        <div className="forge-sidebar-footer">
-          <TimerControls timer={timer} compact />
-          <button type="button" className={`forge-nav-item${page === "settings" ? " active" : ""}`} aria-label="Settings" title="Settings" onClick={() => selectPage("settings")}>
-            <GearSix size={19} /><span>Settings</span>
-          </button>
-        </div>
-      </aside>
-
-      <section className="forge-workspace">
-        <Topbar profileName={session.user.display_name} online={session.online} onSearch={handleSearch} onSwitchAccount={() => void session.switchAccount()} onOpenConnection={session.openConnection} onRefresh={refreshWorkspace} />
-        <main className="forge-main">
-          <LiveSessionBar live={live} online={session.online} onOpen={openLiveTask} />
-          {forge.saveError && <p role="alert" className="form-error">{forge.saveError}</p>}
-          {page === "home" && (
-            <HomePage
-              data={forge.data}
-              timer={timer}
-              onNavigate={selectPage}
-            />
+            ))}
+            {due.map((assignment) => {
+              const late = assignment.due_at ? Date.parse(assignment.due_at) < now : false;
+              return (
+                <button key={assignment.id} type="button" className="list-item" onClick={() => onOpenAssignment(assignment.id)}>
+                  <span className="list-icon"><Icon name="assignments" /></span>
+                  <span className="list-copy"><strong>{assignment.title}</strong><span>{assignment.classroom_name}{assignment.due_at ? ` · Due ${formatWhen(assignment.due_at)}` : ""}</span></span>
+                  {queued.has(assignment.id) ? <Badge>Waiting to send</Badge> : late ? <Badge tone="warning">Past due date</Badge> : null}
+                </button>
+              );
+            })}
+          </div>
+        </Panel>
+        <Panel title="Recent notes" className="panel-flush" action={<Button size="small" icon="plus" onClick={onNewNote}>New note</Button>}>
+          {recent.length ? (
+            <div className="list">
+              {recent.map((note) => (
+                <button key={note.id} type="button" className="list-item" onClick={() => onOpenNote(note.id)}>
+                  <span className="list-icon"><Icon name="notes" /></span>
+                  <span className="list-copy"><strong>{note.title || "Untitled note"}</strong><span>{note.topic ? `${note.topic} · ` : ""}Edited {formatWhen(note.updatedAt)}</span></span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon="notes" title="No notes yet" description="Notes are saved on this computer." />
           )}
-          {page === "classrooms" && <StudentClassrooms key={refreshKey} accountId={session.user.id} api={session.api} baseUrl={session.baseUrl} token={session.token} online={session.online} notes={forge.data.studioNotes} liveTask={live.session?.current_task ?? null} onLiveTaskState={live.acknowledgeTask} />}
-          {page === "live" && <StudentLiveClassroom live={live} online={session.online} onOpenTask={openLiveTask} />}
-          {page === "library" && <LibraryPage data={forge.data} onAddFile={addReferenceFile} onRemoveFile={removeReferenceFile} />}
-          {page === "studio" && (
-            <StudioPage
-              accountId={session.user.id}
-              data={forge.data}
-              openDocumentId={openDocumentId}
-              saveError={forge.saveError}
-              onAddNote={forge.addStudioNote}
-              onUpdateNote={forge.updateStudioNote}
-              onRestoreNote={forge.restoreStudioNote}
-              onRemoveNote={forge.removeStudioNote}
-            />
-          )}
-          {page === "settings" && <SettingsPage name={session.user.display_name} onReset={clearWorkspace} />}
-        </main>
-      </section>
-
-      {timer.status !== "idle" && <FloatingTimer timer={timer} />}
-      {search && <SearchPanel onOpenDocument={(id) => { setOpenDocumentId(id); selectPage("studio"); }} search={search} data={forge.data} onClose={() => setSearch(null)} onNavigate={selectPage} />}
-      {toast && <div className="forge-toast" role="status">{toast}</div>}
+        </Panel>
+      </div>
     </div>
   );
 }
@@ -239,82 +377,77 @@ function StudentLiveClassroom({ live, online, onOpenTask }: { live: ReturnType<t
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const task = live.session?.current_task;
-  return <div className="forge-page student-live-page">
-    <PageHeader kicker="Teaching now" title="Live Classroom" detail="Join your class and keep the current task in view." />
-    {!live.session || live.resultState === "ended" || live.resultState === "expired" ? <form className="classroom-join" onSubmit={async (event) => { event.preventDefault(); setError(""); try { await live.join(code); setCode(""); } catch (failure) { setError(failure instanceof Error ? failure.message : "Live class could not be joined."); } }}><label htmlFor="live-code">Live class code</label><input id="live-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase().slice(0, 10))} minLength={10} maxLength={10} required placeholder="10-character code" /><button className="forge-button primary" disabled={!online} type="submit">Join live class</button></form> : null}
-    {live.sessions.length > 1 ? <section className="forge-panel live-discovery"><h2>Live now</h2>{live.sessions.map((session) => <button className="classroom-row" type="button" key={session.id} onClick={() => live.selectSession(session.id)}><span><strong>{session.classroom_name}</strong><small>{session.current_task?.title ?? "Waiting for a task"}</small></span><span>{session.id === live.session?.id ? "Selected" : "Open"}</span></button>)}</section> : null}
-    {live.session && !live.joined ? <section className="forge-panel live-discovery"><h2>{live.session.classroom_name} is live</h2><p>Your teacher has started a session. Join without entering the code.</p><button className="forge-button primary" disabled={!online || live.resultState !== "active"} type="button" onClick={() => void live.joinDiscovered()}>Join live class</button></section> : null}
-    {live.session && live.joined ? <section className="forge-panel live-task-card"><span className="forge-kicker">Current task</span><h2>{task?.title ?? "Waiting for a task"}</h2><p>{task?.instructions || "Your teacher has not assigned a task yet."}</p>{task ? <div className="panel-actions"><button className="forge-button primary" disabled={live.resultState !== "active"} type="button" onClick={onOpenTask}>{task.kind === "instruction" ? "View task" : "Open task"}</button>{task.kind === "instruction" && live.session.student_task_state?.state !== "completed" ? <button className="forge-button secondary" disabled={!online || live.resultState !== "active"} type="button" onClick={() => void live.acknowledgeTask("completed")}>Mark complete</button> : null}</div> : null}</section> : null}
-    {error ? <p className="form-error" role="alert">{error}</p> : null}
-  </div>;
-}
-
-function HomePage({ data, timer, onNavigate }: { data: ForgeData; timer: Countdown; onNavigate: (page: Page) => void }) {
-  return <div className="forge-dashboard"><header className="forge-welcome forge-welcome-compact"><span className="forge-kicker">Home</span></header><div className="widget-grid">{ALL_WIDGETS.map(widget => <HomeWidget key={widget} widget={widget} data={data} timer={timer} onNavigate={onNavigate} />)}</div></div>;
-}
-
-function HomeWidget(props: {
-  widget: WidgetId;
-  data: ForgeData;
-  timer: Countdown;
-  onNavigate: (page: Page) => void;
-}) {
-  const { widget, data } = props;
-  if (widget === "timer") {
-    return (
-      <article className="forge-panel widget-timer">
-        <div className="panel-heading"><span className="forge-kicker">Timer</span><Clock size={19} /></div>
-        <TimerControls timer={props.timer} />
-      </article>
-    );
-  }
-
-  if (widget === "library") {
-    const latest = data.files[0];
-    return (
-      <article className="forge-panel widget-library">
-        <div className="panel-heading"><span className="forge-kicker">Library</span><FilePdf size={19} /></div>
-        <strong className="widget-number">{data.files.length}</strong>
-        <p>{latest ? `Latest: ${latest.name}` : "No reference files yet."}</p>
-        <button type="button" className="forge-button text" onClick={() => props.onNavigate("library")}>{latest ? "Open Library" : "Add a textbook"}<ArrowRight size={15} /></button>
-      </article>
-    );
-  }
-
-  if (widget === "studio") {
-    const latest = data.studioNotes.find((note) => !note.deletedAt);
-    return (
-      <article className="forge-panel widget-studio">
-        <div className="panel-heading"><span className="forge-kicker">Notes</span><NotePencil size={19} /></div>
-        <strong className="widget-number">{data.studioNotes.filter((note) => !note.deletedAt).length}</strong>
-        <p>{latest ? `Latest: ${latest.title}` : "No notes yet."}</p>
-        <button type="button" className="forge-button text" onClick={() => props.onNavigate("studio")}>{latest ? "Open Notes" : "Start writing"}<ArrowRight size={15} /></button>
-      </article>
-    );
-  }
-
+  const running = live.session && live.resultState !== "ended" && live.resultState !== "expired";
   return (
-    <article className="forge-panel widget-activity">
-      <div className="panel-heading"><span className="forge-kicker">Recent activity</span><Check size={19} /></div>
-      {data.activity.length ? (
-        <div className="activity-list">
-          {data.activity.slice(0, 4).map((item) => (
-            <div className="activity-row" key={item.id}><span><strong>{item.label}</strong><small>{item.detail}</small></span><time>{relativeTime(item.createdAt)}</time></div>
-          ))}
-        </div>
-      ) : <EmptyMessage title="Nothing recorded yet" detail="Notes and added reference files will appear here." />}
-    </article>
+    <div className="workspace">
+      <div className="page">
+        <PageHeader title="Live class" />
+        {live.sessions.length > 1 ? (
+          <Panel title="Live now" className="panel-flush">
+            <div className="list">
+              {live.sessions.map((session) => (
+                <button className="list-item" type="button" key={session.id} onClick={() => live.selectSession(session.id)}>
+                  <span className="list-copy"><strong>{session.classroom_name}</strong><span>{session.current_task?.title ?? "Waiting for a task"}</span></span>
+                  {session.id === live.session?.id ? <Badge tone="accent">Selected</Badge> : null}
+                </button>
+              ))}
+            </div>
+          </Panel>
+        ) : null}
+        {running && !live.joined ? (
+          <Panel title={`${live.session!.classroom_name} is live`}>
+            <div className="stack-row">
+              <p className="muted">Join to see the task your teacher sets.</p>
+              <Button variant="primary" disabled={!online || live.resultState !== "active"} onClick={() => void live.joinDiscovered()}>Join live class</Button>
+            </div>
+          </Panel>
+        ) : null}
+        {running && live.joined ? (
+          <Panel title={task?.title ?? "Waiting for a task"}>
+            <div className="form-stack">
+              <p>{task?.instructions || "Your teacher has not set a task yet."}</p>
+              {task ? (
+                <div className="panel-actions">
+                  <Button variant="primary" disabled={live.resultState !== "active"} onClick={onOpenTask}>{task.kind === "instruction" ? "View task" : "Open task"}</Button>
+                  {task.kind === "instruction" && live.session!.student_task_state?.state !== "completed" ? (
+                    <Button disabled={!online || live.resultState !== "active"} onClick={() => void live.acknowledgeTask("completed")}>Mark as done</Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </Panel>
+        ) : null}
+        {!running ? (
+          <Panel>
+            <form className="join-row" onSubmit={async (event) => {
+              event.preventDefault();
+              setError("");
+              try { await live.join(code); setCode(""); }
+              catch (failure) { setError(failure instanceof Error ? failure.message : "The live class could not be joined."); }
+            }}>
+              <label className="field">
+                <span>No live class right now. Have a code from your teacher?</span>
+                <input value={code} onChange={(event) => setCode(event.target.value.toUpperCase().slice(0, 10))} minLength={10} maxLength={10} required placeholder="10-character code" />
+              </label>
+              <Button variant="primary" type="submit" disabled={!online}>Join</Button>
+            </form>
+          </Panel>
+        ) : null}
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
+      </div>
+    </div>
   );
 }
 
 const MAX_REFERENCE_BYTES = 75 * 1024 * 1024;
 
 function formatBytes(bytes: number) {
-  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024 * 1024) { const mb = bytes / (1024 * 1024); return `${Number.isInteger(mb) ? mb : mb.toFixed(1)} MB`; }
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-function LibraryPage({ data, onAddFile, onRemoveFile }: {
+function LibraryPage({ accountId, data, onAddFile, onRemoveFile }: {
+  accountId: string;
   data: ForgeData;
   onAddFile: (file: File) => Promise<void>;
   onRemoveFile: (id: string) => void;
@@ -322,6 +455,8 @@ function LibraryPage({ data, onAddFile, onRemoveFile }: {
   const inputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const opened = data.files.find((file) => file.id === openId) ?? null;
 
   async function accept(list: FileList | null) {
     if (!list?.length) return;
@@ -344,67 +479,63 @@ function LibraryPage({ data, onAddFile, onRemoveFile }: {
         await onAddFile(file);
       } catch (error) {
         setMessage(error instanceof DOMException && error.name === "QuotaExceededError"
-          ? "There is not enough space on this device for that file."
+          ? "There is not enough space on this computer for that file."
           : `“${file.name}” could not be saved.`);
       }
     }
     setBusy(false);
   }
 
+  if (opened) {
+    return (
+      <div className="reader-page">
+        <Suspense fallback={<p className="loading-line">Opening…</p>}>
+          <PdfPane key={opened.id} fileId={opened.id} storageKey={pdfAssetKey(accountId, opened.id)} name={opened.name} onClose={() => setOpenId(null)} />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
-    <div className="forge-page">
-      <PageHeader kicker="Your material" title="Library" detail="Reference files kept on this device. Open one beside your notes while you write." />
-      <section className="forge-panel library-drop">
-        <FilePdf size={26} />
-        <div>
-          <strong>Add a textbook or reference PDF</strong>
-          <small>Stored on this device only. Up to {formatBytes(MAX_REFERENCE_BYTES)} per file.</small>
-        </div>
-        <button type="button" className="forge-button primary" disabled={busy} onClick={() => inputRef.current?.click()}>
-          <Plus size={15} />{busy ? "Adding…" : "Choose PDFs"}
-        </button>
-        <input hidden ref={inputRef} type="file" accept="application/pdf,.pdf" multiple
-          onChange={(event) => { void accept(event.target.files); event.target.value = ""; }} />
-      </section>
-      {message && <p className="form-error" role="alert">{message}</p>}
-      <section className="library-files" aria-label="Reference files">
-        {data.files.length ? data.files.map((file) => (
-          <article className="library-file" key={file.id}>
-            <FilePdf size={20} />
-            <div><strong>{file.name}</strong><small>{formatBytes(file.size)} · added {relativeTime(file.addedAt)}</small></div>
-            <button type="button" className="danger-icon" aria-label={`Remove ${file.name}`} onClick={() => onRemoveFile(file.id)}><Trash size={17} /></button>
-          </article>
-        )) : <EmptyMessage title="No reference files yet" detail="Add a PDF and it will be available beside every note you write." />}
-      </section>
+    <div className="workspace">
+      <div className="page">
+        <PageHeader
+          title="Library"
+          description="PDFs kept on this computer, to read on their own or beside a note."
+          action={<Button variant="primary" icon="plus" disabled={busy} onClick={() => inputRef.current?.click()}>{busy ? "Adding…" : "Add PDF"}</Button>}
+        />
+        <input hidden ref={inputRef} type="file" accept="application/pdf,.pdf" multiple onChange={(event) => { void accept(event.target.files); event.target.value = ""; }} />
+        {message ? <p className="form-error" role="alert">{message}</p> : null}
+        <Panel className="panel-flush">
+          {data.files.length ? (
+            <div className="list">
+              {data.files.map((file) => (
+                <div className="list-item" key={file.id}>
+                  <span className="list-icon"><Icon name="pdf" /></span>
+                  <button type="button" className="list-copy list-open" onClick={() => setOpenId(file.id)}>
+                    <strong>{file.name}</strong>
+                    <span>{formatBytes(file.size)} · Added {formatDate(file.addedAt)}</span>
+                  </button>
+                  <button type="button" className="icon-button" aria-label={`Remove ${file.name}`} title="Remove" onClick={() => onRemoveFile(file.id)}><Icon name="trash" /></button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon="library" title="No PDFs yet" description={`Add a textbook or worksheet, up to ${formatBytes(MAX_REFERENCE_BYTES)} each.`} />
+          )}
+        </Panel>
+      </div>
     </div>
   );
 }
 
-function StudioPage({ accountId, data, openDocumentId, saveError, onAddNote, onUpdateNote, onRemoveNote, onRestoreNote }: {
-  accountId: string;
-  data: ForgeData;
-  openDocumentId: string | null;
-  saveError: string;
-  onRestoreNote: (id: string) => void;
-  onAddNote: (input: { title: string; topic: string; bodyHtml: string }) => StudioNote;
-  onUpdateNote: (id: string, input: { title: string; topic: string; bodyHtml: string }) => void;
-  onRemoveNote: (id: string) => void;
-}) {
-  return <div className="forge-page studio-documents">
-    <StudioNotesTab accountId={accountId} openDocumentId={openDocumentId} notes={data.studioNotes} files={data.files} onAdd={onAddNote} onUpdate={onUpdateNote} onRemove={onRemoveNote} onRestore={onRestoreNote} />
-  </div>;
-}
-
-/** One menu instance for the whole gallery, positioned from either a
- *  right-click or the card's ⋮ button — same code path, so keyboard users
- *  get the identical menu and the OS Menu key works for free. */
-function CardMenu({ at, onClose, items }: {
+/** Right-click menu for a note in the list. */
+function NoteMenu({ at, onClose, items }: {
   at: { x: number; y: number };
   onClose: () => void;
   items: Array<{ label: string; danger?: boolean; run: () => void }>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     ref.current?.querySelector<HTMLButtonElement>("button")?.focus();
     const away = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) onClose(); };
@@ -418,206 +549,185 @@ function CardMenu({ at, onClose, items }: {
       window.removeEventListener("scroll", onClose, true);
     };
   }, [onClose]);
-
-  function arrows(event: React.KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    event.preventDefault();
-    const buttons = [...(ref.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
-    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    const next = event.key === "ArrowDown" ? index + 1 : index - 1;
-    buttons[(next + buttons.length) % buttons.length]?.focus();
-  }
-
   return (
-    <div ref={ref} className="card-menu" role="menu" onKeyDown={arrows}
-      style={{ left: Math.max(8, Math.min(at.x, window.innerWidth - 210)), top: Math.max(8, Math.min(at.y, window.innerHeight - 190)) }}>
+    <div ref={ref} className="menu" role="menu" style={{ left: Math.max(8, Math.min(at.x, window.innerWidth - 200)), top: Math.max(8, Math.min(at.y, window.innerHeight - 120)) }}>
       {items.map((item) => (
-        <button type="button" role="menuitem" key={item.label} className={item.danger ? "danger" : ""}
-          onClick={() => { item.run(); onClose(); }}>{item.label}</button>
+        <button type="button" role="menuitem" key={item.label} className={item.danger ? "danger" : ""} onClick={() => { item.run(); onClose(); }}>{item.label}</button>
       ))}
     </div>
   );
 }
 
-function StudioNotesTab({ accountId, openDocumentId, notes, files, onAdd, onUpdate, onRemove, onRestore }: {
+function NotesPage({ accountId, data, openNoteId, onSelect, onAdd, onUpdate, onRemove, onRestore, onOpenAssignment }: {
   accountId: string;
-  notes: StudioNote[];
-  openDocumentId: string | null;
-  files: ReferenceFile[];
-  onRestore: (id: string) => void;
-  onAdd: (input: { title: string; topic: string; bodyHtml: string }) => StudioNote;
+  data: ForgeData;
+  openNoteId: string | null;
+  onSelect: (id: string | null) => void;
+  onAdd: (input: NoteInput) => StudioNote;
   onUpdate: (id: string, input: { title: string; topic: string; bodyHtml: string }) => void;
   onRemove: (id: string) => void;
+  onRestore: (id: string) => void;
+  onOpenAssignment: (assignmentId: string) => void;
 }) {
-  const [selectedId, setSelectedId] = useState<string | null>(openDocumentId);
-  useEffect(() => { if (openDocumentId) setSelectedId(openDocumentId); }, [openDocumentId]);
   const [filter, setFilter] = useState("");
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const renameSettled = useRef(false);
   const [referenceId, setReferenceId] = useState<string | null>(null);
-  const selected = notes.find((note) => note.id === selectedId && !note.deletedAt) ?? null;
-
-  // One pass over the documents rather than a DOMPurify render per card:
-  // a scaled HTML thumbnail re-runs on every keystroke and Quill's mm-based
-  // widths don't shrink meaningfully anyway.
-  // ponytail: text excerpt preview; swap to scaled HTML only if it reads badly.
-  const previews = useMemo(() => {
-    const map = new Map<string, string>();
-    notes.forEach((note) => {
-      // Joined per block, because textContent runs paragraphs together:
-      // "…thylakoid membrane.Calvin cycle…".
-      const body = new DOMParser().parseFromString(note.bodyHtml || "", "text/html").body;
-      const text = [...body.children].map((block) => block.textContent || "").join(" ") || body.textContent || "";
-      map.set(note.id, text.replace(/\s+/g, " ").trim().slice(0, 260));
-    });
-    return map;
-  }, [notes]);
-
-  const live = notes.filter((note) => !note.deletedAt);
+  const notes = data.studioNotes;
+  const live = useMemo(() => notes.filter((note) => !note.deletedAt).sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt)), [notes]);
   const shown = live.filter((note) => `${note.title} ${note.topic}`.toLocaleLowerCase().includes(filter.toLocaleLowerCase()));
   const deleted = notes.filter((note) => note.deletedAt);
+  const selected = live.find((note) => note.id === openNoteId) ?? null;
+  const reference = data.files.find((file) => file.id === referenceId) ?? null;
+  const closeMenu = useCallback(() => setMenu(null), []);
 
-  function createNote() {
-    setSelectedId(onAdd({ title: "Untitled note", topic: "", bodyHtml: "" }).id);
+  function create() {
+    onSelect(onAdd({ title: "Untitled note", topic: "", bodyHtml: "" }).id);
   }
 
-  if (!selected) {
-    return (
-      <>
-        <PageHeader kicker="Your writing space" title="Notes" detail="Write, organise and keep your documents on this device." />
-        <div className="notes-toolbar">
-          <button type="button" className="forge-button primary" onClick={createNote}><Plus size={15} />New note</button>
-          <input className="document-search" aria-label="Search notes" placeholder="Search notes" value={filter} onChange={(event) => setFilter(event.target.value)} />
+  return (
+    <div className="notes-layout" data-reference={reference ? "open" : undefined}>
+      <aside className="notes-list" aria-label="Notes">
+        <div className="notes-list-head">
+          <h1>Notes</h1>
+          <button type="button" className="icon-button" onClick={create} aria-label="New note" title="New note"><Icon name="plus" /></button>
         </div>
-
-        {shown.length ? (
-          <div className="notes-gallery">
-            {shown.map((note) => (
-              <article className="note-card" key={note.id}
-                onContextMenu={(event) => { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY, id: note.id }); }}>
-                <button type="button" className="note-card-open" onClick={() => setSelectedId(note.id)} aria-label={`Open ${note.title || "Untitled note"}`}>
-                  <span className="note-card-preview" aria-hidden="true">{previews.get(note.id) || "Empty note"}</span>
-                </button>
-                <footer>
-                  {renamingId === note.id ? (
-                    <input className="note-card-rename" defaultValue={note.title} aria-label="Rename note"
-                      // The menu unmounts in the same commit that mounts this
-                      // input, and removing the focused menu item sends focus
-                      // to the body. A ref callback re-takes it after that,
-                      // and Enter commits directly rather than through blur,
-                      // which is a no-op on an unfocused input.
-                      ref={(element) => { if (element && document.activeElement !== element) element.focus(); }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          renameSettled.current = true;
-                          onUpdate(note.id, { title: event.currentTarget.value, topic: note.topic, bodyHtml: note.bodyHtml });
-                          setRenamingId(null);
-                        }
-                        if (event.key === "Escape") { renameSettled.current = true; setRenamingId(null); }
-                      }}
-                      onBlur={(event) => {
-                        // Removing a focused input fires focusout, which React
-                        // delivers as onBlur — without this, Escape would
-                        // commit the value it just discarded.
-                        if (renameSettled.current) { renameSettled.current = false; return; }
-                        if (renamingId === note.id) onUpdate(note.id, { title: event.target.value, topic: note.topic, bodyHtml: note.bodyHtml });
-                        setRenamingId(null);
-                      }} />
-                  ) : <strong>{note.title || "Untitled note"}</strong>}
-                  <small>{note.topic ? `${note.topic} · ` : ""}Edited {new Date(note.updatedAt).toLocaleDateString()}</small>
-                  <button type="button" className="note-card-more" aria-label={`Actions for ${note.title || "Untitled note"}`}
-                    onClick={(event) => {
-                      const box = event.currentTarget.getBoundingClientRect();
-                      setMenu({ x: box.left, y: box.bottom + 4, id: note.id });
-                    }}><DotsThreeVertical size={17} weight="bold" /></button>
-                </footer>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <section className="forge-panel studio-notes-blank">
-            <EmptyMessage title={live.length ? "No notes match that search" : "No notes yet"} detail={live.length ? "Try a different word." : "Start one with the New note button above."} />
-          </section>
-        )}
-
-        {deleted.length > 0 && (
-          <details className="document-trash"><summary>Recently deleted ({deleted.length})</summary>
-            {deleted.map((note) => <button className="studio-notes-row" key={note.id} onClick={() => onRestore(note.id)}>Restore {note.title}</button>)}
+        <input type="search" aria-label="Filter notes" placeholder="Filter" value={filter} onChange={(event) => setFilter(event.target.value)} />
+        <div className="notes-list-items">
+          {shown.map((note) => (
+            <button
+              type="button"
+              key={note.id}
+              className={`note-row${note.id === selected?.id ? " is-active" : ""}`}
+              onClick={() => onSelect(note.id)}
+              onContextMenu={(event) => { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY, id: note.id }); }}
+            >
+              <strong>{note.title || "Untitled note"}</strong>
+              <small>{note.topic ? `${note.topic} · ` : ""}{formatDate(note.updatedAt)}</small>
+            </button>
+          ))}
+          {!shown.length ? <p className="notes-list-empty">{live.length ? "No notes match." : "No notes yet."}</p> : null}
+        </div>
+        {deleted.length ? (
+          <details className="notes-trash">
+            <summary>Recently deleted ({deleted.length})</summary>
+            {deleted.map((note) => <button type="button" key={note.id} onClick={() => onRestore(note.id)}>Restore “{note.title}”</button>)}
           </details>
+        ) : null}
+      </aside>
+      <section className="notes-editor">
+        {selected ? (
+          <>
+            <div className="editor-bar">
+              {selected.assignmentId ? (
+                <Button size="small" variant="ghost" icon="assignments" onClick={() => onOpenAssignment(selected.assignmentId!)}>Go to assignment</Button>
+              ) : <span />}
+              <label className="editor-reference">
+                <span>Read beside</span>
+                <select value={referenceId ?? ""} onChange={(event) => setReferenceId(event.target.value || null)} aria-label="PDF to read beside this note">
+                  <option value="">Nothing</option>
+                  {data.files.map((file) => <option key={file.id} value={file.id}>{file.name}</option>)}
+                </select>
+              </label>
+            </div>
+            <Suspense fallback={<p className="loading-line" role="status">Opening the editor…</p>}>
+              <DocumentEditor key={selected.id} accountId={accountId} note={selected} onUpdate={onUpdate} onRemove={() => { onRemove(selected.id); onSelect(null); }} />
+            </Suspense>
+          </>
+        ) : (
+          <EmptyState
+            icon="notes"
+            title={live.length ? "No note open" : "No notes yet"}
+            description={live.length ? "Choose a note from the list." : "Notes are saved on this computer."}
+            action={<Button variant="primary" icon="plus" onClick={create}>New note</Button>}
+          />
         )}
-
-        {menu && (() => {
-          const note = notes.find((item) => item.id === menu.id);
-          if (!note) return null;
-          return <CardMenu at={menu} onClose={() => setMenu(null)} items={[
-            { label: "Open", run: () => setSelectedId(note.id) },
-            { label: "Rename", run: () => setRenamingId(note.id) },
-            { label: "Duplicate", run: () => onAdd({ title: `${note.title} copy`, topic: note.topic, bodyHtml: note.bodyHtml }) },
-            { label: "Delete", danger: true, run: () => onRemove(note.id) },
-          ]} />;
-        })()}
-      </>
-    );
-  }
-
-  return (
-    <section className="studio-notes-layout" data-view={referenceId ? "split" : "editor"}>
-      <div className="editor-column">
-        <div className="editor-bar">
-          <button type="button" className="forge-button secondary" onClick={() => setSelectedId(null)}><ArrowLeft size={15} />All notes</button>
-          <label className="editor-reference">
-            <span>Reference</span>
-            <select value={referenceId ?? ""} onChange={(event) => setReferenceId(event.target.value || null)} aria-label="Reference file">
-              <option value="">None</option>
-              {files.map((file) => <option key={file.id} value={file.id}>{file.name}</option>)}
-            </select>
-          </label>
-        </div>
-        <Suspense fallback={<p className="studio-loading" role="status">Opening the editor…</p>}>
-          <DocumentEditor key={selected.id} accountId={accountId} note={selected} onUpdate={onUpdate} onRemove={() => { onRemove(selected.id); setSelectedId(null); }} />
+      </section>
+      {reference ? (
+        <Suspense fallback={null}>
+          <PdfPane key={reference.id} fileId={reference.id} storageKey={pdfAssetKey(accountId, reference.id)} name={reference.name} onClose={() => setReferenceId(null)} />
         </Suspense>
-      </div>
-      {referenceId && <Suspense fallback={null}><PdfPane key={referenceId} fileId={referenceId} storageKey={pdfAssetKey(accountId, referenceId)} name={files.find((file) => file.id === referenceId)?.name ?? "Reference"} onClose={() => setReferenceId(null)} /></Suspense>}
-    </section>
-  );
-}
-
-
-function SettingsPage({ name, onReset }: { name: string; onReset: () => void }) {
-  const [confirmReset, setConfirmReset] = useState(false);
-  return (
-    <div className="forge-page"><PageHeader kicker="This device" title="Settings" detail="Profile, updates and local data." />
-      <div className="settings-grid"><section className="forge-panel settings-panel"><h2>Profile</h2><label>Name<input value={name} readOnly /></label><p>Your teacher or school administrator manages your name.</p></section>
-      <section className="forge-panel settings-panel"><h2>Appearance</h2><ThemePicker /></section>
-      <AppUpdater appName="Cinder Student" />
-      <section className="forge-panel settings-panel danger-zone"><h2>Local data</h2><p>Clear this account's notes, documents, reference files, background image and widget layout from this device.</p>{confirmReset ? <div className="panel-actions"><button type="button" className="forge-button danger-confirm" onClick={() => { onReset(); setConfirmReset(false); }}>Clear everything</button><button type="button" className="forge-button secondary" onClick={() => setConfirmReset(false)}>Cancel</button></div> : <button type="button" className="forge-button secondary" onClick={() => setConfirmReset(true)}>Clear workspace…</button>}</section></div>
+      ) : null}
+      {menu ? (() => {
+        const note = notes.find((item) => item.id === menu.id);
+        if (!note) return null;
+        return <NoteMenu at={menu} onClose={closeMenu} items={[
+          { label: "Duplicate", run: () => onSelect(onAdd({ title: `${note.title} copy`, topic: note.topic, bodyHtml: note.bodyHtml }).id) },
+          { label: "Delete", danger: true, run: () => { onRemove(note.id); if (note.id === selected?.id) onSelect(null); } },
+        ]} />;
+      })() : null}
     </div>
   );
 }
 
-function SearchPanel({ search, data, onClose, onNavigate, onOpenDocument }: { onOpenDocument: (id: string) => void; search: { query: string; ids: string[] }; data: ForgeData; onClose: () => void; onNavigate: (page: Page) => void }) {
+function SettingsPage({ name, baseUrl, onOpenConnection, onSignOut, onReset }: {
+  name: string;
+  baseUrl: string;
+  onOpenConnection: () => void;
+  onSignOut: () => void;
+  onReset: () => void;
+}) {
+  const [confirmReset, setConfirmReset] = useState(false);
   return (
-    <div className="search-backdrop" onMouseDown={onClose}><aside className="search-panel" role="dialog" aria-modal="true" aria-labelledby="search-title" onMouseDown={(event) => event.stopPropagation()}><header><div><span className="forge-kicker">Search</span><h2 id="search-title">{search.query ? `Results for “${search.query}”` : "Search Matchbox"}</h2></div><button type="button" aria-label="Close search" onClick={onClose}><X size={20} /></button></header>
-      {!search.query ? <EmptyMessage title="Type something to search" detail="Search your notes and reference files stored on this device." /> : search.ids.length ? <div className="search-results">{search.ids.map((entry) => {
-        const [kind, id] = entry.split(":");
-        if (kind === "file") {
-          const file = data.files.find((item) => item.id === id);
-          if (!file) return null;
-          return <button type="button" key={entry} onClick={() => { onNavigate("library"); onClose(); }}><span>Reference file</span><strong>{file.name}</strong><small>Library</small><ArrowRight size={16} /></button>;
-        }
-        const item = data.studioNotes.find((note) => note.id === id && !note.deletedAt);
-        if (!item) return null;
-        return <button type="button" key={entry} onClick={() => { onOpenDocument(id); onClose(); }}><span>Note</span><strong>{item.title}</strong><small>{item.topic || "No topic"}</small><ArrowRight size={16} /></button>;
-      })}</div> : <EmptyMessage title="No matches" detail="Nothing saved in Matchbox matches that search." />}
-    </aside></div>
+    <div className="workspace">
+      <div className="page">
+        <PageHeader title="Settings" />
+        <Panel title="Account" className="panel-flush">
+          <div className="settings-list">
+            <div className="settings-row"><div><strong>{name}</strong><small>Your teacher manages your name.</small></div><Button onClick={onSignOut}>Sign out</Button></div>
+            <div className="settings-row"><div><strong>School connection</strong><small>{hostAddressLabel(baseUrl)}</small></div><Button onClick={onOpenConnection}>Change</Button></div>
+          </div>
+        </Panel>
+        <Panel title="Appearance" className="panel-flush">
+          <div className="settings-list">
+            <div className="settings-row"><div><strong>Theme</strong></div><ThemePicker /></div>
+          </div>
+        </Panel>
+        <AppUpdater appName="Cinder Student" />
+        <Panel title="This computer" className="panel-flush">
+          <div className="settings-list">
+            <div className="settings-row">
+              <div><strong>Clear notes and files</strong><small>Removes this account’s notes and Library PDFs from this computer. Work handed in to teachers is kept on the Host.</small></div>
+              {confirmReset ? (
+                <span className="panel-actions">
+                  <Button onClick={() => setConfirmReset(false)}>Cancel</Button>
+                  <Button variant="danger" onClick={() => { onReset(); setConfirmReset(false); }}>Clear everything</Button>
+                </span>
+              ) : <Button onClick={() => setConfirmReset(true)}>Clear…</Button>}
+            </div>
+          </div>
+        </Panel>
+      </div>
+    </div>
   );
 }
 
-function PageHeader({ kicker, title, detail }: { kicker: string; title: string; detail: string }) {
-  return <header className="page-header"><span className="forge-kicker">{kicker}</span><h1>{title}</h1><p>{detail}</p></header>;
-}
-
-function EmptyMessage({ title, detail }: { title: string; detail: string }) {
-  return <div className="empty-message"><strong>{title}</strong><p>{detail}</p></div>;
+function SearchResults({ query, data, onOpenNote, onOpenLibrary }: { query: string; data: ForgeData; onOpenNote: (id: string) => void; onOpenLibrary: () => void }) {
+  const lower = query.toLocaleLowerCase();
+  const notes = data.studioNotes.filter((note) => !note.deletedAt && [note.title, note.topic, new DOMParser().parseFromString(note.bodyHtml, "text/html").body.textContent || ""].some((value) => value.toLocaleLowerCase().includes(lower)));
+  const files: ReferenceFile[] = data.files.filter((file) => file.name.toLocaleLowerCase().includes(lower));
+  return (
+    <div className="workspace">
+      <div className="page">
+        <PageHeader title={`Results for “${query}”`} description="Searches the notes and PDFs on this computer." />
+        <Panel className="panel-flush">
+          {notes.length || files.length ? (
+            <div className="list">
+              {notes.map((note) => (
+                <button type="button" className="list-item" key={note.id} onClick={() => onOpenNote(note.id)}>
+                  <span className="list-icon"><Icon name="notes" /></span>
+                  <span className="list-copy"><strong>{note.title || "Untitled note"}</strong><span>Note{note.topic ? ` · ${note.topic}` : ""}</span></span>
+                </button>
+              ))}
+              {files.map((file) => (
+                <button type="button" className="list-item" key={file.id} onClick={onOpenLibrary}>
+                  <span className="list-icon"><Icon name="pdf" /></span>
+                  <span className="list-copy"><strong>{file.name}</strong><span>Library</span></span>
+                </button>
+              ))}
+            </div>
+          ) : <EmptyState icon="search" title="No matches" />}
+        </Panel>
+      </div>
+    </div>
+  );
 }

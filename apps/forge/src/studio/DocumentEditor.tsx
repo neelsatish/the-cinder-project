@@ -211,7 +211,7 @@ export function DocumentEditor({ accountId, note, onUpdate, onRemove }: {
       <QuillEditor noteId={note.id} initialHtml={note.bodyHtml} onReady={(q) => { editor.current = q; setWords(q?.getText().trim().split(/\s+/).filter(Boolean).length || 0); }} onChange={(html, text) => { update({ bodyHtml: html }); setWords(text.trim().split(/\s+/).filter(Boolean).length); }} />
       {settings.footer && <div className="document-running-footer">{settings.footer}</div>}
     </div>
-    <footer className="document-status"><span>{words} {words === 1 ? "word" : "words"}</span><span>Private · autosaves on this device</span><span>{busy ? "Working…" : "Spellcheck enabled"}</span></footer>
+    <footer className="document-status"><span>{words} {words === 1 ? "word" : "words"}</span><span>{busy ? "Working…" : "Saved on this computer"}</span></footer>
     <style>{`@media print { @page { size: ${settings.paper} ${settings.landscape ? "landscape" : "portrait"}; margin: ${settings.margin}mm; } }`}</style>
   </section>;
 }

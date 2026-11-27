@@ -9,7 +9,6 @@ import "@fontsource/ubuntu/latin-500.css";
 import "@fontsource/ubuntu/latin-700.css";
 import "@cinder/ui/styles.css";
 import "./forge.css";
-import "./components/student-tools.css";
 import { ThemeProvider } from "@cinder/ui";
 import { ForgeThemeProvider } from "./theme";
 import { App } from "./App";

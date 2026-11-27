@@ -25,6 +25,8 @@ fn main() {
             connection::validate_host_address,
             connection::host_request,
             connection::forget_host_identity,
+            connection::inspect_host_identity,
+            connection::trust_host_identity,
             write_text_export,
             write_binary_export,
             load_secure_session,

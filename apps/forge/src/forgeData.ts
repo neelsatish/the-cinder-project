@@ -32,6 +32,8 @@ export type StudioNote = {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
+  /** Set when the note was started from an assignment, so it can be handed in. */
+  assignmentId?: string;
 };
 
 export type ForgeActivity = {
@@ -227,7 +229,7 @@ export function useForgeData(accountId: string, profileName = "") {
     removeReferenceFile(id: string) {
       setData((current) => ({ ...current, files: current.files.filter((file) => file.id !== id) }));
     },
-    addStudioNote(input: { title: string; topic: string; bodyHtml: string }) {
+    addStudioNote(input: { title: string; topic: string; bodyHtml: string; assignmentId?: string }) {
       const now = new Date().toISOString();
       const note: StudioNote = {
         id: makeId(),
@@ -236,6 +238,7 @@ export function useForgeData(accountId: string, profileName = "") {
         bodyHtml: input.bodyHtml,
         createdAt: now,
         updatedAt: now,
+        ...(input.assignmentId ? { assignmentId: input.assignmentId } : {}),
       };
       setData((current) => ({
         ...current,

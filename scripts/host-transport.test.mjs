@@ -11,6 +11,7 @@ globalThis.__TAURI_INTERNALS__ = {
 const { hostFetch, HostTransportError } = await import(
   "../packages/ui/src/hostTransport.ts"
 );
+const { clearSessionValue } = await import("../packages/ui/src/session.ts");
 
 const HOST = "http://192.168.1.20:7373";
 
@@ -84,7 +85,7 @@ test("binary replies and empty replies come back as real Responses", async () =>
 });
 
 test("named native failures reach the page; others stay connection errors", async () => {
-  for (const code of ["host_identity_changed", "host_outdated"]) {
+  for (const code of ["host_untrusted", "host_identity_changed", "host_outdated"]) {
     handler = async () => {
       throw `${code}: Explained for the person.`;
     };
@@ -105,6 +106,14 @@ test("named native failures reach the page; others stay connection errors", asyn
   );
 });
 
+test("replacing a Host cannot proceed if the saved session cannot be cleared", async () => {
+  handler = async (command) => {
+    assert.equal(command, "clear_secure_session");
+    throw new Error("secure storage unavailable");
+  };
+  await assert.rejects(clearSessionValue(["test-session"], true), /secure storage unavailable/);
+});
+
 test("the page's own timeout wins over a request that never answers", async () => {
   handler = () => new Promise(() => {});
   const controller = new AbortController();
@@ -113,4 +122,31 @@ test("the page's own timeout wins over a request that never answers", async () =
     hostFetch(`${HOST}/api/health`, { signal: controller.signal }, 1_000),
     { name: "AbortError" },
   );
+});
+
+test("an outdated Host is recognised from page and raw native errors", async () => {
+  const { isHostOutdated } = await import("../packages/ui/src/hostTransport.ts");
+  assert.equal(isHostOutdated(new HostTransportError("host_outdated", "Update Host.")), true);
+  assert.equal(isHostOutdated("host_outdated: Update Host."), true);
+  assert.equal(isHostOutdated(new HostTransportError("host_untrusted", "Check the code.")), false);
+  assert.equal(isHostOutdated("offline"), false);
+  assert.equal(isHostOutdated(null), false);
+});
+
+test("the shown Host address matches the HTTPS address the native side uses", async () => {
+  const { hostAddressLabel } = await import("../packages/ui/src/hostTransport.ts");
+  assert.equal(hostAddressLabel(HOST), "https://192.168.1.20:7373");
+  assert.equal(hostAddressLabel("http://[fd00::5]:7373"), "https://[fd00::5]:7373");
+  // An implicit port 80 stays 80, as in cinder_core::host_client::https_url.
+  assert.equal(hostAddressLabel("http://school.local"), "https://school.local:80");
+  assert.equal(hostAddressLabel("https://host.example.org:7373"), "https://host.example.org:7373");
+  assert.equal(hostAddressLabel("not an address"), "not an address");
+  // A plain browser (development only) really does use HTTP.
+  const internals = globalThis.__TAURI_INTERNALS__;
+  delete globalThis.__TAURI_INTERNALS__;
+  try {
+    assert.equal(hostAddressLabel(HOST), HOST);
+  } finally {
+    globalThis.__TAURI_INTERNALS__ = internals;
+  }
 });

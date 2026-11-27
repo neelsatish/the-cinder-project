@@ -1,6 +1,14 @@
 import { useId, type SVGProps } from "react";
 import {
+  ArrowLeft,
   ArrowSquareOut,
+  Books,
+  Broadcast,
+  DotsThreeVertical,
+  FilePdf,
+  Image,
+  LockSimple,
+  UploadSimple,
   ArrowsClockwise,
   CalendarCheck,
   Calendar,
@@ -68,7 +76,15 @@ export type IconName =
   | "sun"
   | "popout"
   | "mic"
-  | "mic-off";
+  | "mic-off"
+  | "back"
+  | "library"
+  | "live"
+  | "pdf"
+  | "image"
+  | "more"
+  | "upload"
+  | "lock";
 
 const components: Record<IconName, PhosphorIcon> = {
   dashboard: SquaresFour,
@@ -103,6 +119,14 @@ const components: Record<IconName, PhosphorIcon> = {
   popout: ArrowSquareOut,
   mic: Microphone,
   "mic-off": MicrophoneSlash,
+  back: ArrowLeft,
+  library: Books,
+  live: Broadcast,
+  pdf: FilePdf,
+  image: Image,
+  more: DotsThreeVertical,
+  upload: UploadSimple,
+  lock: LockSimple,
 };
 
 export function Icon({

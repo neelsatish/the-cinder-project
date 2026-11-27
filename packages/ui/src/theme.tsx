@@ -8,9 +8,8 @@ export type { CinderTheme } from "./themeState";
 
 const THEME_KEY = "cinder.appearance.theme";
 const THEME_COLOURS: Record<CinderTheme, string> = {
-  light: "#F4F6F2",
-  dark: "#0E1210",
-  paper: "#F1EEE7",
+  light: "#FBF9F6",
+  dark: "#1B1714",
 };
 
 function savedTheme() {
