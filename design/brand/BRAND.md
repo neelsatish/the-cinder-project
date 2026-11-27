@@ -352,9 +352,10 @@ is a hand-coded SVG reimplementation of the mark, not a copy of the asset.
 
 It takes a `scheme` prop. The default, `"dark"`, draws the dark scheme on a Ground
 rounded square — effectively the app icon. `"light"` draws the light scheme with no
-plate. As of 0.11.0 every call site uses the default, in both themes: the sidebar of
-the shared `AppShell` at 24 px (the minimum, §5.3) and the sign-in and setup screens
-of Host and Teacher at 40 px (the unreleased legacy `apps/student` also uses it, at
+plate. As of 0.11.0 no call site passes `scheme`, so every one uses the default, in
+both themes: the sidebar of the shared `AppShell` at 24 px (the minimum, §5.3); the
+sign-in, setup, start-up and "update Cinder Host first" screens at 40 px; and the Gradebook's
+loading state at 34 px (the unreleased legacy `apps/student` also uses it, at
 58 px). So the light-scheme mark is available but does not
 appear anywhere in the product yet.
 
@@ -373,7 +374,9 @@ Plain, calm and specific. Say what the software does.
 - Prefer the concrete: "works without internet" over "offline-first"; "the teacher
   computer must be on" over "requires an active host session".
 - State limits plainly and early. The product's credibility comes from the
-  documentation admitting there is no backup yet, not from hiding it.
+  documentation admitting what is missing (today: the live database is not
+  encrypted, and daily backups run only while Cinder Host is open), not from
+  hiding it.
 - British spelling: licence, organisation, synchronisation, colour.
 - Address the teacher directly. Students are described, not addressed — they do not
   read the documentation.

@@ -70,9 +70,11 @@ interface.
 ## Shape, space and motion
 
 - Spacing in 4 px steps (`--space-1` to `--space-10`).
-- Corner radius 6 px for controls, 8 px for panels, 12 px for large cards
+- Corner radius 6 px for controls, 8 px for panels, 12 px for dialogs
   (`--radius-sm`, `--radius-md`, `--radius-lg`).
-- One shadow, `--shadow-pop`, for menus and pop-overs. Panels use borders, not shadows.
+- Panels use borders, not shadows. `--shadow-pop` lifts menus, pop-overs and dialogs.
+  The only other shadows are faint 1 to 4 px ones: the selected option of a segmented
+  control or theme picker, and document and PDF pages on their canvas.
 - Transitions are short (`--fast`, 120 ms). `prefers-reduced-motion` turns them off.
 - Focus: a 2 px outline in `--accent-ink`, 2 px from the element. Never remove it.
 
