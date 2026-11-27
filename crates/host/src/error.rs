@@ -35,6 +35,10 @@ pub enum HostError {
     #[error("the AI service is not configured or reachable")]
     AiUnavailable,
 
+    /// A student has used every question they were given.
+    #[error("You have used all your questions. Ask your teacher for more.")]
+    StudentAiLimit,
+
     #[error(transparent)]
     Database(#[from] rusqlite::Error),
 
@@ -58,6 +62,7 @@ impl HostError {
             HostError::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
             HostError::Conflict => (StatusCode::CONFLICT, "conflict"),
             HostError::AiUnavailable => (StatusCode::SERVICE_UNAVAILABLE, "ai_unavailable"),
+            HostError::StudentAiLimit => (StatusCode::TOO_MANY_REQUESTS, "student_ai_limit"),
             HostError::Database(_) | HostError::Pool(_) | HostError::Other(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal")
             }

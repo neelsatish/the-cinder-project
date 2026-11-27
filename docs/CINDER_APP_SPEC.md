@@ -74,6 +74,6 @@ If a graphical Host launcher is designed later, keep it to one compact utility w
 - Every network action needs clear loading, success, offline and retry states. Preserve entered work after ordinary failures.
 - Confirm destructive actions. Credentials, recovery codes and setup PINs must be visually distinct and easy to copy.
 - Use British spelling, sentence case and calm, literal copy.
-- Do not design AI chat, AI grading, spreadsheet AI, Atlas, a modules hub, games, theme switching, Nightdesk, Ember theme, glass effects or a cloud-only workflow. AI in Teacher exists only inside Papers: it drafts a question paper and its marking scheme, finds official papers and locates figures on a page. It is teacher-only, never reaches a student client, and is never given student work.
+- Do not design AI chat, AI grading, spreadsheet AI, Atlas, a modules hub, games, theme switching, Nightdesk, Ember theme, glass effects or a cloud-only workflow. AI in Teacher exists only inside Papers: it drafts a question paper and its marking scheme, finds official papers and locates figures on a page. In released versions it is teacher-only, never reaches a student client, and is never given student work. The unreleased Anthropic provider adds a Teacher AI page and an optional, Host-controlled student study helper; see `handoff.md` section 4 and `docs/security.md`.
 - Do not invent grade-distribution analytics or question-level correctness analytics; they are not in the current product scope.
 

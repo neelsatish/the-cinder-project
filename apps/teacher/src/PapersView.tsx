@@ -16,6 +16,7 @@ import {
   PageHeader,
   PromptDialog,
   openExternalUrl,
+  type ChatModel,
   type Classroom,
   type PaperCandidate,
   type StudyNode,
@@ -795,7 +796,7 @@ function QuestionPaperStudio({
 }) {
   const [materials, setMaterials] = useState<StudyNode[]>([]);
   // null until known; an older Host without the route is treated as unknown, not off.
-  const [aiStatus, setAiStatus] = useState<{ drafting: boolean; search: boolean } | null>(null);
+  const [aiStatus, setAiStatus] = useState<{ drafting: boolean; search: boolean; sonnet?: boolean } | null>(null);
   useEffect(() => { void api.aiStatus().then(setAiStatus).catch(() => setAiStatus(null)); }, [api]);
   const [selected, setSelected] = useState<string[]>([]);
   const [localFiles, setLocalFiles] = useState<File[]>([]);
@@ -851,6 +852,7 @@ function QuestionPaperStudio({
   );
   const [status, setStatus] = useState(activePaper ? "Saved paper opened." : "");
   const [busy, setBusy] = useState(false);
+  const [aiModel, setAiModel] = useState<ChatModel>("haiku");
   const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [generationStage, setGenerationStage] = useState("");
@@ -1072,6 +1074,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
         [{ role: "user", content: makeGenerationPrompt() }],
         references.context || undefined,
         maxOutputTokens,
+        { model: aiModel },
       );
       if (!result.content.trim()) throw new Error("The AI returned an empty paper.");
       setGenerationStage("Checking questions and marks");
@@ -1084,6 +1087,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           [{ role: "user", content: makeGenerationPrompt(true) }],
           `DRAFT TO REPAIR:\n${result.content}`.slice(0, 19_500),
           repairOutputTokens,
+          { model: aiModel },
         );
         nextPaper = parseGeneratedPaperResponse(repair.content);
       }
@@ -1097,6 +1101,7 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
           ],
           JSON.stringify(nextPaper).slice(0, 19_500),
           repairOutputTokens,
+          { model: aiModel },
         );
         nextPaper = parseGeneratedPaperResponse(repair.content);
       }
@@ -1602,6 +1607,13 @@ ${selected.length + localFiles.length > 1 ? "- Multiple REFERENCE blocks are sup
         >
           {busy ? "Drafting…" : paper.questions.length ? "Draft again with AI" : "Draft with AI"}
         </Button>
+        {aiStatus?.sonnet ? <label className="paper-model">
+          AI model
+          <select value={aiModel} disabled={busy} onChange={(event) => setAiModel(event.target.value as ChatModel)}>
+            <option value="haiku">Haiku (fast, cheap)</option>
+            <option value="sonnet">Sonnet (stronger, about 20× the cost)</option>
+          </select>
+        </label> : null}
         <Button variant="secondary" onClick={() => setWorkspaceSection("editing")}>Write it myself</Button>
         {paperId ? (
           <Button variant="ghost" disabled={busy || deleting} onClick={() => setConfirmingDelete(true)}>

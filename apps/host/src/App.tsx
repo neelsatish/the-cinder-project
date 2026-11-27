@@ -29,7 +29,7 @@ type Person = { id: string; username: string; display_name: string; role: string
 type StoredFile = { node_id: string; display_name: string; original_name: string; mime: string; bytes: number; sha256: string; owner: string | null; classroom: string | null; created_at: string; references: number; trashed_at: string | null; missing: boolean };
 type SetupResult = { recovery_code: string; bootstrap_pin: string | null };
 type AuditEntry = { id: number; action: string; detail: string; target_id: string | null; created_at: string };
-type AiSettings = { base_url?: string; model: string; has_key: boolean; reachable: boolean; has_google_key: boolean; google_model: string };
+type AiSettings = { base_url?: string; model: string; has_key: boolean; reachable: boolean; has_google_key: boolean; google_model: string; provider: "compatible" | "anthropic"; has_anthropic_key: boolean; teacher_sonnet: boolean; students_enabled: boolean };
 type GoogleModel = { id: string; display_name: string; description: string };
 type AiUsage = { requests: number; input_tokens: number; output_tokens: number; lifetime_requests: number; lifetime_input_tokens: number; lifetime_output_tokens: number; monthly_token_limit: number | null };
 /** Secrets shown once (recovery codes, temporary passwords, PINs), always in a dialog of their own. */
@@ -755,6 +755,10 @@ function AiCard({ token }: { token: string }) {
   const [apiKey, setApiKey] = useState("");
   const [googleKey, setGoogleKey] = useState("");
   const [googleModel, setGoogleModel] = useState("");
+  const [provider, setProvider] = useState<AiSettings["provider"]>("compatible");
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [teacherSonnet, setTeacherSonnet] = useState(true);
+  const [studentsEnabled, setStudentsEnabled] = useState(false);
   const [limit, setLimit] = useState("");
   const [models, setModels] = useState<GoogleModel[]>([]);
   const [message, setMessage] = useState("");
@@ -769,6 +773,9 @@ function AiCard({ token }: { token: string }) {
       setBaseUrl(result.base_url ?? "");
       setModel(result.model);
       setGoogleModel(result.google_model);
+      setProvider(result.provider);
+      setTeacherSonnet(result.teacher_sonnet);
+      setStudentsEnabled(result.students_enabled);
     } catch (failure) { setMessage(errorText(failure)); }
   }, [token]);
   useEffect(() => { void load(); }, [load]);
@@ -785,10 +792,15 @@ function AiCard({ token }: { token: string }) {
         google_key: googleKey.trim() ? googleKey.trim() : undefined,
         // Always sent, so an emptied box knowingly returns to the default model.
         google_model: googleModel.trim(),
+        provider,
+        anthropic_key: anthropicKey.trim() ? anthropicKey.trim() : undefined,
+        teacher_sonnet: teacherSonnet,
+        students_enabled: studentsEnabled,
       } });
       setSettings(result);
       setApiKey("");
       setGoogleKey("");
+      setAnthropicKey("");
       setMessage("Saved.");
     } catch (failure) { setMessage(errorText(failure)); }
     finally { setBusy(false); }
@@ -827,20 +839,40 @@ function AiCard({ token }: { token: string }) {
 
   const used = usage ? usage.input_tokens + usage.output_tokens : 0;
   return (
-    <Panel title="AI for the paper creator">
+    <Panel title="AI provider">
       <div className="form-stack">
         <p className="form-hint">
-          Optional. Only teachers use it, in Papers; students never reach it, and teachers never see a key.
-          {settings ? ` ${settings.base_url ? (settings.reachable ? "The text model answered." : "The text model did not answer.") : "No text model is set, so AI cannot draft papers."}${settings.has_google_key ? " A Google key is stored." : " Without a Google key, finding past papers and figures online is off."}` : ""}
+          Optional. Teachers use it in Papers and on the AI page and never see a key. Students reach AI only through the study helper, which stays off until you turn it on.
+          {settings ? ` ${settings.provider === "anthropic" ? (settings.has_anthropic_key ? (settings.reachable ? "Anthropic accepted the key." : "Anthropic did not accept the key, or could not be reached.") : "No Anthropic key is stored, so AI is off.") : settings.base_url ? (settings.reachable ? "The text model answered." : "The text model did not answer.") : "No text model is set, so AI cannot draft papers."}${settings.has_google_key ? " A Google key is stored." : " Without a Google key, finding past papers and figures online is off."}` : ""}
         </p>
-        <div className="form-row">
-          <Field label="Text model address"><input value={baseUrl} placeholder="https://provider.example.com/v1" onChange={(event) => setBaseUrl(event.target.value)} /></Field>
-          <Field label="Text model"><input value={model} placeholder="Model name" onChange={(event) => setModel(event.target.value)} /></Field>
-        </div>
-        <div className="form-row">
-          <Field label={settings?.has_key ? "Replace the API key" : "API key"}><input type="password" value={apiKey} placeholder={settings?.has_key ? "A key is stored" : "Paste the provider key"} onChange={(event) => setApiKey(event.target.value)} autoComplete="off" /></Field>
-          <Field label={settings?.has_google_key ? "Replace the Google key" : "Google key"}><input type="password" value={googleKey} placeholder={settings?.has_google_key ? "A key is stored" : "Paste a Google AI Studio key"} onChange={(event) => setGoogleKey(event.target.value)} autoComplete="off" /></Field>
-        </div>
+        <Field label="Provider">
+          <select value={provider} onChange={(event) => setProvider(event.target.value as AiSettings["provider"])}>
+            <option value="anthropic">Anthropic (Claude): reads photos, Haiku and Sonnet</option>
+            <option value="compatible">Other (OpenAI-format address): text only</option>
+          </select>
+        </Field>
+        {provider === "anthropic" ? (
+          <>
+            <div className="form-row">
+              <Field label={settings?.has_anthropic_key ? "Replace the Anthropic key" : "Anthropic API key"}><input type="password" value={anthropicKey} placeholder={settings?.has_anthropic_key ? "A key is stored" : "Paste a key from console.anthropic.com"} onChange={(event) => setAnthropicKey(event.target.value)} autoComplete="off" /></Field>
+              <Field label={settings?.has_google_key ? "Replace the Google key" : "Google key"}><input type="password" value={googleKey} placeholder={settings?.has_google_key ? "A key is stored" : "Paste a Google AI Studio key"} onChange={(event) => setGoogleKey(event.target.value)} autoComplete="off" /></Field>
+            </div>
+            <label className="check-field"><input type="checkbox" checked={teacherSonnet} onChange={(event) => setTeacherSonnet(event.target.checked)} />Let teachers choose Sonnet (stronger, about 20 times the price of Haiku)</label>
+            <label className="check-field"><input type="checkbox" checked={studentsEnabled} onChange={(event) => setStudentsEnabled(event.target.checked)} />Let students use the study helper (Haiku only; 5 questions each, then a teacher decides)</label>
+            <p className="form-hint">The study helper tells students it is an AI and lets their teachers read every question and answer. Anthropic expects a school that gives students AI to follow child-privacy law and say so publicly. Check the school’s own rules and get parental consent before turning it on.</p>
+          </>
+        ) : (
+          <>
+            <div className="form-row">
+              <Field label="Text model address"><input value={baseUrl} placeholder="https://provider.example.com/v1" onChange={(event) => setBaseUrl(event.target.value)} /></Field>
+              <Field label="Text model"><input value={model} placeholder="Model name" onChange={(event) => setModel(event.target.value)} /></Field>
+            </div>
+            <div className="form-row">
+              <Field label={settings?.has_key ? "Replace the API key" : "API key"}><input type="password" value={apiKey} placeholder={settings?.has_key ? "A key is stored" : "Paste the provider key"} onChange={(event) => setApiKey(event.target.value)} autoComplete="off" /></Field>
+              <Field label={settings?.has_google_key ? "Replace the Google key" : "Google key"}><input type="password" value={googleKey} placeholder={settings?.has_google_key ? "A key is stored" : "Paste a Google AI Studio key"} onChange={(event) => setGoogleKey(event.target.value)} autoComplete="off" /></Field>
+            </div>
+          </>
+        )}
         <Field label="Google model">
           {models.length
             ? <select value={googleModel} onChange={(event) => setGoogleModel(event.target.value)}>{models.map((item) => <option key={item.id} value={item.id}>{item.display_name} ({item.id})</option>)}</select>
