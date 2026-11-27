@@ -55,6 +55,8 @@ function Assistant({ api }: { api: CinderApi }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const photos = useImageAttachments(6);
+  const [status, setStatus] = useState<{ drafting: boolean; sonnet?: boolean } | null>(null);
+  useEffect(() => { void api.aiStatus().then(setStatus).catch(() => setStatus(null)); }, [api]);
 
   async function ask() {
     const text = prompt.trim();
@@ -88,7 +90,10 @@ function Assistant({ api }: { api: CinderApi }) {
   return (
     <Panel title="Ask the AI" eyebrow="Text and photos">
       <div className="ai-form" onPaste={pasteHandler(photos)}>
-        <fieldset className="ai-model-choice">
+        {status?.drafting === false ? (
+          <p className="notice">AI is not set up on Cinder Host. Whoever runs Cinder Host can turn it on in Settings.</p>
+        ) : null}
+        {status?.sonnet ? <fieldset className="ai-model-choice">
           <legend>Model</legend>
           <label>
             <input type="radio" name="ai-model" checked={model === "haiku"} onChange={() => setModel("haiku")} />
@@ -102,7 +107,7 @@ function Assistant({ api }: { api: CinderApi }) {
               <strong>Sonnet</strong>: stronger on hard marking, about 20 times the cost. Teachers only.
             </span>
           </label>
-        </fieldset>
+        </fieldset> : null}
         <div className="ai-presets">
           {PRESETS.map((preset) => (
             <button key={preset.label} type="button" className="ai-button" onClick={() => setPrompt(preset.prompt)}>
