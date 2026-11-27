@@ -10,6 +10,18 @@ Every value here was measured from the asset files in this directory, not copied
 from an earlier document. Where the shipped code disagrees, that is recorded in
 [Known drift](#known-drift) rather than quietly reconciled.
 
+**What is in this folder**
+
+| File | What it is |
+| --- | --- |
+| `BRAND.md` | This document: names, colour, type, the mark, lockups, voice, Cinder Forge's look. |
+| [`app-ui.md`](app-ui.md) | How the Matchbox apps (Host, Teacher, Student) look in 0.11.0: themes, interface tokens, type, layout. |
+| `cinder-*.svg`, `cinder-*.png` | The mark, lockups and app icon. Artwork: never redraw, re-typeset or regenerate. |
+| `cinder-brand-reference.pdf` | The original brand PDF. Superseded by this document. |
+
+Older explorations are history only: [`design/archive/`](../archive/) (prototypes, the
+Paper-theme brief) and the UI direction proposals in [`docs/archive/`](../../docs/archive/).
+
 ---
 
 ## 0. Status — adopted and shipped
@@ -33,14 +45,17 @@ What exists for it today:
   unchanged. All three raster assets above were regenerated from the
   originals to carry it.
 
-Application status as of 12 August 2026:
+Application status (12 August 2026, checked against the code on 27 November 2026):
 
 - `BrandMark` in `packages/ui/src/icons.tsx` reproduces the adopted five-blade
-  geometry and gradients.
-- The Tauri icon sets for both Teacher and Student were regenerated from
+  geometry and gradients, in both schemes.
+- The Tauri icon sets for Teacher and Student were regenerated from
   `cinder-app-icon-ember-reduced.png` for Windows, Linux and portable formats.
+  Cinder Host, added in 0.10.0, uses the same icon files (`apps/host/src-tauri/icons`
+  is byte-identical to Teacher's and Student's).
 - The old PNGs remain as clearly labelled historical references; running apps
-  and newly built installers no longer reference them.
+  and newly built installers no longer reference them. The README now shows the
+  Ember, reduced lockups too.
 
 Sections below describe Ember, reduced as the adopted mark. Where a claim was
 carried forward unchanged from the eleven-blade mark — the palette, the clear-space
@@ -70,33 +85,35 @@ therefore load-bearing and worth stating exactly.
 | --- | --- | --- |
 | **The Cinder Project** | The publishing entity. Copyright holder, `publisher` in both bundles. | Legal notices, copyright lines, package metadata. |
 | **Cinder** | The identity and the product line as a whole. | The wordmark. Conversation. Anywhere the specific product is obvious. |
-| **Cinder Matchbox** | The offline classroom product — the thing that exists today. | Documentation, the pitch, release notes. |
-| **Cinder Teacher** | The teacher installer and its window. | The product itself: window titles, `.deb` metadata, download links. |
-| **Cinder Student** | The student installer and its window. | Same. |
-| **Cinder Host** | The school server installer and its window: accounts, files, backups, updates and AI settings. | Same as Teacher and Student. |
-| **Cinder Forge** / **Forge MAX** | Planned application for individuals. Not released. The `apps/forge` folder is a leftover name: that code ships as **Cinder Student**. | Roadmap only. Do not present as available. |
+| **Cinder Matchbox** | The offline school product: Host, Teacher and Student together. Released (0.11.0 on 27 November 2026). | Documentation, the pitch, the README, GitHub release titles ("Cinder Matchbox 0.11.0"). |
+| **Cinder Host** | The school server installer and its window: accounts, files, backups, updates and AI settings. | The product itself: window titles, `.deb` metadata, download links. |
+| **Cinder Teacher** | The teacher installer and its window. | Same. |
+| **Cinder Student** | The student installer and its window. Its code is in `apps/forge`, a leftover folder name with no link to Cinder Forge. | Same. |
+| **Cinder Forge** | A separate study website for individual secondary-school students. In testing, not released. Its code is kept outside this repository. | Only once it is released. Until then, never present it as available. |
+| **Forge MAX** | Cinder Forge's planned paid plan. Not released. | Same as Cinder Forge. |
 | **Cinder Bonfire** | Planned school platform. Still under discussion. | Roadmap only. |
 
 Rules:
 
 - **Never** "CinderMatchbox", "cinder-matchbox" or "Cinder MatchBox" in prose. The
-  repository is `cinder-classroom` and the Codex thread is "Cinder MatchBox"; both
-  are historical and neither sets the style.
+  old repository name `cinder-classroom` and the Codex thread "Cinder MatchBox" are
+  historical and neither sets the style.
 - The wordmark is **always** set as `CINDER` alone. Product names are never drawn
   into the logo — "Cinder Teacher" is typed in UI text, never lettered.
 - Lowercase `cinder` is correct in identifiers only: `org.cinder.teacher`,
   `@cinder/ui`, the npm workspace name.
+- "Forge" alone, in this repository's code, still means the Student app's folder.
+  In anything a person reads, write **Cinder Student** for the school app and
+  **Cinder Forge** for the website.
 
-### Matchbox is currently invisible
+### Where Matchbox appears
 
-Worth deciding deliberately: **"Matchbox" appears nowhere a user can see it.**
-Window titles, `.deb` metadata and the README download table all say "Cinder
-Teacher" and "Cinder Student". The name lives only in documentation.
-
-That is defensible — two installers with plain names is genuinely clearer at a
-school than a product name a teacher has no reason to learn. But it means Matchbox
-is a codename, not a product name, and the documentation should either stop
-promoting it to the title position or the product should start using it. Pick one.
+Matchbox names the product family, not a window. It is the title of the README and
+of every GitHub release, and it appears in documentation and the pitch. The apps
+themselves keep plain names (Cinder Host, Cinder Teacher, Cinder Student), which is
+clearer at a school than a family name a teacher has no reason to learn. That is the
+current practice; adding "Matchbox" to window titles or installers is the
+maintainer's call, not an agent's.
 
 ---
 
@@ -121,7 +138,7 @@ undocumented until now; these names are proposed here for the first time.
 | Name | Hex | Role |
 | --- | --- | --- |
 | **Char** | `#6E3216` | Outer blades on Ground. Sits between Ash and Ember. |
-| **Warm** | `#DD8B36` | Mid blades on Ground. Already exists in code as `--warm`. |
+| **Warm** | `#DD8B36` | Mid blades on Ground. Mark artwork only: the `--warm` token in `styles.css` is now an alias for the success colour, not this value. |
 | **Spark** | `#D9631F` | Core. Unchanged across both schemes. |
 | **Tallow** | `#F3E3C6` | The wordmark on Ground. **Not Paper** — warmer and more saturated. |
 
@@ -155,22 +172,27 @@ fades into.
 
 ### 3.5 Paper is not the UI background
 
-Three different values are in circulation for what everyone calls "Paper":
+Paper (`#F7F1E7`, the ground of the light lockup asset) is a brand colour. It is
+not an interface colour, and the old Paper theme that used it as the app background
+was retired in 0.11.0.
 
 | Value | Where | Status |
 | --- | --- | --- |
-| `#F7F1E7` | The actual light lockup asset | **Canonical Paper** |
-| `#F9F0E7` | `docs/archive/product-overview.md` | Wrong. Unsourced. Correct it. |
-| `#F5F1EB` | `--background` in `packages/ui/src/styles.css:3` | A UI token, not Paper |
+| `#F7F1E7` | The light lockup asset; `--brand-paper` in `styles.css` | **Canonical Paper** |
+| `#FBF9F6` | `--background` (Light theme) in `packages/ui/src/styles.css` | A UI token, not Paper |
+| `#F9F0E7` | `docs/archive/product-overview.md` | Wrong and unsourced, but that document is archived history |
 
-`--background` is an interface surface and is allowed to differ from Paper — the
-logo is rarely presented directly on the app background, and the UI value was
-tuned against panels and text rather than against the mark. Keep them separate and
-keep them named separately. The one thing to fix is `product-overview.md`, which
-cites a value that exists in no asset and no stylesheet.
+Keep brand and interface values separate and named separately: the logo is rarely
+presented directly on the app background, and the UI values were tuned against
+panels and text rather than against the mark.
 
-(`ui-direction-a.md` proposes a fourth value, `#F7EDE3`, for `--background`. That
-is a UI decision, not a brand one, and this document takes no position on it.)
+### 3.6 Interface colours
+
+The Matchbox apps take their accent from this palette: **Ember** `#B24E17` is the
+primary colour in both Light and Dark, and **Ash** `#2E160A` is the text colour on
+light. Every other interface value (surfaces, borders, states, the Dark theme) is a
+UI token, listed in [`app-ui.md`](app-ui.md) and defined in
+`packages/ui/src/styles.css`. Cinder Forge's palette is described in §11.
 
 ---
 
@@ -188,29 +210,21 @@ down here, treat the wordmark as unreproducible: **never re-typeset it, never se
 existing artwork to fit.** If a new lockup is needed at a size the PNGs cannot
 serve, that is a reason to produce vector sources — see [Known drift](#known-drift).
 
-### 4.2 Interface type
+### 4.2 Interface type (Matchbox apps)
 
 | Role | Family | Notes |
 | --- | --- | --- |
-| UI | `Inter, "Segoe UI", Ubuntu, Cantarell, system-ui, sans-serif` | `styles.css:24` |
-| Document surfaces | `Georgia, serif` | Teacher document view, `teacher.css:313` |
-| Data / monospace | `ui-monospace, SFMono-Regular, Consolas, monospace` | `styles.css:999` |
+| UI | `Ubuntu, "Segoe UI", Cantarell, system-ui, sans-serif` | `--font-sans` in `styles.css`. Ubuntu is bundled. |
+| Document pages | `Arial, Helvetica, sans-serif`, 16 px | `.document-body` in `styles.css`, so documents feel like Word or Google Docs |
+| Data / monospace | `ui-monospace, "Cascadia Mono", Consolas, "Ubuntu Mono", monospace` | `--font-mono` in `styles.css`: join codes, PINs, URLs |
 
-**Inter is specified but never delivered.** There is no `@font-face` rule, no font
-file in the repository, and no font package in any `package.json`. Linux Mint
-Cinnamon does not ship Inter. So on the actual target hardware, every app window
-falls through to **Ubuntu** or **Cantarell** — the brand's stated typeface has
-never once rendered on a machine it was designed for.
+**Ubuntu is the interface typeface, and it is delivered.** Host, Teacher and Student
+each import `@fontsource/ubuntu` (weights 400, 500 and 700, Latin subset only) in
+their `main.tsx`, so the face renders the same on Windows and Linux with no network.
+This settles the old Inter problem: Inter was specified but never shipped, so the
+stylesheet now names the face the apps actually use.
 
-Two honest options, both fine:
-
-1. **Bundle Inter.** One `@fontsource/inter` dependency, self-hosted, no network
-   at runtime. Costs ~100 KB per app and makes the specification true.
-2. **Drop Inter and specify Ubuntu first.** It is on every target machine, it is a
-   good face, and it makes the stylesheet describe reality.
-
-What is not fine is leaving it as-is, where the documented typeface and the shipped
-typeface are different things and nobody notices.
+Cinder Forge uses its own pair, Nunito and DM Sans; see §11.
 
 ---
 
@@ -333,13 +347,17 @@ If either is needed, produce it from the SVG sources rather than by editing a PN
 
 ## 7. The mark in the app
 
-`BrandMark` in [`packages/ui/src/icons.tsx:198`](../../packages/ui/src/icons.tsx)
+`BrandMark` in [`packages/ui/src/icons.tsx`](../../packages/ui/src/icons.tsx)
 is a hand-coded SVG reimplementation of the mark, not a copy of the asset.
 
-It always renders the **dark scheme on a Ground rounded square**, in both themes —
-effectively placing the app icon in the interface rather than the mark. That is a
-legitimate choice and it keeps the nav rail consistent across themes, but it means
-the light-scheme mark never appears anywhere in the product.
+It takes a `scheme` prop. The default, `"dark"`, draws the dark scheme on a Ground
+rounded square — effectively the app icon. `"light"` draws the light scheme with no
+plate. As of 0.11.0 no call site passes `scheme`, so every one uses the default, in
+both themes: the sidebar of the shared `AppShell` at 24 px (the minimum, §5.3); the
+sign-in, setup, start-up and "update Cinder Host first" screens at 40 px; and the Gradebook's
+loading state at 34 px (the unreleased legacy `apps/student` also uses it, at
+58 px). So the light-scheme mark is available but does not
+appear anywhere in the product yet.
 
 The drawn mark and the asset mark remain two independent artefacts that must be
 kept in step by hand. The reduced SVG is authoritative and the component is a
@@ -356,13 +374,19 @@ Plain, calm and specific. Say what the software does.
 - Prefer the concrete: "works without internet" over "offline-first"; "the teacher
   computer must be on" over "requires an active host session".
 - State limits plainly and early. The product's credibility comes from the
-  documentation admitting there is no backup yet, not from hiding it.
+  documentation admitting what is missing (today: the live database is not
+  encrypted, and daily backups run only while Cinder Host is open), not from
+  hiding it.
 - British spelling: licence, organisation, synchronisation, colour.
 - Address the teacher directly. Students are described, not addressed — they do not
   read the documentation.
 
 A short test: if a sentence would sound wrong read aloud to a head teacher in a
 room with no working projector, rewrite it.
+
+**Cinder Forge** speaks to the student directly, because the student is its reader.
+The same rules apply: plain, specific, no fake numbers (user counts, testimonials,
+"grades improved"), no hype. Say "practise" and "revise", not "grind".
 
 ---
 
@@ -398,22 +422,64 @@ source.** That gap is now closed for the new mark: `cinder-mark-ember-reduced-*.
 is the source of truth, and everything raster is generated from it. The old
 eleven-blade PNGs remain only as historical references.
 
+Cinder Forge's artwork (its anvil icon) is not stored in this repository; see §11.
+
+---
+
+## 11. Cinder Forge
+
+Cinder Forge is a separate study website for individual students, in testing and not
+released (§2). Its code, and the source of truth for its look, is kept outside this
+repository, in Forge's own `web/src/styles/tokens.css`. This section is a summary so
+the two products stay recognisably one family; where it and the tokens disagree, the
+tokens describe what ships and this section should be corrected.
+
+**Style: claymorphism.** Soft, raised surfaces made from shadows alone: a light
+highlight on one side, a warm shadow on the other, and two inner shadows. There are no
+hairline borders. Pressed controls sink. Corners are generous (12 to 32 px, and pills
+for buttons and chips). It is deliberately softer and more playful than the Matchbox
+apps, because its reader is a student at home, not a school.
+
+**Colour.** The accents are Cinder's own: **Ember** `#B24E17` and **Spark** `#D9631F`
+on a warm cream ground, with Ash `#2E160A` as the ink. Dark mode lifts the accents so
+they hold their contrast on a dark brown ground (Ember to `#E57B3C`, Spark to
+`#FF9A55`). Subjects get soft tints (sky, mint, leaf, lilac, honey, coral) so a
+student can tell them apart at a glance; those tints are Forge interface colours, not
+brand colours. Flare stays inside the artwork, as in §3.4.
+
+**Type.** **Nunito** for display (headings, counts, marks and prices) and **DM Sans**
+for body text, both bundled with the site through `@fontsource`, never loaded from a
+font CDN.
+
+**Themes and motion.** Light and Dark, following the device setting until the student
+picks one. Motion is gentle and turns off when the device asks for reduced motion.
+
+**The mark.** Forge has its own icon: an original anvil, drawn on the same Ground
+rounded square as the Cinder app icon and in the Cinder mark's colours. It is not the
+Cinder ember mark, and the ember mark must never be reshaped into it. The Forge lockup
+is the anvil with the word "Cinder" as a small company line in DM Sans above "Forge"
+in Nunito. That is ordinary text, not the Cinder wordmark: never use the `CINDER`
+wordmark artwork in a Forge lockup, and never re-letter it to match.
+
 ---
 
 ## Known drift
 
 Everything below is a verified disagreement between this document and the shipped
-repository. None of it is fixed by writing this file.
+repository, as of 27 November 2026. None of it is fixed by writing this file.
 
 | # | Issue | Location |
 | --- | --- | --- |
-| 1 | Paper documented as `#F9F0E7`; the asset is `#F7F1E7`. Value appears in no file. | `docs/archive/product-overview.md` |
-| 4 | Inter is specified as the UI face but is not bundled and is absent from the target OS. | `styles.css:24` |
 | 8 | No vector sources for the eleven-blade asset. Resolved for Ember, reduced by `cinder-mark-ember-reduced-*.svg`; the old mark remains PNG-only. | `design/brand/` |
 | 9 | Trademark reserved in the README with no policy behind it. | `README.md` |
-| 10 | "Matchbox" is used as the product name in documentation but appears nowhere in the product. | Docs vs. app |
+| 11 | The app specification still says "do not design theme switching". 0.11.0 ships a Light/Dark choice in every app's Settings. | `docs/CINDER_APP_SPEC.md` (section on what not to design) |
+
+Resolved on 27 November 2026: #1 (the wrong Paper value now lives only in an archived
+document), #4 (Ubuntu is bundled and named first, §4.2), #10 (Matchbox is the
+product-family name on GitHub, §2), and the README showing the superseded
+eleven-blade lockups.
 
 ---
 
-*Maintained as part of Cinder Matchbox. Last measured against the assets on
-12 August 2026.*
+*Maintained as part of Cinder Matchbox. Assets last measured on 12 August 2026; names,
+type and interface checked against the code on 27 November 2026.*

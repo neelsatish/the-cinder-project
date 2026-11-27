@@ -3,7 +3,9 @@
 Read `handoff.md` first. It is the current handoff: repository and release state,
 product line, open decisions, where code lives. `AGENTS.md` holds the maintainer's
 working preferences. `design/brand/BRAND.md` is the identity authority; the wordmark
-is artwork and must never be re-typeset.
+is artwork and must never be re-typeset. `docs/WHERE-THINGS-GO.md` says where each
+kind of file lives and where new ones go. On the maintainer's computer, `catch-up.md`
+at the project root (ignored by git) has the recent history and the private paths.
 
 Working rules that matter most:
 

@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="design/brand/cinder-logo-primary.png#gh-light-mode-only" width="560" alt="Cinder">
-  <img src="design/brand/cinder-logo-dark.png#gh-dark-mode-only" width="560" alt="Cinder">
+  <img src="design/brand/cinder-logo-primary-ember-reduced.png#gh-light-mode-only" width="560" alt="Cinder">
+  <img src="design/brand/cinder-logo-dark-ember-reduced.png#gh-dark-mode-only" width="560" alt="Cinder">
 </p>
 
 <p align="center">
@@ -78,6 +78,8 @@ valid update signature.
 | [Platform support](docs/platform-support.md) | Shared Windows/Linux architecture, builds and update rules |
 | [Security](docs/security.md) | Implemented protections, residual risks and deployment checklist |
 | [Handoff](handoff.md) | Current product state, open decisions and working rules |
+| [Brand](design/brand/BRAND.md) | Names, colour, type, the mark and voice; [app look](design/brand/app-ui.md) |
+| [Where things go](docs/WHERE-THINGS-GO.md) | Where each kind of file lives, and the rules agents trip on |
 | [Backup and recovery](docs/backup-and-recovery.md) | Backup design; encrypted manual and daily backups and restore are built |
 | [Changelog](CHANGELOG.md) | Bullet-point release notes |
 | [Archive](docs/archive/) | Earlier plans, product overview and handoffs, kept as history |

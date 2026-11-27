@@ -94,7 +94,7 @@ for any public claim. Update this file when you resolve a conflict.
   timed-out quiz attempt as `attempt_state: "expired"`.
 - **Installed-app check, 26 November 2026:** the test builds were installed over
   0.10.7 on this computer after a dated backup of the test school
-  (`Downloads/Cinder-Test-Data-backup-2026-11-26`). Clicked through: Host unlock
+  (`Downloads/Cinder/Cinder-Test-Data-backup-2026-11-26`). Clicked through: Host unlock
   and Server page (the data folder updated cleanly), Teacher and Student saved
   sign-in and fresh sign-in, the https:// address, the update check, Gradebook
   entry (which found R-19), marking, returning and taking back, a 40-minute live
@@ -104,7 +104,7 @@ for any public claim. Update this file when you resolve a conflict.
 - **Test data:** `node scripts/seed-test-data.mjs <empty folder>` fills a new
   Host data folder with a labelled Cinder Test School through the classroom
   API. The test passwords are in the script. The maintainer's earlier app
-  data was moved to `Cinder-archive-2026-11-15/app-data-before-rework` (with a
+  data was moved to `Downloads/Cinder/Cinder-archive-2026-11-15/app-data-before-rework` (with a
   README on restoring it). To keep the browser dev builds off a real Host on
   the same computer, run the standalone `cinder-host` on another port and set
   `VITE_CINDER_DEV_HOST=http://127.0.0.1:<port>` in
@@ -118,7 +118,7 @@ for any public claim. Update this file when you resolve a conflict.
   to `docs/archive/` and `design/archive/` (history only). Stale local leftovers
   (`tmp/`, the graphify cache, old Edge test profiles and dev logs from
   `apps/forge`) were moved out of the repository to `Cinder-archive-2026-11-15`
-  beside it. The dead gradebook AI code was removed in the same pass (see
+  beside it (since 27 November 2026 in `Downloads/Cinder/`). The dead gradebook AI code was removed in the same pass (see
   section 5). The local `master` branch (an August commit whose remote branch
   was gone) was deleted, and `AGENTS.md` was rewritten as plain working rules
   without personal details.
@@ -143,7 +143,8 @@ cargo test --workspace --locked
 | **Cinder Teacher** | Teacher app: Overview, Classrooms (Assignments, Students, Materials, Quizzes, Register, Live class tabs), Gradebook, Papers, Settings. | `apps/teacher` |
 | **Cinder Student** | Student app: Home (work to do), Classrooms (Work, Quizzes, Materials, Marks), Live class, Notes, Library (PDFs), Settings, a study timer in the sidebar. | `apps/forge` (the folder keeps an old name) |
 | Legacy student app | Replaced at 0.9.11 and no longer released. Still in the npm workspace and version-bumped. | `apps/student` |
-| **Cinder Forge**, **Forge MAX**, **Cinder Bonfire** | Roadmap names only. Not released; never present them as available. | — |
+| **Cinder Forge**, **Forge MAX** | A separate study website for individual students, and its planned paid plan. In testing, not released; never present them as available. The code is kept outside this repository: never add it here. | — |
+| **Cinder Bonfire** | Roadmap name only. | — |
 
 Shared code: `packages/ui` (the single design system: tokens and components
 in `styles.css` and `components.tsx`, the pdf.js viewer at `@cinder/ui/pdf`,
@@ -213,8 +214,11 @@ Details: "AI provider terms are unresolved" in `docs/security.md`.
   `test:gradebook-intent` in CI and the build scripts.
 - **Docs that still describe older states**: `docs/archive/` holds the
   pre-Host product overview and plan, the UI direction proposals and the 0.9.0
-  handoff. `docs/CINDER_APP_SPEC.md` and the root `design.md` still contain
-  pre-Host or Paper-only statements. `docs/forge-studio-plan.md`,
+  handoff. `docs/CINDER_APP_SPEC.md` still contains pre-Host statements and
+  forbids theme switching, which 0.11.0 ships (drift #11 in `BRAND.md`). The
+  Paper-only brief that was the root `design.md` is now
+  `design/archive/design-brief-paper-theme.md`; the current app look is
+  `design/brand/app-ui.md`. `docs/forge-studio-plan.md`,
   `docs/forge-english-learning-plan.md` and `docs/matchbox-rgh-week-goal.md`
   are plans and are labelled as such; none of them is shipped behaviour.
 - **Android/tablets** are not supported. Schools have asked.
@@ -240,6 +244,7 @@ Details: "AI provider terms are unresolved" in `docs/security.md`.
 | Release pipeline | `.github/workflows/release-installers.yml`, `.github/workflows/checks.yml` |
 | Security review | `docs/security.md` |
 | Platform, versioning, release checklist | `docs/platform-support.md` |
+| Where each kind of file goes | `docs/WHERE-THINGS-GO.md` |
 
 ## 7. Pitch materials
 
@@ -257,8 +262,10 @@ Details: "AI provider terms are unresolved" in `docs/security.md`.
 
 ## 8. Brand and writing
 
-- Palette, mark and lockups: `design/brand/BRAND.md`. Ember **reduced** mark
-  (five blades and a base dot). Do not recolour, rotate, stretch, glow or shadow it.
+- Names, palette, mark, lockups, type and voice: `design/brand/BRAND.md`. Ember
+  **reduced** mark (five blades and a base dot). Do not recolour, rotate, stretch,
+  glow or shadow it. How the Matchbox apps look (Light and Dark, tokens, layout):
+  `design/brand/app-ui.md`. Every brand document lives in `design/brand/`.
 - Voice: plain, calm, specific. No "revolutionary", "seamless", "empowering" or
   unsupported superlatives. Admit limits early and describe what the software
   actually does.

@@ -2,7 +2,8 @@
 
 These are the maintainer's standing preferences for anyone, person or agent,
 working on Cinder. `handoff.md` holds the current product and release state;
-`design/brand/BRAND.md` is the identity authority.
+`design/brand/BRAND.md` is the identity authority; `docs/WHERE-THINGS-GO.md`
+says where each kind of file lives and where new ones go.
 
 ## How to work
 
