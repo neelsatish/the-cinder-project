@@ -150,13 +150,30 @@ layout only),
 
 ## 4. AI, and what is unresolved about it
 
-- AI is optional and teacher-only. The only AI feature is the **paper creator**
-  in Teacher → Papers: it drafts question papers and marking schemes, searches
-  for official past papers and finds figures on their pages.
-- Keys and models are set only in **Host → Settings → AI for the paper
-  creator**. The classroom API has no route that reads or changes AI settings;
-  the teacher-only `GET /api/ai/status` reports only whether drafting and
-  search are set up. Teacher and Student never see a key.
+- AI is optional. In the released 0.10.7 it is teacher-only and the only AI
+  feature is the **paper creator** in Teacher → Papers: it drafts question papers
+  and marking schemes, searches for official past papers and finds figures on
+  their pages.
+- **Unreleased, on branch `claude/ai-helper` (built 19 November 2026, moved onto
+  the rework 27 November):** Host can
+  use **Anthropic** as the AI provider (native Messages API in
+  `crates/ai/src/anthropic.rs`; Haiku 5.5 default, Sonnet 5.5 for teachers only
+  and switchable off in Host). Teacher has an **AI** page (photos by file, paste
+  or live camera; Haiku/Sonnet choice; presets for handwriting, LaTeX, checking
+  working and TikZ diagrams) and a Haiku/Sonnet choice in Papers. Students get an
+  optional **Study helper** (Host setting, off by default): 5 questions each, then
+  a teacher allows 5 more or declines; every question is logged for teachers
+  (`crates/host/src/routes/student_ai.rs`, migration `0015_student_ai`). **Nothing
+  has run against Anthropic's live API** (no key was available); the request shape
+  is tested only against a local stand-in server. Camera capture is untested on
+  Linux Mint (WebKitGTK may not allow it; the app falls back to file and paste).
+  This reverses "students never reach AI": read "Anthropic and children" in
+  `docs/security.md` before turning the helper on with pupils. Version is still
+  0.10.7 on purpose.
+- Keys and models are set only in **Host → Settings → AI provider**. The
+  classroom API has no route that reads or changes AI settings; the
+  teacher-only `GET /api/ai/status` reports only whether drafting and search are
+  set up. Teacher and Student never see a key.
 - Paper writing uses an OpenAI-compatible text model. Paper search and figure
   capture use a Google key; the Google model is picked from the list the key
   can reach.

@@ -13,6 +13,7 @@ import {
   outboxEntries,
   PageHeader,
   Panel,
+  StudentAiHelper,
   ThemePicker,
   type Assignment,
   type CinderApi,
@@ -36,7 +37,7 @@ import "./studio/documents.css";
 const DocumentEditor = lazy(() => import("./studio/DocumentEditor").then((module) => ({ default: module.DocumentEditor })));
 const PdfPane = lazy(() => import("./studio/PdfPane").then((module) => ({ default: module.PdfPane })));
 
-type Page = "home" | "classrooms" | "live" | "notes" | "library" | "settings";
+type Page = "home" | "classrooms" | "live" | "notes" | "library" | "helper" | "settings";
 type NoteInput = { title: string; topic: string; bodyHtml: string; assignmentId?: string };
 
 function pdfAssetKey(accountId: string, fileId: string) {
@@ -57,9 +58,22 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
   const [toast, setToast] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [classroomsVisit, setClassroomsVisit] = useState(0);
+  const [helperOn, setHelperOn] = useState(false);
   const timer = useCountdown(session.user.id);
   const live = useStudentLiveSession({ api: session.api, baseUrl: session.baseUrl, accountId: session.user.id, online: session.online });
   const liveNow = Boolean(live.session && live.remainingSeconds > 0 && live.resultState === "active");
+
+  // The study helper is off until the school turns it on, and an older Host
+  // does not have it at all; either way the nav item stays hidden.
+  useEffect(() => {
+    let current = true;
+    session.api.studentAiStatus().then(
+      (status) => { if (current) setHelperOn(status.enabled); },
+      () => { if (current) setHelperOn(false); },
+    );
+    return () => { current = false; };
+  }, [session.api, session.online, refreshKey]);
+  useEffect(() => { if (!helperOn && page === "helper") setPage("home"); }, [helperOn, page]);
 
   useEffect(() => {
     if (!toast) return;
@@ -89,6 +103,8 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
     { id: "live", label: "Live class", icon: "live", badge: liveNow && !live.joined ? 1 : undefined },
     { id: "notes", label: "Notes", icon: "notes" },
     { id: "library", label: "Library", icon: "library" },
+    // Shown only once the school has switched the study helper on in Cinder Host.
+    ...(helperOn ? [{ id: "helper", label: "Study helper", icon: "assistant" } as NavigationItem<Page>] : []),
     { id: "settings", label: "Settings", icon: "settings" },
   ];
 
@@ -239,6 +255,8 @@ function MatchboxWorkspace({ session }: { session: MatchboxSession }) {
           />
         ) : page === "library" ? (
           <LibraryPage accountId={session.user.id} data={forge.data} onAddFile={addReferenceFile} onRemoveFile={removeReferenceFile} />
+        ) : page === "helper" && helperOn ? (
+          <StudentAiHelper api={session.api} />
         ) : (
           <SettingsPage
             name={session.user.display_name}

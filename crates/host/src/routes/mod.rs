@@ -11,4 +11,5 @@ pub mod live_sessions;
 pub mod notes;
 pub mod papers;
 pub mod quizzes;
+pub mod student_ai;
 pub mod tree;

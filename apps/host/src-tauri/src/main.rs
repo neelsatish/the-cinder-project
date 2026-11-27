@@ -1855,13 +1855,20 @@ async fn save_ai_settings(
         let secret = ai_secret(&config)?;
         let conn = database(&config)?;
         let describe = format!(
-            "AI provider updated: model {}, Google model {}",
+            "AI provider updated: provider {}, model {}, Google model {}, Sonnet for teachers {},              study helper for students {}",
+            match settings.provider {
+                Some(cinder_core::AiProvider::Anthropic) => "Anthropic",
+                Some(cinder_core::AiProvider::Compatible) => "OpenAI-compatible",
+                None => "unchanged",
+            },
             if settings.model.trim().is_empty() {
                 "unset"
             } else {
                 settings.model.trim()
             },
             settings.google_model.as_deref().unwrap_or("unset"),
+            settings.teacher_sonnet.map_or("unchanged", |on| if on { "on" } else { "off" }),
+            settings.students_enabled.map_or("unchanged", |on| if on { "on" } else { "off" }),
         );
         cinder_host::routes::ai::store_ai(&conn, &secret, settings).map_err(|e| e.to_string())?;
         // The audit line records that keys changed, never their values.

@@ -23,10 +23,12 @@ import {
   type Classroom,
   type DashboardStats,
   type NavigationItem,
+  type StudentAiRequest,
   type User,
   type HostIdentity,
   hostAddressLabel,
 } from "@cinder/ui";
+import { AiView } from "./AiView";
 import { GradebookView } from "./GradebookView";
 import { PapersView } from "./PapersView";
 import { isTauri } from "./teacherFiles";
@@ -44,7 +46,7 @@ import {
 } from "./teacherSession";
 
 
-type TeacherTab = "dashboard" | "classrooms" | "gradebook" | "papers" | "settings";
+type TeacherTab = "dashboard" | "classrooms" | "gradebook" | "papers" | "ai" | "settings";
 type TeacherConfig = { host_url: string | null; device_label: string | null };
 
 const SESSION_KEY = "cinder.teacher.session";
@@ -59,6 +61,7 @@ const navigation: NavigationItem<TeacherTab>[] = [
   { id: "classrooms", label: "Classrooms", icon: "classrooms" },
   { id: "gradebook", label: "Gradebook", icon: "spreadsheet" },
   { id: "papers", label: "Papers", icon: "document" },
+  { id: "ai", label: "AI", icon: "assistant" },
   { id: "settings", label: "Settings", icon: "settings" },
 ];
 
@@ -383,6 +386,26 @@ export function App() {
     if (online) setHostOutdated(false);
   }, [online]);
 
+  // Students who have used their study-helper questions wait for a teacher.
+  const [aiRequests, setAiRequests] = useState<StudentAiRequest[]>([]);
+  const loadAiRequests = useCallback(async () => {
+    try {
+      setAiRequests(await api.studentAiRequests());
+    } catch {
+      // An older Host has no study helper, and offline there is nothing to ask.
+    }
+  }, [api]);
+  useEffect(() => {
+    if (!user) {
+      setAiRequests([]);
+      return;
+    }
+    if (!online) return;
+    void loadAiRequests();
+    const timer = window.setInterval(() => void loadAiRequests(), 30_000);
+    return () => window.clearInterval(timer);
+  }, [user, online, loadAiRequests]);
+
   const login = async (username: string, password: string) => {
     const generation = resetWorkspace();
     const result = await api.login(
@@ -556,7 +579,9 @@ export function App() {
   const items = navigation.map((item) =>
     item.id === "classrooms" && stats.ungraded_submissions
       ? { ...item, badge: stats.ungraded_submissions }
-      : item,
+      : item.id === "ai" && aiRequests.length
+        ? { ...item, badge: aiRequests.length }
+        : item,
   );
   const navigate = (next: TeacherTab) => {
     setTab(next);
@@ -603,6 +628,9 @@ export function App() {
         />
       ) : null}
       {tab === "papers" ? <PapersView api={api} classrooms={classrooms} /> : null}
+      {tab === "ai" ? (
+        <AiView api={api} requests={aiRequests} onRequestsChanged={() => void loadAiRequests()} />
+      ) : null}
       {tab === "settings" ? (
         <SettingsView
           api={api}

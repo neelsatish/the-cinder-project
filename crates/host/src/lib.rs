@@ -116,6 +116,7 @@ pub fn router(state: AppState) -> Router {
         .merge(routes::files::router())
         .merge(routes::live_sessions::router())
         .merge(routes::ai::router())
+        .merge(routes::student_ai::router())
         // Uploads are capped in the handler, but the body limit has to be raised
         // here too or axum rejects a large scan before the handler ever runs.
         .layer(axum::extract::DefaultBodyLimit::max(

@@ -75,13 +75,33 @@ access or physical access to an unlocked computer.
   classroom data.
 - AI is configured only in Cinder Host. Teacher and Student apps have no key or
   provider field, the classroom API has no route that reads or changes AI
-  settings, and keys are never sent to any client. The one AI route besides
-  chat, the teacher-only `GET /api/ai/status`, returns two booleans (drafting
-  and search set up or not) and nothing else.
-- The only AI feature is the teacher-only paper creator (0.10.2). It sends the
-  teacher's own instructions, text taken from source papers the teacher chose,
-  a paper-search description and, for figure capture, images of source pages.
-  It does not send student names, submissions or grades.
+  settings, and keys are never sent to any client. The teacher-only
+  `GET /api/ai/status` returns two booleans (drafting and search set up or not)
+  and nothing else.
+- Until the Anthropic provider (unreleased), the only AI feature was the
+  teacher-only paper creator (0.10.2). It sends the teacher's own instructions,
+  text taken from source papers the teacher chose, a paper-search description
+  and, for figure capture, images of source pages. It does not send student
+  names, submissions or grades.
+- **Anthropic provider (unreleased).** Host can use Anthropic's native API
+  (Haiku 5.5 for everyone, Sonnet 5.5 only when a teacher asks and Host allows
+  it). Teachers can attach photos (pasted, chosen or taken with the camera); the
+  Host checks their number, size and file type before sending. Whatever a
+  teacher photographs is sent to Anthropic, so the Teacher AI page warns against
+  photos that show a student's name.
+- **Student study helper (unreleased, off until Host turns it on).** This is the
+  one route a student can use to reach an AI, and it reverses the earlier
+  "students never reach AI" rule. Students ask one stateless question at a time
+  (no client-supplied history), always to Haiku with thinking off and a
+  child-safety system prompt, with at most two photos. Each student gets 5
+  questions in total; the next question is refused, and the student asks a
+  teacher of one of their classrooms, who can allow 5 more or decline. The
+  allowance is taken inside one database transaction before the model is
+  called, and handed back if the provider fails. Every question and answer is
+  kept and readable by the teachers of that student's classrooms. The student
+  screen says it is an AI. No student name is sent to the provider, but a
+  student can type one in a question or show one in a photo. Tests cover the
+  limit, approvals and who may decide.
 - Past papers are downloaded only over HTTPS from an allowlist of examination
   board sites. Every redirect is re-checked against the same allowlist and may
   not drop to plain HTTP, and addresses on the school network are refused.
@@ -179,10 +199,10 @@ terms (checked 18 September 2026, last modified 28 April 2026) say the API may
 not be used "as part of a website, application, or other service … that is
 directed towards or is likely to be accessed by individuals under the age of 18".
 
-Cinder keeps AI teacher-only: students' apps cannot reach any AI route, and the
-key lives only on Host. Whether that is enough is a legal question the terms do
-not answer for a product that schools also give to students. Until Google or a
-lawyer confirms it in writing:
+Cinder keeps the Google features teacher-only, and the key lives only on Host.
+Whether that is enough is a legal question the terms do not answer for a product
+that schools also give to students. The unreleased Anthropic study helper does
+not use the Google key at all. Until Google or a lawyer confirms it in writing:
 
 - do not advertise the paper creator to schools or in the pitch as a feature;
 - a school that wants it should use its own key and its own judgement;
@@ -193,6 +213,31 @@ Google's Search Suggestions to the person who asked. Paper search does not show
 them yet. Fix that, or stop using grounding, before relying on paper search.
 The OpenAI-compatible text model used to write papers is a separate provider
 with its own terms, which the school should check for the provider it picks.
+
+### Anthropic and children (unresolved before the study helper is switched on)
+
+Checked 19 November 2026 from Anthropic's pages, not legal advice:
+
+- Anthropic's consumer apps are for people 18 and over. Its API may sit behind a
+  product used by minors if the operator follows the *Guidelines for
+  Organizations Serving Minors*: disclose that users are talking to an AI,
+  follow child-safety and privacy law (such as COPPA) and **say so publicly**,
+  and use safeguards such as age checks, content filtering, monitoring and a
+  child-safety system prompt. Anthropic audits compliance and can suspend an
+  account.
+- Cinder does the in-product parts: the AI notice, the child-safety prompt,
+  accounts created by the school, and teacher-readable logs. It does **not**
+  filter content beyond the prompt, and it does **not** publish a compliance
+  statement. The school or the Cinder Project must publish one before the
+  helper is used with pupils.
+- India's DPDP rules treat anyone under 18 as a child and require verifiable
+  parental consent to process their data, with an exemption for educational
+  institutions that is limited to educational purposes and safety. Get advice on
+  whether that covers a third-party AI provider before switching the helper on.
+- Anthropic says it does not retain Haiku 5.5 or Sonnet 5.5 prompts and
+  outputs by default and does not train on them without permission (checked on
+  its API data-retention page). Only the Fable and Mythos models require
+  30-day retention.
 
 ## Deployment checklist
 

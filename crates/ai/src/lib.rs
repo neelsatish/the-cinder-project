@@ -11,6 +11,7 @@ use anyhow::{bail, Context, Result};
 use cinder_core::GeneratedCard;
 use serde::Deserialize;
 
+pub mod anthropic;
 pub mod google;
 pub mod grammar;
 

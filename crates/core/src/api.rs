@@ -218,6 +218,39 @@ pub const MAX_UPLOAD_BYTES: usize = 32 * 1024 * 1024;
 
 // ---------------------------------------------------------------- ai
 
+/// Which kind of provider answers chat requests.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum AiProvider {
+    /// Any OpenAI-format endpoint: a hosted provider or a local llama.cpp.
+    #[default]
+    Compatible,
+    /// Anthropic's own API. The only provider that reads photos.
+    Anthropic,
+}
+
+/// Which Claude model a teacher asks for. Students never choose: the Host
+/// answers them with Haiku and the student route has no model field.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum ChatModel {
+    #[default]
+    Haiku,
+    Sonnet,
+}
+
+/// A photo sent with a question: a camera frame, a pasted screenshot or a file.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct ChatImage {
+    /// `image/jpeg`, `image/png`, `image/gif` or `image/webp`.
+    pub media_type: String,
+    /// Standard base64 without a `data:` prefix.
+    pub data: String,
+}
+
 /// AI configuration as the client is allowed to see it — note there is no key
 /// here. The key is written once and never read back out of the host.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
@@ -237,9 +270,15 @@ pub struct AiSettings {
     /// and hand-drawn crops.
     pub has_google_key: bool,
     pub google_model: String,
+    pub provider: AiProvider,
+    pub has_anthropic_key: bool,
+    /// Whether teachers may choose Sonnet, which costs about twenty times Haiku.
+    pub teacher_sonnet: bool,
+    /// Whether students may ask the study helper (Anthropic only).
+    pub students_enabled: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct SaveAiSettings {
     #[ts(optional)]
@@ -253,6 +292,20 @@ pub struct SaveAiSettings {
     pub google_key: Option<String>,
     #[ts(optional)]
     pub google_model: Option<String>,
+    /// Absent leaves each of the settings below as it was.
+    #[serde(default)]
+    #[ts(optional)]
+    pub provider: Option<AiProvider>,
+    /// Same rule as `api_key`, for the Anthropic key.
+    #[serde(default)]
+    #[ts(optional)]
+    pub anthropic_key: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub teacher_sonnet: Option<bool>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub students_enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -283,12 +336,88 @@ pub struct ChatRequest {
     #[serde(default)]
     #[ts(optional)]
     pub max_output_tokens: Option<u32>,
+    /// Anthropic only. Absent means Haiku. Sonnet is for teachers, and the Host
+    /// can switch it off for the school.
+    #[serde(default)]
+    #[ts(optional)]
+    pub model: Option<ChatModel>,
+    /// Photos for the last message. Anthropic only.
+    #[serde(default)]
+    pub images: Vec<ChatImage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct ChatResponse {
     pub content: String,
+}
+
+// ---------------------------------------------------------- student AI
+
+/// Questions every student gets before a teacher is asked, and the number each
+/// approval adds.
+pub const STUDENT_AI_QUESTIONS_PER_GRANT: u32 = 5;
+/// Photos allowed with one student question.
+pub const STUDENT_AI_MAX_IMAGES: usize = 2;
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StudentAiStatus {
+    /// False until the school turns the study helper on.
+    pub enabled: bool,
+    pub used: u32,
+    pub limit: u32,
+    pub remaining: u32,
+    /// A request for more questions is waiting for a teacher.
+    pub request_pending: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StudentAskRequest {
+    pub question: String,
+    #[serde(default)]
+    pub images: Vec<ChatImage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StudentAskResponse {
+    pub answer: String,
+    pub remaining: u32,
+}
+
+/// One asked question, as a teacher reviews it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StudentAiQuestion {
+    #[ts(type = "string")]
+    pub id: Uuid,
+    pub student_name: String,
+    pub question: String,
+    #[ts(optional)]
+    pub answer: Option<String>,
+    pub had_image: bool,
+    pub created_at: String,
+}
+
+/// A student who has used every question and is waiting for a teacher.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct StudentAiRequest {
+    #[ts(type = "string")]
+    pub id: Uuid,
+    pub student_name: String,
+    pub used: u32,
+    pub created_at: String,
+    /// The student's latest questions, so the teacher decides knowing what was asked.
+    pub recent: Vec<StudentAiQuestion>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct DecideStudentAiRequest {
+    pub approve: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

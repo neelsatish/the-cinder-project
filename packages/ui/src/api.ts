@@ -2,7 +2,9 @@ import type {
   Assignment,
   AttendanceDay,
   AttendanceStatus,
+  ChatImage,
   ChatMessage,
+  ChatModel,
   Card,
   Classroom,
   ClassroomRoster,
@@ -32,6 +34,10 @@ import type {
   QuizStatistics,
   Role,
   SaveQuestionPaperInput,
+  StudentAiQuestion,
+  StudentAiRequest,
+  StudentAiStatus,
+  StudentAskResponse,
   StudyNode,
   Submission,
   SubmissionComment,
@@ -794,10 +800,16 @@ export class CinderApi {
 
   /** Whether AI drafting and paper search are set up on Host. Older Hosts answer 404. */
   aiStatus() {
-    return this.request<{ drafting: boolean; search: boolean }>("/api/ai/status", {}, 4_000);
+    return this.request<{ drafting: boolean; search: boolean; sonnet?: boolean }>("/api/ai/status", {}, 4_000);
   }
 
-  chat(messages: ChatMessage[], context?: string, maxOutputTokens?: number) {
+  /** `options.model` and `options.images` need the school's AI provider to be Anthropic. */
+  chat(
+    messages: ChatMessage[],
+    context?: string,
+    maxOutputTokens?: number,
+    options: { model?: ChatModel; images?: ChatImage[] } = {},
+  ) {
     return this.request<{ content: string }>(
       "/api/ai/chat",
       {
@@ -806,10 +818,46 @@ export class CinderApi {
           messages,
           context,
           max_output_tokens: maxOutputTokens,
+          model: options.model,
+          images: options.images ?? [],
         }),
       },
       190_000,
     );
+  }
+
+  /** A 404 here means the Host is older than the study helper. */
+  studentAiStatus() {
+    return this.request<StudentAiStatus>("/api/ai/student/status", {}, 6_000);
+  }
+
+  studentAiAsk(question: string, images: ChatImage[] = []) {
+    return this.request<StudentAskResponse>(
+      "/api/ai/student/ask",
+      { method: "POST", body: JSON.stringify({ question, images }) },
+      120_000,
+    );
+  }
+
+  studentAiRequestMore() {
+    return this.request<StudentAiStatus>("/api/ai/student/request-more", {
+      method: "POST",
+    });
+  }
+
+  studentAiRequests() {
+    return this.request<StudentAiRequest[]>("/api/ai/student/requests", {}, 6_000);
+  }
+
+  decideStudentAiRequest(id: string, approve: boolean) {
+    return this.request<{ ok: true }>(`/api/ai/student/requests/${id}`, {
+      method: "POST",
+      body: JSON.stringify({ approve }),
+    });
+  }
+
+  studentAiQuestions() {
+    return this.request<StudentAiQuestion[]>("/api/ai/student/questions");
   }
 
   cards(deckId: string) {

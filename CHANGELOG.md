@@ -41,6 +41,10 @@ Not yet in a published installer. The version is still 0.10.7.
 - Cinder Host: no more pop-up prompts. Editing people, resetting sign-in, disabling a teacher (with the replacement chosen from a list), renaming files, emptying Trash, restoring and resetting use in-app dialogs, and recovery codes and PINs appear in a dialog of their own.
 - Teacher and Student show the Host security code at first contact and after a certificate change, and need the matching code before trusting it (from earlier work on this branch).
 - An outdated Cinder Host gets its own update-Host-first screen in Teacher and Student (from earlier work on this branch).
+- Cinder Host can use Anthropic (Claude) as its AI provider. Haiku 5.5 is the default; teachers can choose Sonnet 5.5 for harder work, and Host can switch Sonnet off.
+- Teacher has a new AI page and the paper creator can use Claude: attach a photo by choosing a file, pasting a picture or using the live camera to read handwriting, convert working to LaTeX, check an answer or draw a TikZ diagram.
+- Optional student study helper, off until Host turns it on. Each student gets 5 questions, then asks a teacher, who can allow 5 more or decline. The screen says it is an AI, and teachers can read every question and answer. Students always get Haiku.
+- Not yet tried against Anthropic's live service or on Linux Mint's camera; see `handoff.md`.
 
 ## 0.10.7
 

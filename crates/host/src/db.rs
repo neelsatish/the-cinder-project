@@ -65,6 +65,10 @@ const MIGRATIONS: &[(&str, &str)] = &[
         "0014_longer_live_classes",
         include_str!("../migrations/0014_longer_live_classes.sql"),
     ),
+    (
+        "0015_student_ai",
+        include_str!("../migrations/0015_student_ai.sql"),
+    ),
 ];
 
 /// Migrations that rebuild a table other tables refer to. SQLite's rebuild

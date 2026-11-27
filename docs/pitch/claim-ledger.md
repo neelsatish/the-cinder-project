@@ -23,7 +23,7 @@ Rows marked 0.10.0 are unchanged since that release.
 | Supported systems: 64-bit Windows 11 and 64-bit Linux Mint Cinnamon | `docs/platform-support.md` |
 | Windows and Linux Teacher/Student combinations interoperate | `docs/platform-support.md` |
 | All machines must reach the Host computer on TCP 7373 | `docs/platform-support.md` |
-| AI is optional and teacher-only: a question-paper creator that works only if the school adds its own AI key in Host. Students never reach it. | `CHANGELOG.md` 0.10.2–0.10.6 |
+| In released versions (to 0.10.7) AI is optional and teacher-only: a question-paper creator that works only if the school adds its own AI key in Host. Students never reach it. | `CHANGELOG.md` 0.10.2–0.10.6 |
 | Host can cap AI use with a monthly token allowance | `CHANGELOG.md` 0.10.6 |
 | Host makes verified, encrypted backups and restores them; it can make one daily while open and keep the newest N | `CHANGELOG.md` 0.10.7; `docs/security.md` |
 | Core classroom work carries no subscription | Product has no billing path |
@@ -36,6 +36,7 @@ Rows marked 0.10.0 are unchanged since that release.
 | Pilot starts on equipment already available, including team-held devices | No counts stated |
 | Teachers help choose the first workflow tested | |
 | Five-stage pilot method: audit, configure, train, run, review | Reusable beyond one school |
+| An optional student study helper (5 questions each, teacher approves more) is built but unreleased and untested against the live provider | Do not present as available or safe for pupils until the legal questions in `docs/security.md` are answered |
 
 ## Hypotheses (what the pilot tests — never asserted)
 

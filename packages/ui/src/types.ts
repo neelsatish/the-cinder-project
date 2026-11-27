@@ -303,6 +303,39 @@ export type ChatMessage = {
   content: string;
 };
 
+/** A photo sent with a question. `data` is base64 without a `data:` prefix. */
+export type ChatImage = { media_type: string; data: string };
+
+/** Sonnet is for teachers only; the Host answers students with Haiku. */
+export type ChatModel = "haiku" | "sonnet";
+
+export type StudentAiStatus = {
+  enabled: boolean;
+  used: number;
+  limit: number;
+  remaining: number;
+  request_pending: boolean;
+};
+
+export type StudentAskResponse = { answer: string; remaining: number };
+
+export type StudentAiQuestion = {
+  id: string;
+  student_name: string;
+  question: string;
+  answer?: string;
+  had_image: boolean;
+  created_at: string;
+};
+
+export type StudentAiRequest = {
+  id: string;
+  student_name: string;
+  used: number;
+  created_at: string;
+  recent: StudentAiQuestion[];
+};
+
 export type GradebookSuggestion = {
   student_id: string;
   assignment_id: string;
