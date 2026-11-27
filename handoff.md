@@ -1,7 +1,7 @@
 # Cinder Project — handoff
 
-**Last updated:** 16 November 2026, after the UI rework on branch
-`claude/ui-rework-5f8e74`. Last release: **0.10.7**.
+**Last updated:** 27 November 2026, releasing **0.11.0** (the UI rework, PR #11).
+Last release before it: **0.10.7**.
 
 **Repository:** `https://github.com/neelsatish/the-cinder-project`, working branch
 `release-work`, released from `main`.
@@ -32,7 +32,7 @@ for any public claim. Update this file when you resolve a conflict.
 
 ## 2. Repository and release state
 
-- Every app, the shared UI package and the Rust workspace are at **0.10.7**.
+- Every app, the shared UI package and the Rust workspace are at **0.11.0**.
   They move together; see **Versioning** in `docs/platform-support.md`.
 - Releases: bump every version location, merge `release-work` to `main`, and the
   `Cross-platform installers` workflow builds, signs and publishes Windows and
@@ -46,6 +46,10 @@ for any public claim. Update this file when you resolve a conflict.
 - The updater signing key is a GitHub secret plus one local file on the
   maintainer's machine. Keep an offline backup. Never generate a replacement;
   installed apps would reject it.
+- PR #11 (UI rework, with Tauri 2.12 from #12) is released as 0.11.0. PR #13
+  (Claude AI provider and student study helper) is held back: it has never called
+  Claude with a real key or been looked at in the installed apps, and pupils need
+  the consent work in `docs/security.md` first.
 - PR #1 to #10 are merged; 0.10.7 is released. It changed the connection
   (HTTPS with a pinned certificate): 0.10.7 apps and older Hosts cannot talk to
   each other, so Cinder Host must be updated first.

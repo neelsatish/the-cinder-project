@@ -6,10 +6,9 @@ Release notes for Cinder Matchbox. Installers for each release are on the
 Windows Setup installs and AppImages can install signed updates in place. Users
 who installed a `.deb` download the latest package again.
 
-## Unreleased
+## 0.11.0
 
-Not yet in a published installer. The version is still 0.10.7.
-
+- **Update Cinder Host first.** Teacher and Student from this version show an update-Host-first screen when the Host is older.
 - One look across Cinder Host, Teacher and Student: a quiet sidebar beside the page, Ember as the accent in Light and Dark, plain headings and no explanatory filler. The Paper theme is retired; anyone using it gets Light.
 - Fixed: students could not answer quizzes. Every answer failed to save since 0.10.0.
 - Fixed: opening a quiz could show a server error when two start requests arrived together.
